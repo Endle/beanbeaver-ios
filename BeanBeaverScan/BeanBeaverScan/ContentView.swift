@@ -74,6 +74,10 @@ struct ContentView: View {
                 if ProcessInfo.processInfo.arguments.contains("-autoRunSample") {
                     await pipeline.scanBundledSample(named: sampleName)
                 }
+                // `-autoRunBatch`: headless E2E over Documents/batch_in/*.jpg → batch_out.json.
+                if BatchRunner.isRequested {
+                    await BatchRunner.run()
+                }
             }
 #endif
             .onChange(of: photoItem) { _, item in
