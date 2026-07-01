@@ -33,9 +33,9 @@ SIM_TARGETS=(aarch64-apple-ios-sim)
 
 cargo_flags=(--lib -p "$CRATE")
 [ "$PROFILE" = "release" ] && cargo_flags+=(--release)
-# Enable CoreML EP (Apple Neural Engine / GPU) on the device/sim slices unless
-# COREML=0. The prebuilt libonnxruntime.a already ships the CoreML provider.
-[ "${COREML:-1}" = "1" ] && cargo_flags+=(--features "$CRATE/coreml")
+# OCR runs on CPU only (no coreml feature): on the shipped dynamic-shape mobile
+# models, CPU beats CoreML/ANE on both speed and accuracy on real hardware, so the
+# Neural Engine path isn't worth building.
 profile_dir="$PROFILE"; [ "$PROFILE" = "debug" ] && profile_dir=debug
 
 rm -rf "$WORK"; mkdir -p "$WORK"
@@ -78,7 +78,9 @@ echo ">> generating Swift bindings"
 cargo build --lib -p "$CRATE" >/dev/null
 HOST_DYLIB="$REPO_ROOT/target/debug/libbb_receipt_ffi.dylib"
 GEN="$WORK/gen"; mkdir -p "$GEN"
-cargo run -q -p "$CRATE" --bin uniffi-bindgen -- \
+# Run the bindgen bin hosted by this shim package (bb-receipt-ffi is a git dep,
+# so `cargo run -p bb-receipt-ffi` can't reach its copy — see src/bin/uniffi-bindgen.rs).
+cargo run -q -p beanbeaver-ios-ffi-build --bin uniffi-bindgen -- \
   generate --library "$HOST_DYLIB" --language swift --out-dir "$GEN"
 
 # Headers dir for the xcframework: C header + modulemap (named module.modulemap).

@@ -11,12 +11,6 @@ struct ContentView: View {
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
     @AppStorage("saveScansToPhotos") private var saveScansToPhotos = false
 
-    /// Execution provider for OCR. Defaults to CPU: on real hardware CoreML
-    /// degrades the shipped (dynamic-shape) mobile models on both accuracy and
-    /// speed — the ANE path only ever helped the shelved fixed-shape server det.
-    /// The toggle stays for on-device A/B experiments.
-    @AppStorage("useCoreML") private var useCoreML = false
-
     /// Bundled DEBUG sample (a redacted Costco receipt fixture).
     private let sampleName = "costco_20260218_redact"
 
@@ -58,22 +52,11 @@ struct ContentView: View {
                             .font(.subheadline)
                     }
 
-#if DEBUG
-                    // Diagnostic only: CoreML loses to CPU on the shipped
-                    // dynamic-shape models (slower + misreads — see
-                    // docs/ios_port.md). Hidden in Release; kept in dev builds
-                    // for the on-device CoreML-vs-CPU A/B.
-                    Toggle("CoreML (keep disabled)", isOn: $useCoreML)
-                        .font(.subheadline)
-#endif
-
                     statusView
                 }
                 .padding()
             }
             .navigationTitle("BeanBeaver Scan")
-            .onAppear { pipeline.coreMLEnabled = useCoreML }
-            .onChange(of: useCoreML) { _, enabled in pipeline.coreMLEnabled = enabled }
             .fullScreenCover(isPresented: $showScanner) {
                 DocumentScanner(
                     onScan: { data in
