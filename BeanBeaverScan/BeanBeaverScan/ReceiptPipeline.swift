@@ -109,4 +109,102 @@ extension ReceiptPipeline {
         return pipeline
     }
 }
+
+/// Headless on-device E2E harness. Launched via
+/// `simctl launch booted <bid> -autoRunBatch`, it runs every JPEG in the app's
+/// `Documents/batch_in/` through the real on-device pipeline (Rust ocr-paddle →
+/// receipt-core, exactly as a user scan would) and writes structured results to
+/// `Documents/batch_out.json`. A host script pushes the images into the app
+/// container and pulls the JSON back to diff against ground-truth fixtures — the
+/// "device sim live mode" counterpart to the desktop pytest suite (image bytes
+/// in, parsed `ReceiptResult` out, no screenshots, which truncate).
+enum BatchRunner {
+    struct Item: Codable {
+        let description: String
+        let price: String
+        let category: String?
+    }
+
+    struct Result: Codable {
+        let name: String          // stem of the input image (maps to <stem>.expected.json)
+        let merchant: String
+        let date: String?
+        let dateIsPlaceholder: Bool
+        let total: String
+        let subtotal: String?
+        let tax: String?
+        let items: [Item]
+        let warnings: [String]
+        let wallMs: Double
+        let error: String?
+    }
+
+    struct Output: Codable {
+        let count: Int
+        let results: [Result]
+    }
+
+    static var isRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains("-autoRunBatch")
+    }
+
+    private static var documents: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    /// Load the OCR session once, scan every `Documents/batch_in/*.jpg` in sorted
+    /// order, then atomically write `Documents/batch_out.json`.
+    static func run() async {
+        let inDir = documents.appendingPathComponent("batch_in", isDirectory: true)
+        let outURL = documents.appendingPathComponent("batch_out.json")
+
+        let images = (try? FileManager.default.contentsOfDirectory(
+            at: inDir, includingPropertiesForKeys: nil))?
+            .filter { $0.pathExtension.lowercased() == "jpg" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent } ?? []
+
+        let session = try? OcrSession.load(modelsDirectory: Bundle.main.resourceURL!)
+        var results: [Result] = []
+        for url in images {
+            let name = url.deletingPathExtension().lastPathComponent
+            guard let session, let data = try? Data(contentsOf: url) else {
+                results.append(.failure(name, "load failed"))
+                continue
+            }
+            let started = Date()
+            do {
+                let r = try session.scan(imageData: data,
+                                         creditCardAccount: "Liabilities:CreditCard")
+                results.append(Result(
+                    name: name, merchant: r.merchant, date: r.date,
+                    dateIsPlaceholder: r.dateIsPlaceholder, total: r.total,
+                    subtotal: r.subtotal, tax: r.tax,
+                    items: r.items.map { Item(description: $0.description,
+                                              price: $0.price, category: $0.category) },
+                    warnings: r.warnings,
+                    wallMs: Date().timeIntervalSince(started) * 1000, error: nil))
+            } catch {
+                results.append(.failure(name, String(describing: error)))
+            }
+        }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let bytes = try? encoder.encode(Output(count: results.count, results: results))
+        else { return }
+        // Write to a temp file then rename so the host never reads a partial file.
+        let tmp = outURL.appendingPathExtension("tmp")
+        try? bytes.write(to: tmp)
+        try? FileManager.default.removeItem(at: outURL)
+        try? FileManager.default.moveItem(at: tmp, to: outURL)
+    }
+}
+
+private extension BatchRunner.Result {
+    static func failure(_ name: String, _ message: String) -> BatchRunner.Result {
+        BatchRunner.Result(name: name, merchant: "", date: nil, dateIsPlaceholder: false,
+                           total: "", subtotal: nil, tax: nil, items: [], warnings: [],
+                           wallMs: 0, error: message)
+    }
+}
 #endif
