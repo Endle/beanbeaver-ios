@@ -6,3 +6,7 @@ publish = false
 
 [dependencies]
 bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1.0" }
+# `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
+# which build-xcframework.sh runs to generate the Swift glue. Keep the version in
+# step with the uniffi that bb-receipt-ffi pulls in (0.28).
+uniffi = { version = "0.28", features = ["cli"] }
