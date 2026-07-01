@@ -27,19 +27,6 @@ final class ReceiptPipeline {
     /// in `ReceiptResult.timings`. The user-perceived scan latency.
     private(set) var lastWallMs: Double?
 
-    /// When false (the default), forces the CPU execution provider
-    /// (`OCR_COREML=0`); CPU beats CoreML on the shipped mobile models on real
-    /// hardware. Toggle it on for an on-device CoreML/ANE-vs-CPU A/B. Changing
-    /// it drops the loaded session so the next scan rebuilds the ONNX sessions
-    /// with the chosen provider (the EP is selected at session-construction time
-    /// from the env var).
-    var coreMLEnabled = false {
-        didSet {
-            guard coreMLEnabled != oldValue else { return }
-            session = nil
-        }
-    }
-
     /// Default credit-card account for the placeholder posting; tweak in UI later.
     var creditCardAccount = "Liabilities:CreditCard"
 
@@ -52,10 +39,8 @@ final class ReceiptPipeline {
 
     private func loadedSession() throws -> OcrSession {
         if let session { return session }
-        // Pick the execution provider before constructing the session (read once
-        // by the Rust side at build time). No-op on builds without the coreml
-        // feature; harmless to set regardless.
-        setenv("OCR_COREML", coreMLEnabled ? "1" : "0", 1)
+        // OCR runs on CPU: the core is built CPU-only because CPU beats CoreML/ANE
+        // on both speed and accuracy for the shipped dynamic-shape mobile models.
         guard let dir = Bundle.main.resourceURL else {
             throw NSError(domain: "BeanBeaverScan", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "No app resource bundle"])

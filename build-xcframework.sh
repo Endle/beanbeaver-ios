@@ -33,12 +33,9 @@ SIM_TARGETS=(aarch64-apple-ios-sim)
 
 cargo_flags=(--lib -p "$CRATE")
 [ "$PROFILE" = "release" ] && cargo_flags+=(--release)
-# CoreML EP (Apple Neural Engine / GPU) is opt-in and off by default: the app ships
-# CPU OCR (CoreML hurts the mobile models on-device). NOTE: `$CRATE/coreml` is the
-# pre-split syntax and errors now that bb-receipt-ffi is a git dep, not a workspace
-# member ("cannot specify features for packages outside of workspace") — COREML=1
-# needs rework (a passthrough feature on this shim) before it will build again.
-[ "${COREML:-0}" = "1" ] && cargo_flags+=(--features "$CRATE/coreml")
+# OCR runs on CPU only (no coreml feature): on the shipped dynamic-shape mobile
+# models, CPU beats CoreML/ANE on both speed and accuracy on real hardware, so the
+# Neural Engine path isn't worth building.
 profile_dir="$PROFILE"; [ "$PROFILE" = "debug" ] && profile_dir=debug
 
 rm -rf "$WORK"; mkdir -p "$WORK"
