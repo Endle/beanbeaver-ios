@@ -1,0 +1,69 @@
+name: iOS build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build xcframework + app (simulator)
+    runs-on: macos-15
+    env:
+      # Match the local dev toolchain; bump when you move off stable.
+      RUST_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin an Xcode so the available iOS SDK is predictable. Adjust the version
+      # to whatever the runner image provides (see the "Xcode" line in the job's
+      # setup logs); the app only needs an SDK >= deployment target (iOS 17.0).
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode.app
+
+      - name: Install Rust ${{ env.RUST_TOOLCHAIN }} + iOS targets
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+          rustc --version
+
+      # Cargo registry/git + build outputs. Keyed on Cargo.lock so it busts when
+      # deps change.
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      # `ort` downloads a prebuilt libonnxruntime.a here; caching it avoids a
+      # network fetch every run (build-xcframework.sh reads from this path).
+      - name: Cache ONNX Runtime
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ort.pyke.io
+          key: ort-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ort-${{ runner.os }}-
+
+      # Debug profile: faster than release and enough to prove the build is green.
+      - name: Build BBReceiptFFI.xcframework
+        run: PROFILE=debug ./build-xcframework.sh
+
+      - name: Build app (iOS Simulator)
+        run: |
+          xcodebuild build \
+            -project BeanBeaverScan/BeanBeaverScan.xcodeproj \
+            -scheme BeanBeaverScan \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
