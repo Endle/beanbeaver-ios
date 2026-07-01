@@ -9,20 +9,21 @@
 # libonnxruntime.a that `ort` downloads (the Rust .a only *references* ORT
 # symbols; it doesn't embed them), so the app links a single .a per platform.
 #
-# Usage:  crates/ffi/build-xcframework.sh
+# Usage:  ./build-xcframework.sh
 #   PROFILE=debug          ./...   # faster, fat binaries (default: release)
 #   INCLUDE_X86_SIM=1      ./...   # also build x86_64 simulator slice (Intel Macs)
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
+export CARGO_TARGET_DIR="$REPO_ROOT/target"
 
 CRATE=bb-receipt-ffi
 LIB=libbb_receipt_ffi.a
 PROFILE="${PROFILE:-release}"
 # Output into the committed local SPM package (the xcframework + generated glue
 # themselves are git-ignored and rebuilt by this script).
-PKG="$REPO_ROOT/ios/BBReceiptKit"
+PKG="$REPO_ROOT/BBReceiptKit"
 WORK="$REPO_ROOT/target/ios/.work"
 ORT_CACHE="$HOME/Library/Caches/ort.pyke.io"
 
@@ -34,7 +35,7 @@ cargo_flags=(--lib -p "$CRATE")
 [ "$PROFILE" = "release" ] && cargo_flags+=(--release)
 # Enable CoreML EP (Apple Neural Engine / GPU) on the device/sim slices unless
 # COREML=0. The prebuilt libonnxruntime.a already ships the CoreML provider.
-[ "${COREML:-1}" = "1" ] && cargo_flags+=(--features coreml)
+[ "${COREML:-1}" = "1" ] && cargo_flags+=(--features "$CRATE/coreml")
 profile_dir="$PROFILE"; [ "$PROFILE" = "debug" ] && profile_dir=debug
 
 rm -rf "$WORK"; mkdir -p "$WORK"
@@ -101,7 +102,7 @@ rm -rf "$WORK"
 
 cat <<EOF
 
-✅ Done. Wrote into ios/BBReceiptKit/ (git-ignored, rebuildable):
+✅ Done. Wrote into BBReceiptKit/ (git-ignored, rebuildable):
    Frameworks/BBReceiptFFI.xcframework
    Sources/BBReceiptKit/Generated/bb_receipt_ffi.swift
 EOF

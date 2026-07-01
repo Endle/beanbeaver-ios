@@ -3,7 +3,7 @@ import PackageDescription
 
 // Local package wrapping the Rust receipt core. The xcframework and the
 // generated Swift glue under Sources/BBReceiptKit/Generated/ are produced by
-// `crates/ffi/build-xcframework.sh` (git-ignored); run it before building.
+// `../build-xcframework.sh` (git-ignored); run it before building.
 let package = Package(
     name: "BBReceiptKit",
     platforms: [.iOS(.v17)],
