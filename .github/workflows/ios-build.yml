@@ -71,3 +71,126 @@ jobs:
             -configuration Debug \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO
+
+  # Runs the app on a booted simulator: proves the xcframework links AND loads at
+  # runtime (uniffi checksum/contract, ORT init, model loading) — things the
+  # compile-only job above can't catch. `needs: build` serializes so this job
+  # restores the warm cargo/ort caches build just saved (its Rust build is then a
+  # near-no-op) and never races the cache upload.
+  simulator:
+    name: Simulator smoke + E2E
+    needs: build
+    runs-on: macos-15
+    env:
+      RUST_TOOLCHAIN: stable
+      BID: com.beanbeaver.BeanBeaverScan
+      SCHEME: BeanBeaverScan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode.app
+
+      - name: Install Rust + iOS targets
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Cache ONNX Runtime
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ort.pyke.io
+          key: ort-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ort-${{ runner.os }}-
+
+      - name: Build BBReceiptFFI.xcframework
+        run: PROFILE=debug ./build-xcframework.sh
+
+      - name: Boot a simulator
+        id: sim
+        run: |
+          # The scripts hardcode "iPhone 17 Pro"; the runner image won't have it,
+          # so pick the first available iPhone on whatever runtime is installed.
+          UDID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)["devices"]
+          ids = [dev["udid"] for rt in d for dev in d[rt]
+                 if dev.get("isAvailable") and "iPhone" in dev["name"]]
+          print(ids[0] if ids else "")')
+          [ -n "$UDID" ] || { echo "no iPhone simulator available"; xcrun simctl list devices; exit 1; }
+          echo "Booting $UDID"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Build & install app
+        run: |
+          xcodebuild build \
+            -project BeanBeaverScan/BeanBeaverScan.xcodeproj \
+            -scheme "$SCHEME" -configuration Debug \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES
+          APP=$(find build/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' | head -1)
+          [ -n "$APP" ] || { echo "built .app not found"; exit 1; }
+          xcrun simctl install "${{ steps.sim.outputs.udid }}" "$APP"
+
+      # Smoke: feed the committed fixture(s) through the real on-device pipeline
+      # via -autoRunBatch and assert the app produced results with no scan errors.
+      # This is the runtime gate — it fails on a dyld/uniffi/ORT/model failure.
+      - name: Smoke — run batch on device
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          CONT=$(xcrun simctl get_app_container "$UDID" "$BID" data)
+          IN="$CONT/Documents/batch_in"; OUT="$CONT/Documents/batch_out.json"
+          rm -rf "$IN"; mkdir -p "$IN"; cp tests/receipts_e2e/*.jpg "$IN/"; rm -f "$OUT"
+          xcrun simctl launch "$UDID" "$BID" -autoRunBatch >/dev/null
+          for _ in $(seq 1 120); do [ -f "$OUT" ] && break; sleep 2; done
+          [ -f "$OUT" ] || { echo "::error::timed out waiting for batch_out.json"; exit 1; }
+          cp "$OUT" batch_out.json
+          python3 - batch_out.json <<'PY'
+          import json, sys
+          res = json.load(open(sys.argv[1])).get("results", [])
+          assert res, "no results in batch_out.json"
+          for r in res:
+              line = (f"  {r['name']}: {r.get('merchant','?')} {r.get('date','?')} "
+                      f"${r.get('total','?')} ({len(r.get('items',[]))} items, "
+                      f"{int(r.get('wallMs',0))}ms)")
+              print(line + (f"  ERROR: {r['error']}" if r.get("error") else ""))
+          bad = [r["name"] for r in res if r.get("error")]
+          assert not bad, f"on-device scan error(s): {bad}"
+          print(f"OK: {len(res)} scan(s) ran on device, no errors")
+          PY
+
+      # Accuracy: grade the same batch_out.json against ground-truth fixtures.
+      # No *.expected.json committed yet (only a .template) -> skips green until
+      # you add one; then this step starts enforcing merchant/date/total/items.
+      - name: E2E — grade against expected.json
+        run: |
+          shopt -s nullglob
+          exp=(tests/receipts_e2e/*.expected.json)
+          if [ ${#exp[@]} -eq 0 ]; then
+            echo "::notice::No *.expected.json fixtures yet — skipping accuracy grading."
+            echo "Copy tests/receipts_e2e/*.expected.json.template to <stem>.expected.json and fill it in."
+            exit 0
+          fi
+          python3 - <<'PY'
+          import glob, json, os
+          suf = ".expected.json"
+          m = {os.path.basename(p)[:-len(suf)]: p for p in glob.glob("tests/receipts_e2e/*"+suf)}
+          json.dump(m, open("manifest.json", "w"), indent=2)
+          print("grading:", list(m))
+          PY
+          python3 scripts/compare-e2e.py --results batch_out.json --manifest manifest.json
