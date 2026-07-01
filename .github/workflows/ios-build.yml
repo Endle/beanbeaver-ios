@@ -58,6 +58,9 @@ jobs:
       - name: Build BBReceiptFFI.xcframework
         run: PROFILE=debug ./build-xcframework.sh
 
+      # ARCHS=arm64: the generic simulator destination otherwise builds every
+      # valid arch (arm64 + x86_64), but the xcframework ships only the arm64
+      # simulator slice (the runner is Apple Silicon), so drop x86_64.
       - name: Build app (iOS Simulator)
         run: |
           xcodebuild build \
@@ -66,4 +69,5 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO
