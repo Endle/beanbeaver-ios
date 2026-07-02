@@ -120,7 +120,7 @@ struct ContentView: View {
                 }
                 .padding(.top, 12)
 
-                Text("Turn any receipt into clean bookkeeping — right on your phone.")
+                Text("What happens in your wallet, stays in your wallet.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
