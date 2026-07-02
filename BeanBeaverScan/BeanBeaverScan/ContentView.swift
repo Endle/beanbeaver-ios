@@ -433,6 +433,15 @@ struct ReceiptResultView: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(result.merchant.capitalized).font(.title2.bold())
+                // A `Suggested` match isn't trusted enough to replace the OCR'd
+                // name (that stays in `result.merchant`), so offer the canonical
+                // guess quietly in grey rather than silently rewriting it.
+                if case .suggested = result.merchantMatch.status,
+                   let guess = result.merchantMatch.canonical {
+                    Text("Did you mean \(guess.capitalized)?")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let friendlyDate {
                     HStack(spacing: 4) {
                         Text(friendlyDate)
@@ -586,6 +595,8 @@ extension ReceiptResult {
     /// emitted by the on-device classifier.
     static let previewFull = ReceiptResult(
         merchant: "Costco Wholesale",
+        merchantMatch: MerchantMatch(
+            raw: "Costco Wholesale", canonical: "Costco Wholesale", status: .exact, score: 1.0),
         date: "2026-02-18",
         dateIsPlaceholder: false,
         total: "$148.73",
@@ -614,6 +625,8 @@ extension ReceiptResult {
     /// A sparse result: no line items, inferred date, parser warnings.
     static let previewMinimal = ReceiptResult(
         merchant: "Corner Cafe",
+        merchantMatch: MerchantMatch(
+            raw: "Corner Cafe", canonical: nil, status: .unknown, score: 0.0),
         date: nil,
         dateIsPlaceholder: true,
         total: "$6.50",
@@ -628,6 +641,32 @@ extension ReceiptResult {
         """,
         timings: .preview
     )
+
+    /// A low-confidence merchant: OCR read "COSCO" and the matcher offers
+    /// "Costco" as an uncorroborated suggestion — the display name stays raw and
+    /// the guess appears in grey.
+    static let previewSuggestedMerchant = ReceiptResult(
+        merchant: "Cosco",
+        merchantMatch: MerchantMatch(
+            raw: "Cosco", canonical: "Costco", status: .suggested, score: 0.83),
+        date: "2026-02-18",
+        dateIsPlaceholder: false,
+        total: "$42.10",
+        tax: "$2.68",
+        subtotal: "$39.42",
+        items: [
+            ReceiptItem(description: "PAPER TOWELS", price: "$18.99", quantity: 1, category: "Expenses:Home"),
+            ReceiptItem(description: "ORG EGGS 24CT", price: "$9.49", quantity: 1, category: "Expenses:Food:Grocery"),
+        ],
+        warnings: [],
+        beancount: """
+        2026-02-18 * "Cosco"
+          Expenses:Home                18.99 USD
+          Expenses:Food:Grocery         9.49 USD
+          Liabilities:CreditCard      -42.10 USD
+        """,
+        timings: .preview
+    )
 }
 
 #Preview("Result – full") {
@@ -637,6 +676,11 @@ extension ReceiptResult {
 
 #Preview("Result – minimal") {
     ScrollView { ReceiptResultView(result: .previewMinimal, wallMs: 300, capturedImageURL: nil, onScanAnother: {}).padding() }
+        .background(Color(.systemGroupedBackground))
+}
+
+#Preview("Result – suggested merchant") {
+    ScrollView { ReceiptResultView(result: .previewSuggestedMerchant, wallMs: 640, capturedImageURL: nil, onScanAnother: {}).padding() }
         .background(Color(.systemGroupedBackground))
 }
 
