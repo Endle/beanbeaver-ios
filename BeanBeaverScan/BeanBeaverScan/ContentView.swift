@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var pipeline = ReceiptPipeline()
     @State private var photoItem: PhotosPickerItem?
     @State private var showScanner = false
+    @State private var showOriginReceipt = false
 
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
     @AppStorage("saveScansToPhotos") private var saveScansToPhotos = false
@@ -38,6 +39,36 @@ struct ContentView: View {
             .navigationTitle("BeanBeaver")
             .navigationBarTitleDisplayMode(.inline)
             .tint(.bbAccent)
+            .toolbar {
+                if case .done = pipeline.status {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            pipeline.reset()
+                        } label: {
+                            Image(systemName: "house")
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button {
+                                showOriginReceipt = true
+                            } label: {
+                                Label("Show Original Receipt", systemImage: "photo")
+                            }
+                            .disabled(pipeline.capturedImageURL == nil)
+
+                            Button {
+                                // TODO: wire up export options (beancount already
+                                // available via the Accounting details section).
+                            } label: {
+                                Label("Export", systemImage: "square.and.arrow.up")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                    }
+                }
+            }
             .fullScreenCover(isPresented: $showScanner) {
                 DocumentScanner(
                     onScan: { data in
@@ -47,6 +78,9 @@ struct ContentView: View {
                     onFinish: { showScanner = false }
                 )
                 .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showOriginReceipt) {
+                OriginReceiptView(imageURL: pipeline.capturedImageURL)
             }
 #if DEBUG
             .task {
@@ -224,6 +258,38 @@ struct ContentView: View {
         .padding(.top, 40)
         .frame(maxWidth: .infinity)
         .bbCard()
+    }
+}
+
+/// The exact photo the OCR saw, shown on request so a user can verify a scan
+/// against the original receipt.
+struct OriginReceiptView: View {
+    let imageURL: URL?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let imageURL {
+                    ScrollView([.horizontal, .vertical]) {
+                        AsyncImage(url: imageURL) { image in
+                            image.resizable().scaledToFit()
+                        } placeholder: {
+                            ProgressView()
+                        }
+                    }
+                } else {
+                    ContentUnavailableView("No Photo Available", systemImage: "photo")
+                }
+            }
+            .navigationTitle("Original Receipt")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
 
