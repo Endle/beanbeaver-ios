@@ -324,7 +324,13 @@ struct SettingsView: View {
 
 #if DEBUG
                 Section("Debug") {
-                    Button("Run Bundled Sample", action: onRunSample)
+                    Button("Run Bundled Sample") {
+                        // Dismiss first so the home screen's scanning/done
+                        // transition is actually visible, not hidden behind
+                        // this sheet.
+                        dismiss()
+                        onRunSample()
+                    }
                 }
 #endif
             }
