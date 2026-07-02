@@ -1,0 +1,14 @@
+{
+  "merchant": "Costco",
+  "merchant_any_of": ["Costco Wholesale"],
+  "date": "2026-02-18",
+  "total": "221.97",
+
+  "critical_items": [
+    { "description": "COKE ZERO", "price": "17.19", "category_optional": true },
+    { "description": "DOORDASH", "price": "79.99", "category_optional": true },
+    { "description": "FINE-FILT", "price": "6.69", "category_optional": true }
+  ],
+
+  "known_failures": []
+}
