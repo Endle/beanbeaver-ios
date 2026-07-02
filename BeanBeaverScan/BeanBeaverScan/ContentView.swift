@@ -7,6 +7,8 @@ struct ContentView: View {
     @State private var pipeline = ReceiptPipeline()
     @State private var photoItem: PhotosPickerItem?
     @State private var showScanner = false
+    @State private var showOriginReceipt = false
+    @State private var showSettings = false
 
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
     @AppStorage("saveScansToPhotos") private var saveScansToPhotos = false
@@ -14,49 +16,69 @@ struct ContentView: View {
     /// Bundled DEBUG sample (a redacted Costco receipt fixture).
     private let sampleName = "costco_20260218_redact"
 
+    /// The result screen has its own toolbar (home + more-options) that
+    /// already orients the user, so the "BeanBeaver" title would be redundant
+    /// there — unlike the home screen/scanning/failed states, which have no
+    /// other chrome.
+    private var isDone: Bool {
+        if case .done = pipeline.status { return true }
+        return false
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if VNDocumentCameraViewController.isSupported {
-                        Button {
-                            showScanner = true
-                        } label: {
-                            Label("Scan a receipt", systemImage: "doc.viewfinder")
-                                .frame(maxWidth: .infinity)
+                VStack(spacing: 20) {
+                    switch pipeline.status {
+                    case .idle:
+                        homeView
+                    case .scanning:
+                        scanningView
+                    case .failed(let message):
+                        failedView(message)
+                    case .done(let result):
+                        ReceiptResultView(result: result, wallMs: pipeline.lastWallMs, capturedImageURL: pipeline.capturedImageURL) {
+                            pipeline.reset()
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
                     }
-
-                    PhotosPicker(selection: $photoItem, matching: .images) {
-                        Label("Pick a receipt photo", systemImage: "photo.on.rectangle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-
-#if DEBUG
-                    Button {
-                        Task { await pipeline.scanBundledSample(named: sampleName) }
-                    } label: {
-                        Label("Run bundled sample", systemImage: "doc.text.magnifyingglass")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-#endif
-
-                    if VNDocumentCameraViewController.isSupported {
-                        Toggle("Save scans to Photos", isOn: $saveScansToPhotos)
-                            .font(.subheadline)
-                    }
-
-                    statusView
                 }
                 .padding()
+                .frame(maxWidth: .infinity)
             }
-            .navigationTitle("BeanBeaver Scan")
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle(isDone ? "" : "BeanBeaver")
+            .navigationBarTitleDisplayMode(.inline)
+            .tint(.bbAccent)
+            .toolbar {
+                if isDone {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            pipeline.reset()
+                        } label: {
+                            Image(systemName: "house")
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button {
+                                showOriginReceipt = true
+                            } label: {
+                                Label("Show Original Receipt", systemImage: "photo")
+                            }
+                            .disabled(pipeline.capturedImageURL == nil)
+
+                            Button {
+                                // TODO: wire up export options (beancount already
+                                // available via the Accounting details section).
+                            } label: {
+                                Label("Export", systemImage: "square.and.arrow.up")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                    }
+                }
+            }
             .fullScreenCover(isPresented: $showScanner) {
                 DocumentScanner(
                     onScan: { data in
@@ -66,6 +88,18 @@ struct ContentView: View {
                     onFinish: { showScanner = false }
                 )
                 .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showOriginReceipt) {
+                OriginReceiptView(imageURL: pipeline.capturedImageURL)
+            }
+            .sheet(isPresented: $showSettings) {
+#if DEBUG
+                SettingsView(saveScansToPhotos: $saveScansToPhotos) {
+                    Task { await pipeline.scanBundledSample(named: sampleName) }
+                }
+#else
+                SettingsView(saveScansToPhotos: $saveScansToPhotos)
+#endif
             }
 #if DEBUG
             .task {
@@ -90,93 +124,421 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var statusView: some View {
-        switch pipeline.status {
-        case .idle:
-            Text("Pick a receipt and it's parsed entirely on-device — OCR, parse, and beancount.")
-                .foregroundStyle(.secondary)
-        case .scanning:
-            HStack { ProgressView(); Text("Scanning…") }
-        case .failed(let message):
-            VStack(alignment: .leading, spacing: 12) {
-                Label(message, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.red)
-                capturedImageExport
+    // MARK: - Home
+
+    private var homeView: some View {
+        VStack(spacing: 28) {
+            VStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(Color.bbAccentSoft)
+                        .frame(width: 88, height: 88)
+                    Image(systemName: "leaf.fill")
+                        .font(.system(size: 38))
+                        .foregroundStyle(Color.bbAccent)
+                }
+                .padding(.top, 12)
+
+                Text("What happens in your wallet, stays in your wallet.")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
             }
-        case .done(let result):
-            VStack(alignment: .leading, spacing: 12) {
-                ReceiptResultView(result: result)
-                ScanTimingsView(timings: result.timings, wallMs: pipeline.lastWallMs)
-                capturedImageExport
+
+            VStack(spacing: 12) {
+                if VNDocumentCameraViewController.isSupported {
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Label("Scan a Receipt", systemImage: "camera.viewfinder")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.bbAccent)
+                    .controlSize(.large)
+                }
+
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    Label("Choose from Photos", systemImage: "photo.on.rectangle")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .tint(.bbAccent)
+                .controlSize(.large)
+
+                Button {
+                    showSettings = true
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .tint(.secondary)
+                .controlSize(.large)
             }
+
+            HStack(spacing: 8) {
+                Image(systemName: "lock.shield")
+                Text("Everything is scanned and parsed on your device — nothing is uploaded.")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 12)
         }
+        .padding(.top, 20)
     }
 
-    /// Export the exact JPEG the OCR saw, to A/B against the desktop server.
-    @ViewBuilder
-    private var capturedImageExport: some View {
-        if let url = pipeline.capturedImageURL {
-            ShareLink(item: url) {
-                Label("Export captured image", systemImage: "photo.badge.arrow.down")
+    // MARK: - Scanning
+
+    @State private var pulse = false
+
+    private var scanningView: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Color.bbAccentSoft)
+                    .frame(width: 96, height: 96)
+                    .scaleEffect(pulse ? 1.15 : 0.9)
+                    .opacity(pulse ? 0.4 : 0.9)
+                    .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: pulse)
+                Image(systemName: "text.viewfinder")
+                    .font(.system(size: 34))
+                    .foregroundStyle(Color.bbAccent)
+            }
+            Text("Reading your receipt…")
+                .font(.title3.bold())
+            Text("This all happens on your device.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 60)
+        .onAppear { pulse = true }
+    }
+
+    // MARK: - Failed
+
+    private func failedView(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Color.bbAccentSoft)
+                    .frame(width: 88, height: 88)
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 34))
+                    .foregroundStyle(Color.bbAccent)
+            }
+            Text("Couldn't read that receipt")
+                .font(.title3.bold())
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
+
+            Button {
+                pipeline.reset()
+            } label: {
+                Label("Try Again", systemImage: "arrow.clockwise")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.bbAccent)
+            .controlSize(.large)
+            .padding(.top, 8)
+
+#if DEBUG
+            if let url = pipeline.capturedImageURL {
+                ShareLink(item: url) {
+                    Label("Debug: Export captured image", systemImage: "photo.badge.arrow.down")
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+#endif
+        }
+        .padding(.top, 40)
+        .frame(maxWidth: .infinity)
+        .bbCard()
+    }
+}
+
+/// The exact photo the OCR saw, shown on request so a user can verify a scan
+/// against the original receipt.
+struct OriginReceiptView: View {
+    let imageURL: URL?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let imageURL {
+                    ScrollView([.horizontal, .vertical]) {
+                        AsyncImage(url: imageURL) { image in
+                            image.resizable().scaledToFit()
+                        } placeholder: {
+                            ProgressView()
+                        }
+                    }
+                } else {
+                    ContentUnavailableView("No Photo Available", systemImage: "photo")
+                }
+            }
+            .navigationTitle("Original Receipt")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
             }
         }
     }
 }
 
-struct ReceiptResultView: View {
-    let result: ReceiptResult
+struct SettingsView: View {
+    @Binding var saveScansToPhotos: Bool
+#if DEBUG
+    var onRunSample: () -> Void
+#endif
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(result.merchant).font(.title2).bold()
-                if let date = result.date {
-                    Text(date).foregroundStyle(.secondary)
-                }
-                Text("Total \(result.total)").font(.headline)
-            }
-
-            if !result.items.isEmpty {
-                Divider()
-                ForEach(Array(result.items.enumerated()), id: \.offset) { _, item in
-                    HStack {
-                        Text(item.description).lineLimit(1)
-                        Spacer()
-                        if let category = item.category {
-                            Text(category).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Text(item.price).monospacedDigit()
+        NavigationStack {
+            List {
+                if VNDocumentCameraViewController.isSupported {
+                    Section {
+                        Toggle("Save a copy to Photos", isOn: $saveScansToPhotos)
+                    } footer: {
+                        Text("Keep a copy of each camera scan in your Photos library.")
                     }
                 }
+
+#if DEBUG
+                Section("Debug") {
+                    Button("Run Bundled Sample") {
+                        // Dismiss first so the home screen's scanning/done
+                        // transition is actually visible, not hidden behind
+                        // this sheet.
+                        dismiss()
+                        onRunSample()
+                    }
+                }
+#endif
             }
-
-            Divider()
-            Text("beancount").font(.caption).foregroundStyle(.secondary)
-            Text(result.beancount)
-                .font(.system(.footnote, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-
-            ShareLink(item: result.beancount) {
-                Label("Export beancount", systemImage: "square.and.arrow.up")
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
             }
         }
+    }
+}
+
+// MARK: - Result card
+
+struct ReceiptResultView: View {
+    let result: ReceiptResult
+    var wallMs: Double?
+    var capturedImageURL: URL?
+    var onScanAnother: () -> Void
+
+    private static let displayDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy"
+        return f
+    }()
+
+    private static let isoDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private var friendlyDate: String? {
+        guard let date = result.date else { return nil }
+        guard let parsed = Self.isoDateFormatter.date(from: date) else { return date }
+        return Self.displayDateFormatter.string(from: parsed)
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 16) {
+                header
+                if !result.items.isEmpty {
+                    Divider()
+                    itemsList
+                }
+            }
+            .bbCard()
+
+            if !result.warnings.isEmpty {
+                warningsBanner
+            }
+
+            DisclosureGroup("Accounting details (beancount)") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(result.beancount)
+                        .font(.system(.footnote, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+
+                    ShareLink(item: result.beancount) {
+                        Label("Export beancount", systemImage: "square.and.arrow.up")
+                    }
+
+#if DEBUG
+                    ScanTimingsView(timings: result.timings, wallMs: wallMs)
+                    if let url = capturedImageURL {
+                        ShareLink(item: url) {
+                            Label("Debug: Export captured image", systemImage: "photo.badge.arrow.down")
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+#endif
+                }
+                .padding(.top, 8)
+            }
+            .padding(16)
+            .bbCard()
+
+            Button {
+                onScanAnother()
+            } label: {
+                Label("Scan Another Receipt", systemImage: "camera.viewfinder")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.bbAccent)
+            .controlSize(.large)
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(result.merchant.capitalized).font(.title2.bold())
+                if let friendlyDate {
+                    HStack(spacing: 4) {
+                        Text(friendlyDate)
+                        if result.dateIsPlaceholder {
+                            Text("(estimated)")
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            if result.subtotal != nil || result.tax != nil {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let subtotal = result.subtotal {
+                        subtotalRow("Subtotal", subtotal)
+                    }
+                    if let tax = result.tax {
+                        subtotalRow("Tax", tax)
+                    }
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text("Total")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(PriceFormat.display(result.total).text)
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundStyle(Color.bbAccent)
+            }
+        }
+    }
+
+    private func subtotalRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(PriceFormat.display(value).text).monospacedDigit()
+        }
+    }
+
+    private var itemsList: some View {
+        VStack(spacing: 10) {
+            ForEach(Array(result.items.enumerated()), id: \.offset) { _, item in
+                itemRow(item)
+            }
+        }
+    }
+
+    private func itemRow(_ item: ReceiptItem) -> some View {
+        let style = CategoryDisplay.style(for: item.category)
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.description.capitalized)
+                    .lineLimit(1)
+                    .font(.subheadline)
+                Text(style.label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if item.quantity > 1 {
+                Text("×\(item.quantity)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            let priceDisplay = PriceFormat.display(item.price)
+            Text(priceDisplay.text)
+                .monospacedDigit()
+                .font(.subheadline)
+                .foregroundStyle(priceDisplay.isNegative ? .green : .primary)
+        }
+    }
+
+    private var warningsBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Heads up", systemImage: "exclamationmark.circle.fill")
+                .font(.subheadline.bold())
+            ForEach(result.warnings, id: \.self) { warning in
+                Text(warning).font(.caption)
+            }
+        }
+        .foregroundStyle(Color.bbAccent)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.bbAccentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
 /// Compact per-stage latency readout under a result, for the real-device test.
 /// `wallMs` is the Swift-observed total (incl. decode + FFI); the stage rows are
 /// the Rust `ScanTimings` (prep → detect → recognize → classify → parse).
+/// DEBUG-only diagnostic — never shown in a release build.
 struct ScanTimingsView: View {
     let timings: ScanTimings
     var wallMs: Double?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Scan time").font(.caption).foregroundStyle(.secondary)
+            Text("Debug: scan time").font(.caption).foregroundStyle(.secondary)
             if let wallMs { row("total (wall)", wallMs, emphasized: true) }
             row("prep", timings.prepMs)
             row("detect", timings.detectMs)
@@ -220,6 +582,8 @@ extension ScanTimings {
 
 extension ReceiptResult {
     /// A rich, fully-populated result (mirrors the bundled Costco fixture).
+    /// Categories are realistic colon-delimited beancount account paths, as
+    /// emitted by the on-device classifier.
     static let previewFull = ReceiptResult(
         merchant: "Costco Wholesale",
         date: "2026-02-18",
@@ -228,18 +592,20 @@ extension ReceiptResult {
         tax: "$9.42",
         subtotal: "$139.31",
         items: [
-            ReceiptItem(description: "ORG BANANAS", price: "$2.49", quantity: 1, category: "Groceries"),
-            ReceiptItem(description: "ROTISSERIE CHICKEN", price: "$4.99", quantity: 1, category: "Groceries"),
-            ReceiptItem(description: "KIRKLAND OLIVE OIL 2L", price: "$21.99", quantity: 1, category: "Groceries"),
-            ReceiptItem(description: "BATH TISSUE 30 ROLL", price: "$24.99", quantity: 1, category: "Household"),
-            ReceiptItem(description: "GASOLINE REGULAR", price: "$58.40", quantity: 1, category: nil),
+            ReceiptItem(description: "ORG BANANAS", price: "$2.49", quantity: 1, category: "Expenses:Food:Grocery"),
+            ReceiptItem(description: "ROTISSERIE CHICKEN", price: "$4.99", quantity: 1, category: "Expenses:Food:Grocery:PreparedMeal"),
+            ReceiptItem(description: "KIRKLAND OLIVE OIL 2L", price: "$21.99", quantity: 1, category: "Expenses:Food:Grocery"),
+            ReceiptItem(description: "BATH TISSUE 30 ROLL", price: "$24.99", quantity: 1, category: "Expenses:Home"),
+            ReceiptItem(description: "GASOLINE REGULAR", price: "$58.40", quantity: 1, category: "Expenses:Driving:Gas"),
+            ReceiptItem(description: "MYSTERY ITEM", price: "$3.00", quantity: 2, category: nil),
         ],
         warnings: [],
         beancount: """
         2026-02-18 * "Costco Wholesale"
-          Expenses:Groceries          54.45 USD
-          Expenses:Household          24.99 USD
-          Expenses:Uncategorized      58.40 USD
+          Expenses:Food:Grocery        54.45 USD
+          Expenses:Home                24.99 USD
+          Expenses:Driving:Gas         58.40 USD
+          Expenses:Uncategorized        6.00 USD
           Liabilities:CreditCard     -148.73 USD
         """,
         timings: .preview
@@ -265,14 +631,16 @@ extension ReceiptResult {
 }
 
 #Preview("Result – full") {
-    ScrollView { ReceiptResultView(result: .previewFull).padding() }
+    ScrollView { ReceiptResultView(result: .previewFull, wallMs: 816, capturedImageURL: nil, onScanAnother: {}).padding() }
+        .background(Color(.systemGroupedBackground))
 }
 
 #Preview("Result – minimal") {
-    ScrollView { ReceiptResultView(result: .previewMinimal).padding() }
+    ScrollView { ReceiptResultView(result: .previewMinimal, wallMs: 300, capturedImageURL: nil, onScanAnother: {}).padding() }
+        .background(Color(.systemGroupedBackground))
 }
 
-#Preview("Screen – idle") {
+#Preview("Screen – home") {
     ContentView()
 }
 
