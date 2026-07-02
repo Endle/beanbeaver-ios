@@ -15,13 +15,22 @@ struct ContentView: View {
     /// Bundled DEBUG sample (a redacted Costco receipt fixture).
     private let sampleName = "costco_20260218_redact"
 
+    /// The result screen has its own toolbar (home + more-options) that
+    /// already orients the user, so the "BeanBeaver" title would be redundant
+    /// there — unlike the home screen/scanning/failed states, which have no
+    /// other chrome.
+    private var isDone: Bool {
+        if case .done = pipeline.status { return true }
+        return false
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
                     switch pipeline.status {
                     case .idle:
-                        idleView
+                        homeView
                     case .scanning:
                         scanningView
                     case .failed(let message):
@@ -36,11 +45,11 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("BeanBeaver")
+            .navigationTitle(isDone ? "" : "BeanBeaver")
             .navigationBarTitleDisplayMode(.inline)
             .tint(.bbAccent)
             .toolbar {
-                if case .done = pipeline.status {
+                if isDone {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
                             pipeline.reset()
@@ -105,9 +114,9 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Idle
+    // MARK: - Home
 
-    private var idleView: some View {
+    private var homeView: some View {
         VStack(spacing: 28) {
             VStack(spacing: 10) {
                 ZStack {
@@ -588,7 +597,7 @@ extension ReceiptResult {
         .background(Color(.systemGroupedBackground))
 }
 
-#Preview("Screen – idle") {
+#Preview("Screen – home") {
     ContentView()
 }
 

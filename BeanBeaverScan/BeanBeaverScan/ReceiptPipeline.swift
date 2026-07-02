@@ -63,7 +63,7 @@ final class ReceiptPipeline {
     }
 #endif
 
-    /// Return to the idle state so the user can scan another receipt.
+    /// Return to the home screen (idle state) so the user can scan another receipt.
     func reset() {
         status = .idle
         capturedImageURL = nil
