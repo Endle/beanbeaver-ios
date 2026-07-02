@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var showScanner = false
     @State private var showOriginReceipt = false
+    @State private var showSettings = false
 
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
     @AppStorage("saveScansToPhotos") private var saveScansToPhotos = false
@@ -91,6 +92,15 @@ struct ContentView: View {
             .sheet(isPresented: $showOriginReceipt) {
                 OriginReceiptView(imageURL: pipeline.capturedImageURL)
             }
+            .sheet(isPresented: $showSettings) {
+#if DEBUG
+                SettingsView(saveScansToPhotos: $saveScansToPhotos) {
+                    Task { await pipeline.scanBundledSample(named: sampleName) }
+                }
+#else
+                SettingsView(saveScansToPhotos: $saveScansToPhotos)
+#endif
+            }
 #if DEBUG
             .task {
                 // Lets `simctl launch … -autoRunSample` exercise the pipeline
@@ -160,17 +170,18 @@ struct ContentView: View {
                 .buttonStyle(.bordered)
                 .tint(.bbAccent)
                 .controlSize(.large)
-            }
 
-            if VNDocumentCameraViewController.isSupported {
-                HStack {
-                    Image(systemName: "photo.badge.checkmark")
-                        .foregroundStyle(.secondary)
-                    Toggle("Save a copy to Photos", isOn: $saveScansToPhotos)
-                        .font(.subheadline)
+                Button {
+                    showSettings = true
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
-                .padding(12)
-                .bbCard()
+                .buttonStyle(.bordered)
+                .tint(.secondary)
+                .controlSize(.large)
             }
 
             HStack(spacing: 8) {
@@ -181,15 +192,6 @@ struct ContentView: View {
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 12)
-
-#if DEBUG
-            Button("Debug: Run Bundled Sample") {
-                Task { await pipeline.scanBundledSample(named: sampleName) }
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .padding(.top, 8)
-#endif
         }
         .padding(.top, 20)
     }
@@ -292,6 +294,41 @@ struct OriginReceiptView: View {
                 }
             }
             .navigationTitle("Original Receipt")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+struct SettingsView: View {
+    @Binding var saveScansToPhotos: Bool
+#if DEBUG
+    var onRunSample: () -> Void
+#endif
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if VNDocumentCameraViewController.isSupported {
+                    Section {
+                        Toggle("Save a copy to Photos", isOn: $saveScansToPhotos)
+                    } footer: {
+                        Text("Keep a copy of each camera scan in your Photos library.")
+                    }
+                }
+
+#if DEBUG
+                Section("Debug") {
+                    Button("Run Bundled Sample", action: onRunSample)
+                }
+#endif
+            }
+            .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
