@@ -85,6 +85,11 @@ jobs:
       RUST_TOOLCHAIN: stable
       BID: com.beanbeaver.BeanBeaverScan
       SCHEME: BeanBeaverScan
+      # device_sim live mode is slow (~4s/scan + app launch), and it exists to
+      # prove the on-device path works — not to grade the whole corpus (that's
+      # done fast on Linux in beanbeaver-core's receipt-core E2E). So run only a
+      # representative handful here. Bump if you want more on-device coverage.
+      LIVE_SIM_MAX: "2"
     steps:
       - uses: actions/checkout@v4
 
@@ -146,7 +151,27 @@ jobs:
           [ -n "$APP" ] || { echo "built .app not found"; exit 1; }
           xcrun simctl install "${{ steps.sim.outputs.udid }}" "$APP"
 
-      # Smoke: feed the committed fixture(s) through the real on-device pipeline
+      # Pick up to LIVE_SIM_MAX fixtures to run on-device, preferring ones with a
+      # committed expected.json (so the accuracy step has something to grade),
+      # sorted for determinism. Written to selected.txt, shared by the two steps
+      # below (same job -> same workspace).
+      - name: Select live fixtures
+        run: |
+          python3 - "$LIVE_SIM_MAX" <<'PY'
+          import glob, os, sys
+          n = int(sys.argv[1])
+          jpgs = sorted(glob.glob("tests/receipts_e2e/*.jpg"))
+          graded = [j for j in jpgs if os.path.exists(j[:-len(".jpg")] + ".expected.json")]
+          rest = [j for j in jpgs if j not in graded]
+          sel = (graded + rest)[:n]
+          assert sel, "no *.jpg fixtures under tests/receipts_e2e/"
+          open("selected.txt", "w").write("\n".join(sel) + "\n")
+          print(f"selected {len(sel)}/{len(jpgs)} fixture(s) for live mode:")
+          for j in sel:
+              print("  " + j + ("" if j in graded else "  (no expected.json — smoke only)"))
+          PY
+
+      # Smoke: feed the selected fixture(s) through the real on-device pipeline
       # via -autoRunBatch and assert the app produced results with no scan errors.
       # This is the runtime gate — it fails on a dyld/uniffi/ORT/model failure.
       - name: Smoke — run batch on device
@@ -155,7 +180,8 @@ jobs:
         run: |
           CONT=$(xcrun simctl get_app_container "$UDID" "$BID" data)
           IN="$CONT/Documents/batch_in"; OUT="$CONT/Documents/batch_out.json"
-          rm -rf "$IN"; mkdir -p "$IN"; cp tests/receipts_e2e/*.jpg "$IN/"; rm -f "$OUT"
+          rm -rf "$IN"; mkdir -p "$IN"; rm -f "$OUT"
+          xargs -I{} cp {} "$IN/" < selected.txt
           xcrun simctl launch "$UDID" "$BID" -autoRunBatch >/dev/null
           for _ in $(seq 1 120); do [ -f "$OUT" ] && break; sleep 2; done
           [ -f "$OUT" ] || { echo "::error::timed out waiting for batch_out.json"; exit 1; }
@@ -174,23 +200,26 @@ jobs:
           print(f"OK: {len(res)} scan(s) ran on device, no errors")
           PY
 
-      # Accuracy: grade the same batch_out.json against ground-truth fixtures.
-      # No *.expected.json committed yet (only a .template) -> skips green until
-      # you add one; then this step starts enforcing merchant/date/total/items.
+      # Accuracy: grade the same batch_out.json against ground-truth fixtures,
+      # but only for the fixtures we actually ran on-device (selected.txt). If a
+      # selected fixture has no *.expected.json (only a .template) this skips
+      # green; add one and it starts enforcing merchant/date/total/items.
       - name: E2E — grade against expected.json
         run: |
-          shopt -s nullglob
-          exp=(tests/receipts_e2e/*.expected.json)
-          if [ ${#exp[@]} -eq 0 ]; then
-            echo "::notice::No *.expected.json fixtures yet — skipping accuracy grading."
-            echo "Copy tests/receipts_e2e/*.expected.json.template to <stem>.expected.json and fill it in."
-            exit 0
-          fi
           python3 - <<'PY'
-          import glob, json, os
+          import json, os
           suf = ".expected.json"
-          m = {os.path.basename(p)[:-len(suf)]: p for p in glob.glob("tests/receipts_e2e/*"+suf)}
+          m = {}
+          for jpg in open("selected.txt").read().split():
+              exp = jpg[:-len(".jpg")] + suf
+              if os.path.exists(exp):
+                  m[os.path.basename(jpg)[:-len(".jpg")]] = exp
+          if not m:
+              print("::notice::No *.expected.json for the selected fixture(s) — "
+                    "skipping accuracy grading. Copy the .template to <stem>.expected.json.")
+              raise SystemExit(0)
           json.dump(m, open("manifest.json", "w"), indent=2)
           print("grading:", list(m))
           PY
+          [ -f manifest.json ] || exit 0
           python3 scripts/compare-e2e.py --results batch_out.json --manifest manifest.json
