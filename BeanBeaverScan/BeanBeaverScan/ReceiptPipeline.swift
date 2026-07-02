@@ -63,6 +63,13 @@ final class ReceiptPipeline {
     }
 #endif
 
+    /// Return to the idle state so the user can scan another receipt.
+    func reset() {
+        status = .idle
+        capturedImageURL = nil
+        lastWallMs = nil
+    }
+
     func scan(imageData: Data) async {
         status = .scanning
         capturedImageURL = persistCapture(imageData)
