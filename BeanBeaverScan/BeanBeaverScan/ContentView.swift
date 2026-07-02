@@ -371,15 +371,6 @@ struct ReceiptResultView: View {
     private func itemRow(_ item: ReceiptItem) -> some View {
         let style = CategoryDisplay.style(for: item.category)
         return HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(style.accented ? Color.bbAccentSoft : Color(.tertiarySystemFill))
-                    .frame(width: 34, height: 34)
-                Image(systemName: style.icon)
-                    .font(.system(size: 14))
-                    .foregroundStyle(style.accented ? Color.bbAccent : .secondary)
-            }
-
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.description.capitalized)
                     .lineLimit(1)
