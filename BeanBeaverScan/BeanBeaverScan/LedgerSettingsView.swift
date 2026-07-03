@@ -100,22 +100,23 @@ struct LedgerSettingsView: View {
             case .starting:
                 HStack { ProgressView(); Text("Contacting GitHub…") }
             case .idle, .failed:
-                // Always offer Connect; if the OAuth App isn't registered yet
-                // (`clientID` empty) the flow surfaces a clear "not set up"
-                // message and the manual token below is the fallback.
-                Button {
-                    connection.connect(openURL: { openURL($0) }) { token in
-                        exporter.github.token = token
-                    }
-                } label: {
-                    Label("Connect GitHub", systemImage: "person.badge.key")
-                }
-                if case .failed(let message) = connection.phase {
-                    Text(message).font(.caption).foregroundStyle(.red)
-                }
-                DisclosureGroup("Enter a token manually") {
-                    SecureField("Access token", text: $exporter.github.token)
-                }
+                // "Connect GitHub" (OAuth Device Flow) is parked pending a design
+                // review — see the github-oauth-plan memory. The device-flow code
+                // in GitHubDeviceFlow.swift is ready; to re-enable, uncomment this
+                // button and set GitHubOAuth.clientID. Manual token stays as the
+                // working path in the meantime.
+                //
+                // Button {
+                //     connection.connect(openURL: { openURL($0) }) { token in
+                //         exporter.github.token = token
+                //     }
+                // } label: {
+                //     Label("Connect GitHub", systemImage: "person.badge.key")
+                // }
+                // if case .failed(let message) = connection.phase {
+                //     Text(message).font(.caption).foregroundStyle(.red)
+                // }
+                SecureField("Access token", text: $exporter.github.token)
             }
         }
     }
