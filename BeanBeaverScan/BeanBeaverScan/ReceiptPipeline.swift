@@ -187,6 +187,18 @@ enum BatchRunner {
         let category: String?
     }
 
+    /// Per-stage on-device timings (ms) for one scan, mirrored from the Rust
+    /// `ScanTimings`, so the headless batch output carries the stage breakdown
+    /// (not just wall time) for latency profiling.
+    struct Timings: Codable {
+        let prepMs: Double
+        let detectMs: Double
+        let classifyMs: Double
+        let recognizeMs: Double
+        let parseMs: Double
+        let totalMs: Double
+    }
+
     struct Result: Codable {
         let name: String          // stem of the input image (maps to <stem>.expected.json)
         let merchant: String
@@ -198,6 +210,7 @@ enum BatchRunner {
         let items: [Item]
         let warnings: [String]
         let wallMs: Double
+        let timings: Timings?     // nil only when the scan itself failed
         let error: String?
     }
 
@@ -210,6 +223,13 @@ enum BatchRunner {
         ProcessInfo.processInfo.arguments.contains("-autoRunBatch")
     }
 
+    /// Value following a launch flag, e.g. `-batchDelaySec 2` → "2".
+    static func argValue(_ flag: String) -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
     private static var documents: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
@@ -219,19 +239,32 @@ enum BatchRunner {
     static func run() async {
         let inDir = documents.appendingPathComponent("batch_in", isDirectory: true)
         let outURL = documents.appendingPathComponent("batch_out.json")
+        // Clear any prior run's output up front so a host harness that can't
+        // delete the file remotely (devicectl) can treat its reappearance as an
+        // unambiguous "this run finished" signal.
+        try? FileManager.default.removeItem(at: outURL)
 
         let images = (try? FileManager.default.contentsOfDirectory(
             at: inDir, includingPropertiesForKeys: nil))?
             .filter { $0.pathExtension.lowercased() == "jpg" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent } ?? []
 
+        // Optional cooldown between scans (`-batchDelaySec N`): run each scan
+        // closer to real single-scan conditions (cold SoC) instead of back to
+        // back, so the timings aren't skewed by sustained-load throttling.
+        let delaySec = argValue("-batchDelaySec").flatMap(Double.init) ?? 0
+        NSLog("[Batch] \(images.count) image(s), delay=\(delaySec)s")
+
         let session = try? OcrSession.load(modelsDirectory: Bundle.main.resourceURL!)
         var results: [Result] = []
-        for url in images {
+        for (i, url) in images.enumerated() {
             let name = url.deletingPathExtension().lastPathComponent
             guard let session, let data = try? Data(contentsOf: url) else {
                 results.append(.failure(name, "load failed"))
                 continue
+            }
+            if delaySec > 0 && i > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delaySec * 1_000_000_000))
             }
             let started = Date()
             do {
@@ -244,7 +277,12 @@ enum BatchRunner {
                     items: r.items.map { Item(description: $0.description,
                                               price: $0.price, category: $0.category) },
                     warnings: r.warnings,
-                    wallMs: Date().timeIntervalSince(started) * 1000, error: nil))
+                    wallMs: Date().timeIntervalSince(started) * 1000,
+                    timings: Timings(
+                        prepMs: r.timings.prepMs, detectMs: r.timings.detectMs,
+                        classifyMs: r.timings.classifyMs, recognizeMs: r.timings.recognizeMs,
+                        parseMs: r.timings.parseMs, totalMs: r.timings.totalMs),
+                    error: nil))
             } catch {
                 results.append(.failure(name, String(describing: error)))
             }
@@ -266,7 +304,7 @@ private extension BatchRunner.Result {
     static func failure(_ name: String, _ message: String) -> BatchRunner.Result {
         BatchRunner.Result(name: name, merchant: "", date: nil, dateIsPlaceholder: false,
                            total: "", subtotal: nil, tax: nil, items: [], warnings: [],
-                           wallMs: 0, error: message)
+                           wallMs: 0, timings: nil, error: message)
     }
 }
 #endif
