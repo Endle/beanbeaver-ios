@@ -5,10 +5,12 @@ import BBReceiptKit
 
 struct ContentView: View {
     @State private var pipeline = ReceiptPipeline()
+    @State private var exporter = LedgerExporter()
     @State private var photoItem: PhotosPickerItem?
     @State private var showScanner = false
     @State private var showOriginReceipt = false
     @State private var showSettings = false
+    @Environment(\.openURL) private var openURL
 
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
     @AppStorage("saveScansToPhotos") private var saveScansToPhotos = false
@@ -25,6 +27,11 @@ struct ContentView: View {
         return false
     }
 
+    private var doneResult: ReceiptResult? {
+        if case .done(let result) = pipeline.status { return result }
+        return nil
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -37,7 +44,10 @@ struct ContentView: View {
                     case .failed(let message):
                         failedView(message)
                     case .done(let result):
-                        ReceiptResultView(result: result, wallMs: pipeline.lastWallMs, capturedImageURL: pipeline.capturedImageURL) {
+                        ReceiptResultView(result: result, wallMs: pipeline.lastWallMs,
+                                          capturedImageURL: pipeline.capturedImageURL,
+                                          exporter: exporter,
+                                          onConfigure: { showSettings = true }) {
                             pipeline.reset()
                         }
                     }
@@ -67,11 +77,12 @@ struct ContentView: View {
                             }
                             .disabled(pipeline.capturedImageURL == nil)
 
-                            Button {
-                                // TODO: wire up export options (beancount already
-                                // available via the Accounting details section).
-                            } label: {
-                                Label("Export", systemImage: "square.and.arrow.up")
+                            if let result = doneResult {
+                                Section("Export") {
+                                    LedgerExportButtons(beancount: result.beancount,
+                                                        exporter: exporter,
+                                                        onConfigure: { showSettings = true })
+                                }
                             }
                         } label: {
                             Image(systemName: "ellipsis.circle")
@@ -94,12 +105,23 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showSettings) {
 #if DEBUG
-                SettingsView(saveScansToPhotos: $saveScansToPhotos) {
+                SettingsView(saveScansToPhotos: $saveScansToPhotos, exporter: exporter) {
                     Task { await pipeline.scanBundledSample(named: sampleName) }
                 }
 #else
-                SettingsView(saveScansToPhotos: $saveScansToPhotos)
+                SettingsView(saveScansToPhotos: $saveScansToPhotos, exporter: exporter)
 #endif
+            }
+            .alert(exporter.result?.title ?? "", isPresented: Binding(
+                get: { exporter.result != nil },
+                set: { if !$0 { exporter.result = nil } }
+            ), presenting: exporter.result) { result in
+                if let url = result.openURL {
+                    Button("Open") { openURL(url) }
+                }
+                Button("OK", role: .cancel) {}
+            } message: { result in
+                Text(result.message)
             }
 #if DEBUG
             .task {
@@ -306,6 +328,7 @@ struct OriginReceiptView: View {
 
 struct SettingsView: View {
     @Binding var saveScansToPhotos: Bool
+    var exporter: LedgerExporter
 #if DEBUG
     var onRunSample: () -> Void
 #endif
@@ -314,6 +337,16 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    NavigationLink {
+                        LedgerSettingsView(exporter: exporter)
+                    } label: {
+                        Label("Ledger Sync", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                } footer: {
+                    Text("Choose where scanned transactions go: a synced .bean file and/or a GitHub pull request.")
+                }
+
                 if VNDocumentCameraViewController.isSupported {
                     Section {
                         Toggle("Save a copy to Photos", isOn: $saveScansToPhotos)
@@ -351,6 +384,8 @@ struct ReceiptResultView: View {
     let result: ReceiptResult
     var wallMs: Double?
     var capturedImageURL: URL?
+    var exporter: LedgerExporter
+    var onConfigure: () -> Void = {}
     var onScanAnother: () -> Void
 
     private static let displayDateFormatter: DateFormatter = {
@@ -395,8 +430,17 @@ struct ReceiptResultView: View {
                         .padding(8)
                         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
 
-                    ShareLink(item: result.beancount) {
-                        Label("Export beancount", systemImage: "square.and.arrow.up")
+                    HStack {
+                        Menu {
+                            LedgerExportButtons(beancount: result.beancount,
+                                                exporter: exporter,
+                                                onConfigure: onConfigure)
+                        } label: {
+                            Label("Add to Ledger", systemImage: "square.and.arrow.up")
+                        }
+                        if exporter.runningKind != nil {
+                            ProgressView().padding(.leading, 6)
+                        }
                     }
 
 #if DEBUG
@@ -670,17 +714,17 @@ extension ReceiptResult {
 }
 
 #Preview("Result – full") {
-    ScrollView { ReceiptResultView(result: .previewFull, wallMs: 816, capturedImageURL: nil, onScanAnother: {}).padding() }
+    ScrollView { ReceiptResultView(result: .previewFull, wallMs: 816, capturedImageURL: nil, exporter: LedgerExporter(), onScanAnother: {}).padding() }
         .background(Color(.systemGroupedBackground))
 }
 
 #Preview("Result – minimal") {
-    ScrollView { ReceiptResultView(result: .previewMinimal, wallMs: 300, capturedImageURL: nil, onScanAnother: {}).padding() }
+    ScrollView { ReceiptResultView(result: .previewMinimal, wallMs: 300, capturedImageURL: nil, exporter: LedgerExporter(), onScanAnother: {}).padding() }
         .background(Color(.systemGroupedBackground))
 }
 
 #Preview("Result – suggested merchant") {
-    ScrollView { ReceiptResultView(result: .previewSuggestedMerchant, wallMs: 640, capturedImageURL: nil, onScanAnother: {}).padding() }
+    ScrollView { ReceiptResultView(result: .previewSuggestedMerchant, wallMs: 640, capturedImageURL: nil, exporter: LedgerExporter(), onScanAnother: {}).padding() }
         .background(Color(.systemGroupedBackground))
 }
 
