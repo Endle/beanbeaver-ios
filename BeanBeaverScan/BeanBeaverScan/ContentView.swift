@@ -13,6 +13,9 @@ struct ContentView: View {
     /// DEBUG deep-link: `-showLedgerSettings` opens the Ledger Sync page on
     /// launch so it can be screenshotted headlessly (previews render only in Xcode).
     @State private var debugShowLedgerSettings = false
+    /// DEBUG deep-link: `-showDataDump` opens the data-dump debug screen on
+    /// launch so it can be screenshotted headlessly.
+    @State private var debugShowDataDump = false
     @Environment(\.openURL) private var openURL
 
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
@@ -108,11 +111,13 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showSettings) {
 #if DEBUG
-                SettingsView(saveScansToPhotos: $saveScansToPhotos, exporter: exporter) {
+                SettingsView(saveScansToPhotos: $saveScansToPhotos, exporter: exporter,
+                             currentCaptureURL: pipeline.capturedImageURL) {
                     Task { await pipeline.scanBundledSample(named: sampleName) }
                 }
 #else
-                SettingsView(saveScansToPhotos: $saveScansToPhotos, exporter: exporter)
+                SettingsView(saveScansToPhotos: $saveScansToPhotos, exporter: exporter,
+                             currentCaptureURL: pipeline.capturedImageURL)
 #endif
             }
             .alert(exporter.result?.title ?? "", isPresented: Binding(
@@ -130,6 +135,9 @@ struct ContentView: View {
             .sheet(isPresented: $debugShowLedgerSettings) {
                 NavigationStack { LedgerSettingsView(exporter: exporter) }
             }
+            .sheet(isPresented: $debugShowDataDump) {
+                NavigationStack { DataDumpView() }
+            }
             .task {
                 // Lets `simctl launch … -autoRunSample` exercise the pipeline
                 // headlessly for screenshots/verification.
@@ -138,6 +146,17 @@ struct ContentView: View {
                 }
                 if ProcessInfo.processInfo.arguments.contains("-showLedgerSettings") {
                     debugShowLedgerSettings = true
+                }
+                if ProcessInfo.processInfo.arguments.contains("-showDataDump") {
+                    debugShowDataDump = true
+                }
+                // Headless check for `ReceiptCaptureStore.clearOld`: logs before/after
+                // counts so a `simctl launch` run can be grepped for correctness.
+                if ProcessInfo.processInfo.arguments.contains("-clearOldReceipts") {
+                    let before = ReceiptCaptureStore.totalBytes()
+                    let result = ReceiptCaptureStore.clearOld(keeping: pipeline.capturedImageURL)
+                    let after = ReceiptCaptureStore.totalBytes()
+                    NSLog("[ClearOldReceipts] before=\(before)B after=\(after)B removed=\(result.count) freed=\(result.bytes)B")
                 }
                 // `-autoRunBatch`: headless E2E over Documents/batch_in/*.jpg → batch_out.json.
                 if BatchRunner.isRequested {
@@ -338,10 +357,16 @@ struct OriginReceiptView: View {
 struct SettingsView: View {
     @Binding var saveScansToPhotos: Bool
     var exporter: LedgerExporter
+    /// The photo behind the result screen currently on top, if any — excluded
+    /// from "Clear Old Receipts" so it can't vanish out from under the user
+    /// while they're still looking at it.
+    var currentCaptureURL: URL?
 #if DEBUG
     var onRunSample: () -> Void
 #endif
     @Environment(\.dismiss) private var dismiss
+    @State private var capturedBytes = ReceiptCaptureStore.totalBytes()
+    @State private var clearResultMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -364,6 +389,8 @@ struct SettingsView: View {
                     }
                 }
 
+                storageSection
+
 #if DEBUG
                 Section("Debug") {
                     Button("Run Bundled Sample") {
@@ -372,6 +399,9 @@ struct SettingsView: View {
                         // this sheet.
                         dismiss()
                         onRunSample()
+                    }
+                    NavigationLink("Dump All Data") {
+                        DataDumpView()
                     }
                 }
 #endif
@@ -383,6 +413,33 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .alert("Storage", isPresented: Binding(
+                get: { clearResultMessage != nil },
+                set: { if !$0 { clearResultMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(clearResultMessage ?? "")
+            }
+        }
+    }
+
+    private var storageSection: some View {
+        Section {
+            LabeledContent("Captured receipt photos",
+                           value: ByteCountFormatter.string(fromByteCount: capturedBytes, countStyle: .file))
+            Button(role: .destructive) {
+                let result = ReceiptCaptureStore.clearOld(keeping: currentCaptureURL)
+                capturedBytes = ReceiptCaptureStore.totalBytes()
+                clearResultMessage = result.count > 0
+                    ? "Cleared \(result.count) receipt photo\(result.count == 1 ? "" : "s"), "
+                        + "freed \(ByteCountFormatter.string(fromByteCount: result.bytes, countStyle: .file))."
+                    : "No old receipt photos to clear."
+            } label: {
+                Label("Clear Old Receipts", systemImage: "trash")
+            }
+        } footer: {
+            Text("Each scan keeps a copy of the receipt photo on your device so you can review the original later. This removes all of them except the one you're currently viewing.")
         }
     }
 }

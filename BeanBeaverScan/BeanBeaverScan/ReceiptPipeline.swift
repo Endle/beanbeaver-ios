@@ -94,8 +94,7 @@ final class ReceiptPipeline {
     /// Write the captured JPEG to a timestamped temp file so it can be exported
     /// via the share sheet (AirDrop / Files / Mail).
     private func persistCapture(_ data: Data) -> URL? {
-        let stamp = Int(Date().timeIntervalSince1970)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("receipt_capture_\(stamp).jpg")
+        let url = ReceiptCaptureStore.newCaptureURL()
         do {
             try data.write(to: url)
             return url
