@@ -100,14 +100,15 @@ struct LedgerSettingsView: View {
             case .starting:
                 HStack { ProgressView(); Text("Contacting GitHub…") }
             case .idle, .failed:
-                if GitHubOAuth.isConfigured {
-                    Button {
-                        connection.connect(openURL: { openURL($0) }) { token in
-                            exporter.github.token = token
-                        }
-                    } label: {
-                        Label("Connect GitHub", systemImage: "person.badge.key")
+                // Always offer Connect; if the OAuth App isn't registered yet
+                // (`clientID` empty) the flow surfaces a clear "not set up"
+                // message and the manual token below is the fallback.
+                Button {
+                    connection.connect(openURL: { openURL($0) }) { token in
+                        exporter.github.token = token
                     }
+                } label: {
+                    Label("Connect GitHub", systemImage: "person.badge.key")
                 }
                 if case .failed(let message) = connection.phase {
                     Text(message).font(.caption).foregroundStyle(.red)

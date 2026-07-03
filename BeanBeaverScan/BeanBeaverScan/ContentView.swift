@@ -10,6 +10,9 @@ struct ContentView: View {
     @State private var showScanner = false
     @State private var showOriginReceipt = false
     @State private var showSettings = false
+    /// DEBUG deep-link: `-showLedgerSettings` opens the Ledger Sync page on
+    /// launch so it can be screenshotted headlessly (previews render only in Xcode).
+    @State private var debugShowLedgerSettings = false
     @Environment(\.openURL) private var openURL
 
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
@@ -124,11 +127,17 @@ struct ContentView: View {
                 Text(result.message)
             }
 #if DEBUG
+            .sheet(isPresented: $debugShowLedgerSettings) {
+                NavigationStack { LedgerSettingsView(exporter: exporter) }
+            }
             .task {
                 // Lets `simctl launch … -autoRunSample` exercise the pipeline
                 // headlessly for screenshots/verification.
                 if ProcessInfo.processInfo.arguments.contains("-autoRunSample") {
                     await pipeline.scanBundledSample(named: sampleName)
+                }
+                if ProcessInfo.processInfo.arguments.contains("-showLedgerSettings") {
+                    debugShowLedgerSettings = true
                 }
                 // `-autoRunBatch`: headless E2E over Documents/batch_in/*.jpg → batch_out.json.
                 if BatchRunner.isRequested {
