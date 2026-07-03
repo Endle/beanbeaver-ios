@@ -17,6 +17,15 @@ final class ReceiptPipeline {
 
     private(set) var status: Status = .idle
 
+    /// 0...1 estimated progress through the scan, animated against hardcoded
+    /// per-stage duration guesses (see `StepEstimate`) since we don't get a real
+    /// progress signal across the FFI boundary. Caps below 1 until the actual
+    /// result arrives, so a slow scan never looks falsely complete.
+    private(set) var scanProgress: Double = 0
+
+    /// Human-readable label for whichever stage the estimate currently sits in.
+    private(set) var scanStepLabel: String = StepEstimate.steps[0].label
+
     /// The exact JPEG bytes (written to a temp file) that the OCR last saw, for
     /// diagnostics: export it and A/B against the desktop server to isolate the
     /// capture/encode path from the OCR model.
@@ -31,6 +40,7 @@ final class ReceiptPipeline {
     var creditCardAccount = "Liabilities:CreditCard"
 
     private var session: OcrSession?
+    private var progressTask: Task<Void, Never>?
 
     /// Instruments signpost: a "scan" interval per `OcrSession.scan`, so the
     /// on-device latency shows up in the Time Profiler / os_signpost track.
@@ -68,12 +78,19 @@ final class ReceiptPipeline {
         status = .idle
         capturedImageURL = nil
         lastWallMs = nil
+        progressTask?.cancel()
+        scanProgress = 0
+        scanStepLabel = StepEstimate.steps[0].label
     }
 
     func scan(imageData: Data) async {
         status = .scanning
         capturedImageURL = persistCapture(imageData)
         lastWallMs = nil
+        scanProgress = 0
+        scanStepLabel = StepEstimate.steps[0].label
+        progressTask?.cancel()
+        progressTask = Task { await self.animateEstimatedProgress() }
         let account = creditCardAccount
         do {
             let session = try loadedSession()
@@ -85,9 +102,48 @@ final class ReceiptPipeline {
             }.value
             lastWallMs = Date().timeIntervalSince(started) * 1000
             Self.signposter.endInterval("scan", signpost)
+            progressTask?.cancel()
+            scanProgress = 1
             status = .done(result)
         } catch {
+            progressTask?.cancel()
             status = .failed(String(describing: error))
+        }
+    }
+
+    /// Hardcoded rough per-stage duration guesses (ms), taken from a typical
+    /// on-device scan (see the `ScanTimings.preview` fixture). Used only to
+    /// animate a progress bar client-side — not a measurement of the live scan.
+    private enum StepEstimate {
+        static let steps: [(label: String, ms: Double)] = [
+            ("Preparing image…", 28),
+            ("Detecting text…", 322),
+            ("Checking orientation…", 41),
+            ("Recognizing text…", 408),
+            ("Parsing receipt…", 17),
+        ]
+        /// Running total of `ms` after each step, e.g. [28, 350, 391, 799, 816].
+        static let cumulativeMs: [Double] = {
+            var sum = 0.0
+            return steps.map { sum += $0.ms; return sum }
+        }()
+        static let totalMs = cumulativeMs.last ?? 1
+    }
+
+    /// Ticks `scanProgress`/`scanStepLabel` by comparing elapsed time against
+    /// `StepEstimate`, since there's no real progress signal across the FFI
+    /// boundary. Caps at 96% so a scan that runs long than the estimate doesn't
+    /// look finished before the actual result arrives; `scan(imageData:)` snaps
+    /// it to 100% itself once the result is in.
+    private func animateEstimatedProgress() async {
+        let started = Date()
+        while !Task.isCancelled {
+            let elapsedMs = Date().timeIntervalSince(started) * 1000
+            let stepIndex = StepEstimate.cumulativeMs.firstIndex { elapsedMs < $0 }
+                ?? StepEstimate.steps.count - 1
+            scanStepLabel = StepEstimate.steps[stepIndex].label
+            scanProgress = min(elapsedMs / StepEstimate.totalMs, 0.96)
+            try? await Task.sleep(nanoseconds: 80_000_000)
         }
     }
 

@@ -265,9 +265,15 @@ struct ContentView: View {
             }
             Text("Reading your receipt…")
                 .font(.title3.bold())
-            Text("This all happens on your device.")
+
+            ProgressView(value: pipeline.scanProgress)
+                .tint(Color.bbAccent)
+                .frame(maxWidth: 220)
+            Text(pipeline.scanStepLabel)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .contentTransition(.numericText())
+                .animation(.default, value: pipeline.scanStepLabel)
         }
         .padding(.top, 60)
         .onAppear { pulse = true }
