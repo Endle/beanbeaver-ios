@@ -7,6 +7,8 @@ struct LedgerSettingsView: View {
     @Bindable var exporter: LedgerExporter
     @State private var showFileImporter = false
     @State private var importError: String?
+    @State private var connection = GitHubConnection()
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         List {
@@ -61,11 +63,59 @@ struct LedgerSettingsView: View {
                 .textInputAutocapitalization(.never).autocorrectionDisabled()
             TextField("Base branch", text: $exporter.github.baseBranch)
                 .textInputAutocapitalization(.never).autocorrectionDisabled()
-            SecureField("Access token", text: $exporter.github.token)
+            gitHubAuthRows
         } header: {
             Label(LedgerDestinationKind.githubPR.title, systemImage: LedgerDestinationKind.githubPR.systemImage)
         } footer: {
-            Text("Each export opens a pull request that appends the transaction to the file. Use a fine-grained personal access token scoped to this repo with Contents and Pull requests read/write. The token is stored in the device Keychain.")
+            Text("Each export opens a pull request that appends the transaction to the file. Connect your GitHub account, or enter a fine-grained token (Contents + Pull requests read/write). Either way the token is stored in the device Keychain.")
+        }
+    }
+
+    private var isGitHubConnected: Bool {
+        !exporter.github.token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    @ViewBuilder
+    private var gitHubAuthRows: some View {
+        if isGitHubConnected {
+            LabeledContent("Account") {
+                Label("Connected", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
+            Button("Disconnect", role: .destructive) {
+                connection.cancel()
+                exporter.github.token = ""
+            }
+        } else {
+            switch connection.phase {
+            case .awaitingAuthorization(let code):
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Authorize in the browser that just opened, then come back.")
+                        .font(.footnote)
+                    LabeledContent("Your code", value: code)
+                        .font(.body.monospaced())
+                    ProgressView()
+                }
+                Button("Cancel", role: .cancel) { connection.cancel() }
+            case .starting:
+                HStack { ProgressView(); Text("Contacting GitHub…") }
+            case .idle, .failed:
+                if GitHubOAuth.isConfigured {
+                    Button {
+                        connection.connect(openURL: { openURL($0) }) { token in
+                            exporter.github.token = token
+                        }
+                    } label: {
+                        Label("Connect GitHub", systemImage: "person.badge.key")
+                    }
+                }
+                if case .failed(let message) = connection.phase {
+                    Text(message).font(.caption).foregroundStyle(.red)
+                }
+                DisclosureGroup("Enter a token manually") {
+                    SecureField("Access token", text: $exporter.github.token)
+                }
+            }
         }
     }
 }

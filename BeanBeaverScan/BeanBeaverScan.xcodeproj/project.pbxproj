@@ -18,6 +18,7 @@
 		1C0000000000000000000009 /* FilesLedgerInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000009 /* FilesLedgerInbox.swift */; };
 		1C000000000000000000000A /* GitHubLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000000000000000000000A /* GitHubLedger.swift */; };
 		1C000000000000000000000B /* LedgerSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000000000000000000000B /* LedgerSettingsView.swift */; };
+		1C000000000000000000000C /* GitHubDeviceFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000000000000000000000C /* GitHubDeviceFlow.swift */; };
 		1C0000000000000000000010 /* PP-OCRv5_mobile_det.onnx in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000010 /* PP-OCRv5_mobile_det.onnx */; };
 		1C0000000000000000000011 /* PP-OCRv5_mobile_rec.onnx in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000011 /* PP-OCRv5_mobile_rec.onnx */; };
 		1C0000000000000000000012 /* PP-LCNet_x1_0_textline_ori.onnx in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000012 /* PP-LCNet_x1_0_textline_ori.onnx */; };
@@ -38,6 +39,7 @@
 		1B0000000000000000000009 /* FilesLedgerInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesLedgerInbox.swift; sourceTree = "<group>"; };
 		1B000000000000000000000A /* GitHubLedger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubLedger.swift; sourceTree = "<group>"; };
 		1B000000000000000000000B /* LedgerSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSettingsView.swift; sourceTree = "<group>"; };
+		1B000000000000000000000C /* GitHubDeviceFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubDeviceFlow.swift; sourceTree = "<group>"; };
 		1B0000000000000000000010 /* PP-OCRv5_mobile_det.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = "PP-OCRv5_mobile_det.onnx"; path = "../models/PP-OCRv5_mobile_det.onnx"; sourceTree = SOURCE_ROOT; };
 		1B0000000000000000000011 /* PP-OCRv5_mobile_rec.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = "PP-OCRv5_mobile_rec.onnx"; path = "../models/PP-OCRv5_mobile_rec.onnx"; sourceTree = SOURCE_ROOT; };
 		1B0000000000000000000012 /* PP-LCNet_x1_0_textline_ori.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = "PP-LCNet_x1_0_textline_ori.onnx"; path = "../models/PP-LCNet_x1_0_textline_ori.onnx"; sourceTree = SOURCE_ROOT; };
@@ -87,6 +89,7 @@
 				1B0000000000000000000009 /* FilesLedgerInbox.swift */,
 				1B000000000000000000000A /* GitHubLedger.swift */,
 				1B000000000000000000000B /* LedgerSettingsView.swift */,
+				1B000000000000000000000C /* GitHubDeviceFlow.swift */,
 			);
 			path = BeanBeaverScan;
 			sourceTree = "<group>";
@@ -191,6 +194,7 @@
 				1C0000000000000000000009 /* FilesLedgerInbox.swift in Sources */,
 				1C000000000000000000000A /* GitHubLedger.swift in Sources */,
 				1C000000000000000000000B /* LedgerSettingsView.swift in Sources */,
+				1C000000000000000000000C /* GitHubDeviceFlow.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
