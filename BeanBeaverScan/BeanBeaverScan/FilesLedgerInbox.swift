@@ -48,19 +48,26 @@ final class FilesLedgerInbox: LedgerDestination {
         fileName = nil
     }
 
-    func append(_ beancount: String) async throws -> LedgerExportOutcome {
+    func append(_ entry: LedgerEntry) async throws -> LedgerExportOutcome {
         guard let bookmark else {
             throw LedgerExportError("No ledger file chosen yet. Pick one in Settings › Sync.")
         }
         // Coordinated file IO is blocking; keep it off the main actor.
-        let name = try await Task.detached { try Self.appendToBookmark(bookmark, text: beancount) }.value
+        let text = entry.beancount
+        let document = entry.document
+        let name = try await Task.detached {
+            try Self.appendToBookmark(bookmark, text: text, document: document)
+        }.value
         // A stale bookmark was refreshed inside the task; re-read the name we stored.
         return .appended(fileName: name)
     }
 
-    /// Resolve the bookmark, append `text` (ensuring a blank-line separator), and
-    /// return the file's name. Runs off the main actor.
-    private nonisolated static func appendToBookmark(_ bookmark: Data, text: String) throws -> String {
+    /// Resolve the bookmark, append `text` (ensuring a blank-line separator),
+    /// best-effort store `document` beside the ledger file, and return the file's
+    /// name. Runs off the main actor.
+    private nonisolated static func appendToBookmark(
+        _ bookmark: Data, text: String, document: ReceiptDocument?
+    ) throws -> String {
         var stale = false
         let url = try URL(resolvingBookmarkData: bookmark, options: [],
                           relativeTo: nil, bookmarkDataIsStale: &stale)
@@ -96,6 +103,42 @@ final class FilesLedgerInbox: LedgerDestination {
         }
         if let coordError { throw coordError }
         if let thrown { throw thrown }
+
+        if let document {
+            storeDocument(document, besideLedgerFile: url)
+        }
         return url.lastPathComponent
+    }
+
+    /// Write the receipt image to `<ledger-file-dir>/<relpath>` (i.e. a
+    /// `beanbeaver/` subfolder next to the inbox `.bean`), so the transaction's
+    /// `document:` link resolves when the user's `option "documents"` root points
+    /// at that directory.
+    ///
+    /// Best-effort: the document picker grants a security scope to the *file*,
+    /// not its parent, so creating a sibling folder may be denied by the sandbox.
+    /// We log and continue rather than fail the (already-written) transaction.
+    /// The robust fix is to let the user pick the containing *folder* instead of
+    /// a single file — a future settings change.
+    private nonisolated static func storeDocument(_ document: ReceiptDocument, besideLedgerFile ledger: URL) {
+        let dir = ledger.deletingLastPathComponent()
+        let dest = dir.appendingPathComponent(document.relpath)
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        coordinator.coordinate(writingItemAt: dest, options: [], error: &coordError) { writeURL in
+            do {
+                try FileManager.default.createDirectory(
+                    at: writeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                // Idempotent: same content hash -> same filename; skip if present.
+                if !FileManager.default.fileExists(atPath: writeURL.path) {
+                    try document.data.write(to: writeURL, options: .atomic)
+                }
+            } catch {
+                NSLog("[FilesLedgerInbox] receipt image not stored (\(document.relpath)): \(error.localizedDescription)")
+            }
+        }
+        if let coordError {
+            NSLog("[FilesLedgerInbox] receipt image coordination failed: \(coordError.localizedDescription)")
+        }
     }
 }
