@@ -401,6 +401,7 @@ struct SettingsView: View {
 
                 Section {
                     Toggle("Faster scans", isOn: $skipOrientationCheck)
+                    /// TODO there is a bug. this option can't turned off properly. Doesn't matter for now - 2026-07-04
                 } footer: {
                     Text("Skips the per-line upside-down check, which document scans rarely need. Turn on if scans feel slow; turn off if you see garbled or missing lines.")
                 }
