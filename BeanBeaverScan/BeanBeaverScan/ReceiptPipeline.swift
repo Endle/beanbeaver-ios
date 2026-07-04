@@ -40,7 +40,19 @@ final class ReceiptPipeline {
     var creditCardAccount = "Liabilities:CreditCard"
 
     private var session: OcrSession?
+    /// Whether `session` was built with the orientation classifier — so a change
+    /// to the setting reloads the session on the next scan.
+    private var sessionUsesOrientationCls: Bool?
     private var progressTask: Task<Void, Never>?
+
+    /// The one global switch for the orientation classifier, read from the
+    /// `skipOrientationCheck` default (Settings toggle; default off = keep the
+    /// classifier — current behavior). Drives both interactive scans and the
+    /// headless `BatchRunner`. For a headless A/B it can be overridden per launch
+    /// via `-skipOrientationCheck YES|NO` (NSUserDefaults argument domain).
+    nonisolated static var useOrientationCls: Bool {
+        !UserDefaults.standard.bool(forKey: "skipOrientationCheck")
+    }
 
     /// Instruments signpost: a "scan" interval per `OcrSession.scan`, so the
     /// on-device latency shows up in the Time Profiler / os_signpost track.
@@ -48,15 +60,19 @@ final class ReceiptPipeline {
         subsystem: "com.beanbeaver.BeanBeaverScan", category: "scan")
 
     private func loadedSession() throws -> OcrSession {
-        if let session { return session }
+        let useCls = Self.useOrientationCls
+        // Reuse the cached session only if the orientation-cls setting is
+        // unchanged; otherwise reload (the classifier is loaded at construction).
+        if let session, sessionUsesOrientationCls == useCls { return session }
         // OCR runs on CPU: the core is built CPU-only because CPU beats CoreML/ANE
         // on both speed and accuracy for the shipped dynamic-shape mobile models.
         guard let dir = Bundle.main.resourceURL else {
             throw NSError(domain: "BeanBeaverScan", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "No app resource bundle"])
         }
-        let s = try OcrSession.load(modelsDirectory: dir)
+        let s = try OcrSession.load(modelsDirectory: dir, useOrientationCls: useCls)
         session = s
+        sessionUsesOrientationCls = useCls
         return s
     }
 
@@ -255,7 +271,8 @@ enum BatchRunner {
         let delaySec = argValue("-batchDelaySec").flatMap(Double.init) ?? 0
         NSLog("[Batch] \(images.count) image(s), delay=\(delaySec)s")
 
-        let session = try? OcrSession.load(modelsDirectory: Bundle.main.resourceURL!)
+        let session = try? OcrSession.load(modelsDirectory: Bundle.main.resourceURL!,
+                                           useOrientationCls: ReceiptPipeline.useOrientationCls)
         var results: [Result] = []
         for (i, url) in images.enumerated() {
             let name = url.deletingPathExtension().lastPathComponent

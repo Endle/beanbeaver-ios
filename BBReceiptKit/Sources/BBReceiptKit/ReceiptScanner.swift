@@ -6,8 +6,12 @@ import Foundation
 public extension OcrSession {
     /// Load the OCR session from a directory holding the three PP-OCRv5
     /// `.onnx` models (their fixed filenames are baked into the Rust side).
-    static func load(modelsDirectory: URL) throws -> OcrSession {
-        try OcrSession(modelDir: modelsDirectory.path)
+    ///
+    /// `useOrientationCls` controls whether the textline-orientation classifier
+    /// is loaded/run (default true). Passing false skips the per-crop classify
+    /// pass — faster, at the cost of not correcting 180°-flipped lines.
+    static func load(modelsDirectory: URL, useOrientationCls: Bool = true) throws -> OcrSession {
+        try OcrSession(modelDir: modelsDirectory.path, useOrientationCls: useOrientationCls)
     }
 
     /// Scan encoded image bytes (JPEG/PNG) using the current local date for

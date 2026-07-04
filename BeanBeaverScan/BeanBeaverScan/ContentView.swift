@@ -362,6 +362,10 @@ struct OriginReceiptView: View {
 
 struct SettingsView: View {
     @Binding var saveScansToPhotos: Bool
+    /// When on, the OCR pipeline skips the per-line orientation classifier for
+    /// faster scans. Read globally via `ReceiptPipeline.useOrientationCls`; the
+    /// session reloads on the next scan when this changes.
+    @AppStorage("skipOrientationCheck") private var skipOrientationCheck = false
     var exporter: LedgerExporter
     /// The photo behind the result screen currently on top, if any — excluded
     /// from "Clear Old Receipts" so it can't vanish out from under the user
@@ -393,6 +397,12 @@ struct SettingsView: View {
                     } footer: {
                         Text("Keep a copy of each camera scan in your Photos library.")
                     }
+                }
+
+                Section {
+                    Toggle("Faster scans", isOn: $skipOrientationCheck)
+                } footer: {
+                    Text("Skips the per-line upside-down check, which document scans rarely need. Turn on if scans feel slow; turn off if you see garbled or missing lines.")
                 }
 
                 storageSection
