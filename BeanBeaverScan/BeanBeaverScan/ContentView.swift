@@ -750,6 +750,8 @@ extension ReceiptResult {
           Expenses:Uncategorized        6.00 USD
           Liabilities:CreditCard     -148.73 USD
         """,
+        beanbeaverId: nil,
+        documentRelpath: nil,
         timings: .preview
     )
 
@@ -770,6 +772,8 @@ extension ReceiptResult {
           Expenses:Uncategorized       6.50 USD
           Liabilities:CreditCard      -6.50 USD
         """,
+        beanbeaverId: nil,
+        documentRelpath: nil,
         timings: .preview
     )
 
@@ -796,6 +800,8 @@ extension ReceiptResult {
           Expenses:Food:Grocery         9.49 USD
           Liabilities:CreditCard      -42.10 USD
         """,
+        beanbeaverId: nil,
+        documentRelpath: nil,
         timings: .preview
     )
 }
