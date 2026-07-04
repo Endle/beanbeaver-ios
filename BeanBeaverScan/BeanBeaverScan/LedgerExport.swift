@@ -50,6 +50,14 @@ enum LedgerDestinationKind: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Compact label for the home screen's "Sync:" indicator.
+    var shortTitle: String {
+        switch self {
+        case .filesInbox: return "Files"
+        case .githubPR: return "GitHub"
+        }
+    }
+
     /// One-line explainer shown under the row in settings.
     var blurb: String {
         switch self {

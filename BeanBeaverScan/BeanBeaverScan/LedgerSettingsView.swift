@@ -9,6 +9,7 @@ struct LedgerSettingsView: View {
     @State private var importError: String?
     @State private var connection = GitHubConnection()
     @Environment(\.openURL) private var openURL
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         List {
@@ -17,6 +18,11 @@ struct LedgerSettingsView: View {
         }
         .navigationTitle("Ledger Sync")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") { dismiss() }
+            }
+        }
         .fileImporter(isPresented: $showFileImporter,
                       allowedContentTypes: [.plainText, .text, .data]) { result in
             switch result {
