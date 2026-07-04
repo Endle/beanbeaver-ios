@@ -43,4 +43,30 @@ enum Keychain {
         ]
         SecItemDelete(query as CFDictionary)
     }
+
+    struct Item {
+        let account: String
+        let byteCount: Int
+    }
+
+    /// Every item stored under this app's Keychain service — for the data-dump
+    /// debug screen. Never returns the secret itself, only its account name and
+    /// size, so the dump can't leak a live token.
+    static func allItems() -> [Item] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let items = result as? [[String: Any]] else { return [] }
+        return items.compactMap { item in
+            guard let account = item[kSecAttrAccount as String] as? String else { return nil }
+            let byteCount = (item[kSecValueData as String] as? Data)?.count ?? 0
+            return Item(account: account, byteCount: byteCount)
+        }
+    }
 }
