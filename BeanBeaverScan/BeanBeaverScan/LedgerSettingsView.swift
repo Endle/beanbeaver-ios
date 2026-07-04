@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 /// Configure where scanned transactions are sent: a synced `.bean` file (Files /
@@ -8,6 +9,7 @@ struct LedgerSettingsView: View {
     @State private var showFileImporter = false
     @State private var importError: String?
     @State private var connection = GitHubConnection()
+    @State private var codeCopied = false
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
 
@@ -103,12 +105,26 @@ struct LedgerSettingsView: View {
         } else {
             switch connection.phase {
             case .awaitingAuthorization(let code):
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Authorize in the browser that just opened, then come back.")
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Authorize in the browser that just opened, then come back. Enter this code if GitHub asks for it — tap to copy:")
                         .font(.footnote)
-                    LabeledContent("Your code", value: code)
-                        .font(.body.monospaced())
-                    ProgressView()
+                    Button {
+                        UIPasteboard.general.string = code
+                        withAnimation { codeCopied = true }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Text(code)
+                                .font(.system(.title, design: .monospaced).weight(.bold))
+                                .minimumScaleFactor(0.6)
+                                .lineLimit(1)
+                            Spacer(minLength: 8)
+                            Image(systemName: codeCopied ? "checkmark.circle.fill" : "doc.on.doc")
+                                .foregroundStyle(codeCopied ? .green : .accentColor)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(codeCopied ? "Code copied" : "Copy code \(code)")
+                    HStack(spacing: 6) { ProgressView(); Text("Waiting for authorization…").font(.footnote) }
                 }
                 Button("Cancel", role: .cancel) { connection.cancel() }
             case .starting:
@@ -129,6 +145,7 @@ struct LedgerSettingsView: View {
                 Button("Cancel", role: .cancel) { connection.cancel() }
             case .idle, .failed:
                 Button {
+                    codeCopied = false
                     connection.connect(openURL: { openURL($0) }) { token in
                         exporter.github.token = token
                     }
