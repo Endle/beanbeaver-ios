@@ -73,12 +73,20 @@ struct LedgerSettingsView: View {
         } header: {
             Label(LedgerDestinationKind.githubPR.title, systemImage: LedgerDestinationKind.githubPR.systemImage)
         } footer: {
-            Text("Each export opens a pull request that appends the transaction to the file. Connect your GitHub account, or enter a fine-grained token (Contents + Pull requests read/write). Either way the token is stored in the device Keychain.")
+            Text("Each export opens a pull request that appends the transaction to the file. Connect your GitHub account: authorize in the browser, then install BeanBeaver on this one repo (it can't touch your other repos). The token is stored in the device Keychain.")
         }
     }
 
     private var isGitHubConnected: Bool {
         !exporter.github.token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// "owner/repo" when both are filled in, else a generic fallback for the
+    /// install prompt.
+    private var repoLabel: String {
+        let owner = exporter.github.owner.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repo = exporter.github.repo.trimmingCharacters(in: .whitespacesAndNewlines)
+        return owner.isEmpty || repo.isEmpty ? "your ledger repo" : "\(owner)/\(repo)"
     }
 
     @ViewBuilder
@@ -105,24 +113,32 @@ struct LedgerSettingsView: View {
                 Button("Cancel", role: .cancel) { connection.cancel() }
             case .starting:
                 HStack { ProgressView(); Text("Contacting GitHub…") }
+            case .verifyingInstall:
+                HStack { ProgressView(); Text("Checking repository access…") }
+            case .needsInstall(let installURL):
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Almost done. Install BeanBeaver on \(repoLabel) so it can open pull requests there — and only there.")
+                        .font(.footnote)
+                }
+                Button {
+                    openURL(installURL)
+                } label: {
+                    Label("Install on Your Repo", systemImage: "square.and.arrow.down")
+                }
+                Button("I've Installed It — Continue") { connection.recheckInstallation() }
+                Button("Cancel", role: .cancel) { connection.cancel() }
             case .idle, .failed:
-                // "Connect GitHub" (OAuth Device Flow) is parked pending a design
-                // review — see the github-oauth-plan memory. The device-flow code
-                // in GitHubDeviceFlow.swift is ready; to re-enable, uncomment this
-                // button and set GitHubOAuth.clientID. Manual token stays as the
-                // working path in the meantime.
-                //
-                // Button {
-                //     connection.connect(openURL: { openURL($0) }) { token in
-                //         exporter.github.token = token
-                //     }
-                // } label: {
-                //     Label("Connect GitHub", systemImage: "person.badge.key")
-                // }
-                // if case .failed(let message) = connection.phase {
-                //     Text(message).font(.caption).foregroundStyle(.red)
-                // }
-                SecureField("Access token", text: $exporter.github.token)
+                Button {
+                    connection.connect(openURL: { openURL($0) }) { token in
+                        exporter.github.token = token
+                    }
+                } label: {
+                    Label("Connect GitHub", systemImage: "person.badge.key")
+                }
+                .disabled(!GitHubApp.isConfigured)
+                if case .failed(let message) = connection.phase {
+                    Text(message).font(.caption).foregroundStyle(.red)
+                }
             }
         }
     }

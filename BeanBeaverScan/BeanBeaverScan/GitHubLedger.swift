@@ -11,8 +11,11 @@ import Observation
 ///   4. PUT the appended file onto that branch (one commit),
 ///   5. open a PR from that branch into the base.
 ///
-/// A fine-grained personal access token with Contents + Pull requests
-/// read/write on the repo is stored in the Keychain.
+/// A GitHub App user access token (obtained via device flow, see
+/// `GitHubDeviceFlow.swift`) authorizes the REST calls and is stored in the
+/// Keychain. The app must be installed on the repo with Contents + Pull requests
+/// read/write; because it's a per-repo installation the token can't reach the
+/// user's other repos.
 @Observable
 @MainActor
 final class GitHubLedger: LedgerDestination {
