@@ -131,6 +131,15 @@ enum GitHubApp {
         return ((json["total_count"] as? Int) ?? 0) > 0
     }
 
+    /// The signed-in account's login, used to pre-fill the repo owner.
+    static func fetchLogin(token: String) async throws -> String {
+        let json = try await getJSON("https://api.github.com/user", token: token)
+        guard let login = json["login"] as? String else {
+            throw FlowError("Couldn't read your GitHub username.")
+        }
+        return login
+    }
+
     // MARK: - Transport
 
     private static func postForm(_ urlString: String, body: String) async throws -> [String: Any] {

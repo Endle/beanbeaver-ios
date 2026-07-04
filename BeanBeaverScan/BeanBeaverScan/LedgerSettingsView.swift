@@ -63,19 +63,16 @@ struct LedgerSettingsView: View {
 
     private var gitHubSection: some View {
         Section {
-            TextField("Owner (user or org)", text: $exporter.github.owner)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-            TextField("Repository", text: $exporter.github.repo)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-            TextField("File path (e.g. receipts-inbox.bean)", text: $exporter.github.path)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-            TextField("Base branch", text: $exporter.github.baseBranch)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-            gitHubAuthRows
+            if isGitHubConnected {
+                gitHubConnectedRows
+                repoConfigRows
+            } else {
+                gitHubConnectFlow
+            }
         } header: {
             Label(LedgerDestinationKind.githubPR.title, systemImage: LedgerDestinationKind.githubPR.systemImage)
         } footer: {
-            Text("Each export opens a pull request that appends the transaction to the file. Connect your GitHub account: authorize in the browser, then install BeanBeaver on this one repo (it can't touch your other repos). The token is stored in the device Keychain.")
+            Text("Each export opens a pull request that appends the transaction to the ledger file on the repo's default branch. Connect your GitHub account: authorize in the browser, then install BeanBeaver on the one repo you pick — it can't touch your other repos. The token is stored in the device Keychain.")
         }
     }
 
@@ -91,72 +88,101 @@ struct LedgerSettingsView: View {
         return owner.isEmpty || repo.isEmpty ? "your ledger repo" : "\(owner)/\(repo)"
     }
 
+    /// Account status + disconnect, shown once a token is stored.
     @ViewBuilder
-    private var gitHubAuthRows: some View {
-        if isGitHubConnected {
-            LabeledContent("Account") {
-                Label("Connected", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            }
-            Button("Disconnect", role: .destructive) {
-                connection.cancel()
-                exporter.github.token = ""
-            }
-        } else {
-            switch connection.phase {
-            case .awaitingAuthorization(let code):
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Authorize in the browser that just opened, then come back. Enter this code if GitHub asks for it — tap to copy:")
-                        .font(.footnote)
-                    Button {
-                        UIPasteboard.general.string = code
-                        withAnimation { codeCopied = true }
-                    } label: {
-                        HStack(spacing: 12) {
-                            Text(code)
-                                .font(.system(.title, design: .monospaced).weight(.bold))
-                                .minimumScaleFactor(0.6)
-                                .lineLimit(1)
-                            Spacer(minLength: 8)
-                            Image(systemName: codeCopied ? "checkmark.circle.fill" : "doc.on.doc")
-                                .foregroundStyle(codeCopied ? .green : .accentColor)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(codeCopied ? "Code copied" : "Copy code \(code)")
-                    HStack(spacing: 6) { ProgressView(); Text("Waiting for authorization…").font(.footnote) }
-                }
-                Button("Cancel", role: .cancel) { connection.cancel() }
-            case .starting:
-                HStack { ProgressView(); Text("Contacting GitHub…") }
-            case .verifyingInstall:
-                HStack { ProgressView(); Text("Checking repository access…") }
-            case .needsInstall(let installURL):
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Almost done. Install BeanBeaver on \(repoLabel) so it can open pull requests there — and only there.")
-                        .font(.footnote)
-                }
+    private var gitHubConnectedRows: some View {
+        LabeledContent("Account") {
+            Label("Connected", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        }
+        Button("Disconnect", role: .destructive) {
+            connection.cancel()
+            exporter.github.token = ""
+        }
+    }
+
+    /// Which repo/file to write to. Owner is pre-filled from the signed-in
+    /// account but stays editable so an org-owned repo can be entered.
+    @ViewBuilder
+    private var repoConfigRows: some View {
+        TextField("Owner (you or an org)", text: $exporter.github.owner)
+            .textInputAutocapitalization(.never).autocorrectionDisabled()
+        TextField("Repository", text: $exporter.github.repo)
+            .textInputAutocapitalization(.never).autocorrectionDisabled()
+        TextField("File path (e.g. receipts-inbox.bean)", text: $exporter.github.path)
+            .textInputAutocapitalization(.never).autocorrectionDisabled()
+    }
+
+    /// The connect flow before a token exists: one Connect button that walks
+    /// through the device-code and install steps.
+    @ViewBuilder
+    private var gitHubConnectFlow: some View {
+        switch connection.phase {
+        case .awaitingAuthorization(let code):
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Authorize in the browser that just opened, then come back. Enter this code if GitHub asks for it — tap to copy:")
+                    .font(.footnote)
                 Button {
-                    openURL(installURL)
+                    UIPasteboard.general.string = code
+                    withAnimation { codeCopied = true }
                 } label: {
-                    Label("Install on Your Repo", systemImage: "square.and.arrow.down")
-                }
-                Button("I've Installed It — Continue") { connection.recheckInstallation() }
-                Button("Cancel", role: .cancel) { connection.cancel() }
-            case .idle, .failed:
-                Button {
-                    codeCopied = false
-                    connection.connect(openURL: { openURL($0) }) { token in
-                        exporter.github.token = token
+                    HStack(spacing: 12) {
+                        Text(code)
+                            .font(.system(.title, design: .monospaced).weight(.bold))
+                            .minimumScaleFactor(0.6)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Image(systemName: codeCopied ? "checkmark.circle.fill" : "doc.on.doc")
+                            .foregroundStyle(codeCopied ? .green : .accentColor)
                     }
-                } label: {
-                    Label("Connect GitHub", systemImage: "person.badge.key")
                 }
-                .disabled(!GitHubApp.isConfigured)
-                if case .failed(let message) = connection.phase {
-                    Text(message).font(.caption).foregroundStyle(.red)
-                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(codeCopied ? "Code copied" : "Copy code \(code)")
+                HStack(spacing: 6) { ProgressView(); Text("Waiting for authorization…").font(.footnote) }
             }
+            Button("Cancel", role: .cancel) { connection.cancel() }
+        case .starting:
+            HStack { ProgressView(); Text("Contacting GitHub…") }
+        case .verifyingInstall:
+            HStack { ProgressView(); Text("Checking repository access…") }
+        case .needsInstall(let installURL):
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Almost done. Install BeanBeaver on \(repoLabel) so it can open pull requests there — and only there.")
+                    .font(.footnote)
+            }
+            Button {
+                openURL(installURL)
+            } label: {
+                Label("Install on Your Repo", systemImage: "square.and.arrow.down")
+            }
+            Button("I've Installed It — Continue") { connection.recheckInstallation() }
+            Button("Cancel", role: .cancel) { connection.cancel() }
+        case .idle, .failed:
+            Button {
+                codeCopied = false
+                connection.connect(openURL: { openURL($0) }) { token in
+                    exporter.github.token = token
+                    deduceOwnerIfNeeded(token: token)
+                }
+            } label: {
+                Label("Connect GitHub", systemImage: "person.badge.key")
+            }
+            .disabled(!GitHubApp.isConfigured)
+            if case .failed(let message) = connection.phase {
+                Text(message).font(.caption).foregroundStyle(.red)
+            }
+        }
+    }
+
+    /// After connecting, default the owner to the signed-in account's login so
+    /// the user doesn't have to type it. Only fills a blank field, so an org
+    /// owner the user already entered is never overwritten.
+    private func deduceOwnerIfNeeded(token: String) {
+        guard exporter.github.owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        Task { @MainActor in
+            guard exporter.github.owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let login = try? await GitHubApp.fetchLogin(token: token) else { return }
+            exporter.github.owner = login
         }
     }
 }
