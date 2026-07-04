@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 /// A receipt image to store alongside the transaction so its `document:` link
 /// resolves for any user. `relpath` is relative to the ledger's documents root
@@ -144,6 +145,21 @@ final class LedgerExporter {
     /// Destinations the user has configured — the ones worth offering as buttons.
     var configuredKinds: [LedgerDestinationKind] {
         LedgerDestinationKind.allCases.filter { destination(for: $0).isConfigured }
+    }
+
+    /// Short label for a "Sync:" button — "None" or the configured
+    /// destinations, e.g. "Files" or "Files+GitHub". Shared by the home
+    /// screen and the result screen so they never drift.
+    var syncIndicator: String {
+        let kinds = configuredKinds
+        guard !kinds.isEmpty else { return "None" }
+        return kinds.map(\.shortTitle).joined(separator: "+")
+    }
+
+    /// Green once a destination is configured (matches the platform's
+    /// "connected" convention), grey while sync is unset.
+    var syncTint: Color {
+        configuredKinds.isEmpty ? .secondary : .green
     }
 
     func export(_ entry: LedgerEntry, to kind: LedgerDestinationKind) async {

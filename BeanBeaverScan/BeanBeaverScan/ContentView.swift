@@ -53,9 +53,7 @@ struct ContentView: View {
                         ReceiptResultView(result: result, wallMs: pipeline.lastWallMs,
                                           capturedImageURL: pipeline.capturedImageURL,
                                           exporter: exporter,
-                                          onConfigure: { showSettings = true }) {
-                            pipeline.reset()
-                        }
+                                          onConfigure: { showSettings = true })
                     }
                 }
                 .padding()
@@ -179,14 +177,6 @@ struct ContentView: View {
 
     // MARK: - Home
 
-    /// Short label for the home screen's "Sync:" button — "None" or the
-    /// configured destinations, e.g. "Files" or "Files+GitHub".
-    private var syncIndicator: String {
-        let kinds = exporter.configuredKinds
-        guard !kinds.isEmpty else { return "None" }
-        return kinds.map(\.shortTitle).joined(separator: "+")
-    }
-
     private var homeView: some View {
         VStack(spacing: 28) {
             VStack(spacing: 10) {
@@ -225,13 +215,13 @@ struct ContentView: View {
                 Button {
                     showLedgerSettings = true
                 } label: {
-                    Label("Sync:\(syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
+                    Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
                 .buttonStyle(.bordered)
-                .tint(.secondary)
+                .tint(exporter.syncTint)
                 .controlSize(.large)
 
                 Button {
@@ -471,7 +461,6 @@ struct ReceiptResultView: View {
     var capturedImageURL: URL?
     var exporter: LedgerExporter
     var onConfigure: () -> Void = {}
-    var onScanAnother: () -> Void
 
     private static let displayDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -546,16 +535,20 @@ struct ReceiptResultView: View {
             .padding(16)
             .bbCard()
 
-            Button {
-                onScanAnother()
+            Menu {
+                LedgerExportButtons(beancount: result.beancount,
+                                    documentRelpath: result.documentRelpath,
+                                    imageURL: capturedImageURL,
+                                    exporter: exporter,
+                                    onConfigure: onConfigure)
             } label: {
-                Label("Scan Another Receipt", systemImage: "camera.viewfinder")
+                Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.bbAccent)
+            .tint(exporter.syncTint)
             .controlSize(.large)
         }
     }
@@ -807,17 +800,17 @@ extension ReceiptResult {
 }
 
 #Preview("Result – full") {
-    ScrollView { ReceiptResultView(result: .previewFull, wallMs: 816, capturedImageURL: nil, exporter: LedgerExporter(), onScanAnother: {}).padding() }
+    ScrollView { ReceiptResultView(result: .previewFull, wallMs: 816, capturedImageURL: nil, exporter: LedgerExporter()).padding() }
         .background(Color(.systemGroupedBackground))
 }
 
 #Preview("Result – minimal") {
-    ScrollView { ReceiptResultView(result: .previewMinimal, wallMs: 300, capturedImageURL: nil, exporter: LedgerExporter(), onScanAnother: {}).padding() }
+    ScrollView { ReceiptResultView(result: .previewMinimal, wallMs: 300, capturedImageURL: nil, exporter: LedgerExporter()).padding() }
         .background(Color(.systemGroupedBackground))
 }
 
 #Preview("Result – suggested merchant") {
-    ScrollView { ReceiptResultView(result: .previewSuggestedMerchant, wallMs: 640, capturedImageURL: nil, exporter: LedgerExporter(), onScanAnother: {}).padding() }
+    ScrollView { ReceiptResultView(result: .previewSuggestedMerchant, wallMs: 640, capturedImageURL: nil, exporter: LedgerExporter()).padding() }
         .background(Color(.systemGroupedBackground))
 }
 
