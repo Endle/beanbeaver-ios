@@ -140,6 +140,26 @@ enum GitHubApp {
         return login
     }
 
+    struct RepoAccess {
+        /// The branch pull requests will target.
+        let defaultBranch: String
+        /// Whether the token can push (i.e. the app is installed here with write).
+        let canPush: Bool
+    }
+
+    /// Confirm the token can actually reach `owner/repo` and describe the access.
+    /// Throws with GitHub's message when the repo isn't found or not accessible
+    /// (e.g. the app isn't installed on it).
+    static func checkRepoAccess(owner: String, repo: String, token: String) async throws -> RepoAccess {
+        let json = try await getJSON("https://api.github.com/repos/\(owner)/\(repo)", token: token)
+        guard let defaultBranch = json["default_branch"] as? String else {
+            throw FlowError(json["message"] as? String ?? "Repository not found or not accessible.")
+        }
+        // `permissions` is present for authenticated requests; absent → assume ok.
+        let canPush = (json["permissions"] as? [String: Any])?["push"] as? Bool ?? true
+        return RepoAccess(defaultBranch: defaultBranch, canPush: canPush)
+    }
+
     // MARK: - Transport
 
     private static func postForm(_ urlString: String, body: String) async throws -> [String: Any] {

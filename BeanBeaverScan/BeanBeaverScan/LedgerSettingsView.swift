@@ -10,6 +10,13 @@ struct LedgerSettingsView: View {
     @State private var importError: String?
     @State private var connection = GitHubConnection()
     @State private var codeCopied = false
+    @State private var repoCheck: RepoCheck = .idle
+
+    private enum RepoCheck: Equatable {
+        case idle, checking
+        case ok(branch: String)
+        case failed(String)
+    }
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
 
@@ -91,26 +98,81 @@ struct LedgerSettingsView: View {
     /// Account status + disconnect, shown once a token is stored.
     @ViewBuilder
     private var gitHubConnectedRows: some View {
-        LabeledContent("Account") {
-            Label("Connected", systemImage: "checkmark.circle.fill")
+        HStack {
+            Label("GitHub connected", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
-        }
-        Button("Disconnect", role: .destructive) {
-            connection.cancel()
-            exporter.github.token = ""
+            Spacer()
+            Button("Disconnect", role: .destructive) {
+                connection.cancel()
+                exporter.github.token = ""
+                repoCheck = .idle
+            }
         }
     }
 
-    /// Which repo/file to write to. Owner is pre-filled from the signed-in
-    /// account but stays editable so an org-owned repo can be entered.
+    /// Which repo to write to. Owner is pre-filled from the signed-in account but
+    /// stays editable so an org-owned repo can be entered. The file path within
+    /// the repo is fixed (`GitHubLedger.ledgerPath`), so it isn't asked for.
     @ViewBuilder
     private var repoConfigRows: some View {
         TextField("Owner (you or an org)", text: $exporter.github.owner)
             .textInputAutocapitalization(.never).autocorrectionDisabled()
+            .onChange(of: exporter.github.owner) { repoCheck = .idle }
         TextField("Repository", text: $exporter.github.repo)
             .textInputAutocapitalization(.never).autocorrectionDisabled()
-        TextField("File path (e.g. receipts-inbox.bean)", text: $exporter.github.path)
-            .textInputAutocapitalization(.never).autocorrectionDisabled()
+            .onChange(of: exporter.github.repo) { repoCheck = .idle }
+
+        Button {
+            verifyRepoAccess()
+        } label: {
+            HStack {
+                Label("Verify Access", systemImage: "checkmark.shield")
+                if repoCheck == .checking { Spacer(); ProgressView() }
+            }
+        }
+        .disabled(verifyDisabled)
+        repoCheckStatus
+    }
+
+    @ViewBuilder
+    private var repoCheckStatus: some View {
+        switch repoCheck {
+        case .ok(let branch):
+            Label("Ready — pull requests will target \(branch).", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green).font(.footnote)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red).font(.footnote)
+        case .idle, .checking:
+            EmptyView()
+        }
+    }
+
+    private var verifyDisabled: Bool {
+        if repoCheck == .checking { return true }
+        return exporter.github.owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || exporter.github.repo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Confirm the connected token can actually reach the entered repo, and show
+    /// the outcome (green ready / red reason).
+    private func verifyRepoAccess() {
+        let owner = exporter.github.owner.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repo = exporter.github.repo.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !owner.isEmpty, !repo.isEmpty else { return }
+        repoCheck = .checking
+        Task { @MainActor in
+            do {
+                let access = try await GitHubApp.checkRepoAccess(
+                    owner: owner, repo: repo, token: exporter.github.token)
+                repoCheck = access.canPush
+                    ? .ok(branch: access.defaultBranch)
+                    : .failed("Reachable, but no write access. Install BeanBeaver on this repo with Contents + Pull requests write.")
+            } catch {
+                let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                repoCheck = .failed(message)
+            }
+        }
     }
 
     /// The connect flow before a token exists: one Connect button that walks

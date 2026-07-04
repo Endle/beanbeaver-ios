@@ -24,14 +24,16 @@ final class GitHubLedger: LedgerDestination {
     private enum Key {
         static let owner = "githubOwner"
         static let repo = "githubRepo"
-        static let path = "githubPath"
         static let token = "githubToken"   // Keychain account
     }
 
+    /// Fixed location of the receipts ledger file in the repo. Receipt images
+    /// land in a `beanbeaver/` subfolder beside it (from the document relpath),
+    /// so everything scanned lives under `beanbeaver_receipts/`.
+    static let ledgerPath = "beanbeaver_receipts/receipts.bean"
+
     var owner: String { didSet { UserDefaults.standard.set(owner, forKey: Key.owner) } }
     var repo: String { didSet { UserDefaults.standard.set(repo, forKey: Key.repo) } }
-    /// Path of the ledger file within the repo, e.g. `receipts-inbox.bean`.
-    var path: String { didSet { UserDefaults.standard.set(path, forKey: Key.path) } }
 
     /// Backed by the Keychain, not UserDefaults. `token`'s presence flips
     /// `hasToken`, which the settings UI observes.
@@ -43,20 +45,18 @@ final class GitHubLedger: LedgerDestination {
         let d = UserDefaults.standard
         owner = d.string(forKey: Key.owner) ?? ""
         repo = d.string(forKey: Key.repo) ?? ""
-        path = d.string(forKey: Key.path) ?? ""
         token = Keychain.get(Key.token) ?? ""
     }
 
     var isConfigured: Bool {
-        !owner.trimmed.isEmpty && !repo.trimmed.isEmpty
-            && !path.trimmed.isEmpty && !token.trimmed.isEmpty
+        !owner.trimmed.isEmpty && !repo.trimmed.isEmpty && !token.trimmed.isEmpty
     }
 
     func append(_ entry: LedgerEntry) async throws -> LedgerExportOutcome {
         guard isConfigured else {
-            throw LedgerExportError("GitHub isn't fully set up. Add the repo and a token in Settings › Sync.")
+            throw LedgerExportError("GitHub isn't fully set up. Connect and pick a repo in Settings › Sync.")
         }
-        let cfg = Config(owner: owner.trimmed, repo: repo.trimmed, path: path.trimmed,
+        let cfg = Config(owner: owner.trimmed, repo: repo.trimmed, path: Self.ledgerPath,
                          token: token.trimmed)
         let url = try await Self.openPullRequest(cfg: cfg, beancount: entry.beancount,
                                                  document: entry.document)
