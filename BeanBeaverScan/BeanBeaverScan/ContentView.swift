@@ -169,6 +169,7 @@ struct ContentView: View {
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }
                 Task {
+                    defer { photoItem = nil }
                     guard let data = try? await item.loadTransferable(type: Data.self) else { return }
                     await pipeline.scan(imageData: data)
                 }
@@ -181,16 +182,6 @@ struct ContentView: View {
     private var homeView: some View {
         VStack(spacing: 28) {
             VStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(Color.bbAccentSoft)
-                        .frame(width: 88, height: 88)
-                    Image(systemName: "leaf.fill")
-                        .font(.system(size: 38))
-                        .foregroundStyle(Color.bbAccent)
-                }
-                .padding(.top, 12)
-
                 Text("What happens in your wallet, stays in your wallet.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
