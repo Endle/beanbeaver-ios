@@ -83,8 +83,7 @@ struct ContentView: View {
 
                             if let result = doneResult {
                                 Section("Export") {
-                                    LedgerExportButtons(beancount: result.beancount,
-                                                        documentRelpath: result.documentRelpath,
+                                    LedgerExportButtons(result: result,
                                                         imageURL: pipeline.capturedImageURL,
                                                         exporter: exporter,
                                                         onConfigure: { showSettings = true })
@@ -506,8 +505,7 @@ struct ReceiptResultView: View {
 
                     HStack {
                         Menu {
-                            LedgerExportButtons(beancount: result.beancount,
-                                                documentRelpath: result.documentRelpath,
+                            LedgerExportButtons(result: result,
                                                 imageURL: capturedImageURL,
                                                 exporter: exporter,
                                                 onConfigure: onConfigure)
@@ -536,8 +534,7 @@ struct ReceiptResultView: View {
             .bbCard()
 
             Menu {
-                LedgerExportButtons(beancount: result.beancount,
-                                    documentRelpath: result.documentRelpath,
+                LedgerExportButtons(result: result,
                                     imageURL: capturedImageURL,
                                     exporter: exporter,
                                     onConfigure: onConfigure)
