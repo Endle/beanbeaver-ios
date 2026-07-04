@@ -1,6 +1,25 @@
 import Foundation
 import Observation
 
+/// A receipt image to store alongside the transaction so its `document:` link
+/// resolves for any user. `relpath` is relative to the ledger's documents root
+/// (e.g. `beanbeaver/2026-02-18-costco-a1b2c3d4.jpg`) — exactly the value the
+/// Rust core wrote into the transaction's `document:` metadata
+/// (`ReceiptResult.documentRelpath`). `data` is the scanned JPEG, whose content
+/// hash the relpath's token was derived from, so the link always resolves.
+struct ReceiptDocument {
+    let data: Data
+    let relpath: String
+}
+
+/// One transaction to export, plus the optional receipt image that travels with
+/// it. `document` is nil when the scan produced no content hash (older cores) or
+/// the captured JPEG is unavailable — export then falls back to text-only.
+struct LedgerEntry {
+    let beancount: String
+    let document: ReceiptDocument?
+}
+
 /// A place a parsed receipt's beancount transaction can be sent. Concrete
 /// backends (a synced `.bean` file via the Files layer, a GitHub pull request)
 /// live in their own files; the UI only talks to this seam.
@@ -12,8 +31,10 @@ protocol LedgerDestination: AnyObject {
     /// Whether the user has finished configuring this backend (picked a file,
     /// entered a repo + token, …). Drives whether the export button is offered.
     var isConfigured: Bool { get }
-    /// Append one transaction. `beancount` is `ReceiptResult.beancount` verbatim.
-    func append(_ beancount: String) async throws -> LedgerExportOutcome
+    /// Append one transaction and, when present, store its receipt image so the
+    /// `document:` link resolves. `entry.beancount` is `ReceiptResult.beancount`
+    /// verbatim.
+    func append(_ entry: LedgerEntry) async throws -> LedgerExportOutcome
 }
 
 enum LedgerDestinationKind: String, CaseIterable, Identifiable {
@@ -117,12 +138,12 @@ final class LedgerExporter {
         LedgerDestinationKind.allCases.filter { destination(for: $0).isConfigured }
     }
 
-    func export(_ beancount: String, to kind: LedgerDestinationKind) async {
+    func export(_ entry: LedgerEntry, to kind: LedgerDestinationKind) async {
         guard runningKind == nil else { return }
         runningKind = kind
         defer { runningKind = nil }
         do {
-            let outcome = try await destination(for: kind).append(beancount)
+            let outcome = try await destination(for: kind).append(entry)
             result = Result(title: outcome.title, message: outcome.message,
                             openURL: outcome.openableURL, isError: false)
         } catch {

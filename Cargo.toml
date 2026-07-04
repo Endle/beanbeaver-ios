@@ -5,7 +5,11 @@ edition = "2021"
 publish = false
 
 [dependencies]
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1.3" }
+# DEV: tracking the beanbeaver-core dev branch for portable-receipt-identity —
+# ReceiptResult now carries beanbeaver_id/document_relpath and scans emit real
+# `document:` metadata. Re-pin to a cut tag (e.g. v0.2.0) before merging to main,
+# and rerun ./build-xcframework.sh to regenerate the Swift glue + xcframework.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", branch = "dev/portable-receipt-identity" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).

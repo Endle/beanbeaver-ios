@@ -52,14 +52,15 @@ final class GitHubLedger: LedgerDestination {
             && !path.trimmed.isEmpty && !token.trimmed.isEmpty
     }
 
-    func append(_ beancount: String) async throws -> LedgerExportOutcome {
+    func append(_ entry: LedgerEntry) async throws -> LedgerExportOutcome {
         guard isConfigured else {
             throw LedgerExportError("GitHub isn't fully set up. Add the repo and a token in Settings › Sync.")
         }
         let cfg = Config(owner: owner.trimmed, repo: repo.trimmed, path: path.trimmed,
                          base: baseBranch.trimmed.isEmpty ? "main" : baseBranch.trimmed,
                          token: token.trimmed)
-        let url = try await Self.openPullRequest(cfg: cfg, entry: beancount)
+        let url = try await Self.openPullRequest(cfg: cfg, beancount: entry.beancount,
+                                                 document: entry.document)
         return .pullRequest(url: url)
     }
 
@@ -69,7 +70,9 @@ final class GitHubLedger: LedgerDestination {
         let owner, repo, path, base, token: String
     }
 
-    private nonisolated static func openPullRequest(cfg: Config, entry: String) async throws -> URL {
+    private nonisolated static func openPullRequest(
+        cfg: Config, beancount: String, document: ReceiptDocument?
+    ) async throws -> URL {
         let repoRoot = "/repos/\(cfg.owner)/\(cfg.repo)"
 
         // 1. Head commit of the base branch.
@@ -86,13 +89,23 @@ final class GitHubLedger: LedgerDestination {
             existing = nil
         }
         let currentText = existing?.decodedContent ?? ""
-        let newText = appendEntry(to: currentText, entry: entry)
+        let newText = appendEntry(to: currentText, entry: beancount)
 
         // 3. New branch off the base head.
         let stamp = branchStamp()
         let branch = "beanbeaver/receipt-\(stamp)"
         let _: RefResponse = try await api(cfg, "POST", "\(repoRoot)/git/refs",
             body: ["ref": "refs/heads/\(branch)", "sha": baseSha])
+
+        // 3b. Commit the receipt image onto the same branch so the PR carries it
+        //     and the transaction's `document:` link resolves. Stored beside the
+        //     ledger file under its documents-root-relative path (`beanbeaver/…`).
+        if let document {
+            let dir = (cfg.path as NSString).deletingLastPathComponent
+            let imagePath = dir.isEmpty ? document.relpath : "\(dir)/\(document.relpath)"
+            try await putImageIfAbsent(cfg, repoRoot: repoRoot, path: imagePath,
+                                       data: document.data, branch: branch)
+        }
 
         // 4. Commit the appended file onto the new branch.
         var putBody: [String: Any] = [
@@ -114,6 +127,27 @@ final class GitHubLedger: LedgerDestination {
             throw LedgerExportError("Pull request created but its URL was missing.")
         }
         return url
+    }
+
+    /// Create `path` on `branch` with `data` if it's not already there. The
+    /// receipt filename carries the image's content hash, so an existing file is
+    /// necessarily identical — we skip it, keeping re-exports idempotent.
+    private nonisolated static func putImageIfAbsent(
+        _ cfg: Config, repoRoot: String, path: String, data: Data, branch: String
+    ) async throws {
+        let escaped = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+        do {
+            let _: ContentsResponse = try await api(
+                cfg, "GET", "\(repoRoot)/contents/\(escaped)?ref=\(branch)")
+            return // already present on the branch
+        } catch let e as HTTPStatusError where e.status == 404 {
+            // not there yet — create it below
+        }
+        let _: PutResponse = try await api(cfg, "PUT", "\(repoRoot)/contents/\(escaped)", body: [
+            "message": "BeanBeaver: add receipt image",
+            "content": data.base64EncodedString(),
+            "branch": branch,
+        ])
     }
 
     /// Append `entry` to `existing`, keeping a blank-line separator between txns.

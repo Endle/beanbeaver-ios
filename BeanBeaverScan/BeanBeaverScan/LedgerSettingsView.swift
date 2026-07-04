@@ -127,13 +127,22 @@ struct LedgerSettingsView: View {
 /// Shared by the result card and the toolbar menu so they never drift.
 struct LedgerExportButtons: View {
     let beancount: String
+    /// The receipt image's documents-root-relative path (`ReceiptResult
+    /// .documentRelpath`) and the captured JPEG on disk. When both are present
+    /// the image is stored alongside the transaction so its `document:` link
+    /// resolves; otherwise export is text-only.
+    var documentRelpath: String?
+    var imageURL: URL?
     @Bindable var exporter: LedgerExporter
     var onConfigure: () -> Void
 
     var body: some View {
         ForEach(exporter.configuredKinds) { kind in
             Button {
-                Task { await exporter.export(beancount, to: kind) }
+                let entry = LedgerEntry(beancount: beancount,
+                                        document: Self.makeDocument(relpath: documentRelpath,
+                                                                    imageURL: imageURL))
+                Task { await exporter.export(entry, to: kind) }
             } label: {
                 Label(kind.title, systemImage: kind.systemImage)
             }
@@ -150,5 +159,16 @@ struct LedgerExportButtons: View {
             Label(exporter.configuredKinds.isEmpty ? "Set Up Sync…" : "Sync Settings…",
                   systemImage: "gearshape")
         }
+    }
+
+    /// Read the captured JPEG so it can travel with the transaction. Deferred to
+    /// tap time (not view rendering) to avoid re-reading the file on every body
+    /// evaluation. Returns nil (text-only export) if either input is missing or
+    /// the bytes can't be read.
+    private static func makeDocument(relpath: String?, imageURL: URL?) -> ReceiptDocument? {
+        guard let relpath, let imageURL, let data = try? Data(contentsOf: imageURL) else {
+            return nil
+        }
+        return ReceiptDocument(data: data, relpath: relpath)
     }
 }
