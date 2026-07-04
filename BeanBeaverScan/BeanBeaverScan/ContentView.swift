@@ -10,9 +10,9 @@ struct ContentView: View {
     @State private var showScanner = false
     @State private var showOriginReceipt = false
     @State private var showSettings = false
-    /// DEBUG deep-link: `-showLedgerSettings` opens the Ledger Sync page on
-    /// launch so it can be screenshotted headlessly (previews render only in Xcode).
-    @State private var debugShowLedgerSettings = false
+    /// Also opened by the `-showLedgerSettings` DEBUG deep-link, so it can be
+    /// screenshotted headlessly (previews render only in Xcode).
+    @State private var showLedgerSettings = false
     /// DEBUG deep-link: `-showDataDump` opens the data-dump debug screen on
     /// launch so it can be screenshotted headlessly.
     @State private var debugShowDataDump = false
@@ -111,14 +111,17 @@ struct ContentView: View {
             .sheet(isPresented: $showOriginReceipt) {
                 OriginReceiptView(imageURL: pipeline.capturedImageURL)
             }
+            .sheet(isPresented: $showLedgerSettings) {
+                NavigationStack { LedgerSettingsView(exporter: exporter) }
+            }
             .sheet(isPresented: $showSettings) {
 #if DEBUG
-                SettingsView(saveScansToPhotos: $saveScansToPhotos, exporter: exporter,
+                SettingsView(saveScansToPhotos: $saveScansToPhotos,
                              currentCaptureURL: pipeline.capturedImageURL) {
                     Task { await pipeline.scanBundledSample(named: sampleName) }
                 }
 #else
-                SettingsView(saveScansToPhotos: $saveScansToPhotos, exporter: exporter,
+                SettingsView(saveScansToPhotos: $saveScansToPhotos,
                              currentCaptureURL: pipeline.capturedImageURL)
 #endif
             }
@@ -134,9 +137,6 @@ struct ContentView: View {
                 Text(result.message)
             }
 #if DEBUG
-            .sheet(isPresented: $debugShowLedgerSettings) {
-                NavigationStack { LedgerSettingsView(exporter: exporter) }
-            }
             .sheet(isPresented: $debugShowDataDump) {
                 NavigationStack { DataDumpView() }
             }
@@ -147,7 +147,7 @@ struct ContentView: View {
                     await pipeline.scanBundledSample(named: sampleName)
                 }
                 if ProcessInfo.processInfo.arguments.contains("-showLedgerSettings") {
-                    debugShowLedgerSettings = true
+                    showLedgerSettings = true
                 }
                 if ProcessInfo.processInfo.arguments.contains("-showDataDump") {
                     debugShowDataDump = true
@@ -169,6 +169,7 @@ struct ContentView: View {
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }
                 Task {
+                    defer { photoItem = nil }
                     guard let data = try? await item.loadTransferable(type: Data.self) else { return }
                     await pipeline.scan(imageData: data)
                 }
@@ -178,19 +179,17 @@ struct ContentView: View {
 
     // MARK: - Home
 
+    /// Short label for the home screen's "Sync:" button — "None" or the
+    /// configured destinations, e.g. "Files" or "Files+GitHub".
+    private var syncIndicator: String {
+        let kinds = exporter.configuredKinds
+        guard !kinds.isEmpty else { return "None" }
+        return kinds.map(\.shortTitle).joined(separator: "+")
+    }
+
     private var homeView: some View {
         VStack(spacing: 28) {
             VStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(Color.bbAccentSoft)
-                        .frame(width: 88, height: 88)
-                    Image(systemName: "leaf.fill")
-                        .font(.system(size: 38))
-                        .foregroundStyle(Color.bbAccent)
-                }
-                .padding(.top, 12)
-
                 Text("What happens in your wallet, stays in your wallet.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
@@ -221,6 +220,18 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.bbAccent)
+                .controlSize(.large)
+
+                Button {
+                    showLedgerSettings = true
+                } label: {
+                    Label("Sync:\(syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .tint(.secondary)
                 .controlSize(.large)
 
                 Button {
@@ -368,7 +379,6 @@ struct SettingsView: View {
     /// faster scans. Read globally via `ReceiptPipeline.useOrientationCls`; the
     /// session reloads on the next scan when this changes.
     @AppStorage("skipOrientationCheck") private var skipOrientationCheck = false
-    var exporter: LedgerExporter
     /// The photo behind the result screen currently on top, if any — excluded
     /// from "Clear Old Receipts" so it can't vanish out from under the user
     /// while they're still looking at it.
@@ -383,16 +393,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    NavigationLink {
-                        LedgerSettingsView(exporter: exporter)
-                    } label: {
-                        Label("Ledger Sync", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                } footer: {
-                    Text("Choose where scanned transactions go: a synced .bean file and/or a GitHub pull request.")
-                }
-
                 if VNDocumentCameraViewController.isSupported {
                     Section {
                         Toggle("Save a copy to Photos", isOn: $saveScansToPhotos)

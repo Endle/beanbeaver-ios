@@ -5,14 +5,17 @@ import Observation
 /// user's ledger repository. No on-device git engine is needed — everything is
 /// the GitHub REST API over HTTPS:
 ///
-///   1. read the base branch's head commit,
+///   1. resolve the repo's default branch and read its head commit,
 ///   2. read the target file (content + blob sha; may not exist yet),
-///   3. create a fresh branch off the base,
+///   3. create a fresh branch off the default branch,
 ///   4. PUT the appended file onto that branch (one commit),
-///   5. open a PR from that branch into the base.
+///   5. open a PR from that branch into the default branch.
 ///
-/// A fine-grained personal access token with Contents + Pull requests
-/// read/write on the repo is stored in the Keychain.
+/// A GitHub App user access token (obtained via device flow, see
+/// `GitHubDeviceFlow.swift`) authorizes the REST calls and is stored in the
+/// Keychain. The app must be installed on the repo with Contents + Pull requests
+/// read/write; because it's a per-repo installation the token can't reach the
+/// user's other repos.
 @Observable
 @MainActor
 final class GitHubLedger: LedgerDestination {
@@ -21,16 +24,16 @@ final class GitHubLedger: LedgerDestination {
     private enum Key {
         static let owner = "githubOwner"
         static let repo = "githubRepo"
-        static let path = "githubPath"
-        static let base = "githubBase"
         static let token = "githubToken"   // Keychain account
     }
 
+    /// Fixed location of the receipts ledger file in the repo. Receipt images
+    /// land in a `beanbeaver/` subfolder beside it (from the document relpath),
+    /// so everything scanned lives under `beanbeaver_receipts/`.
+    static let ledgerPath = "beanbeaver_receipts/receipts.bean"
+
     var owner: String { didSet { UserDefaults.standard.set(owner, forKey: Key.owner) } }
     var repo: String { didSet { UserDefaults.standard.set(repo, forKey: Key.repo) } }
-    /// Path of the ledger file within the repo, e.g. `receipts-inbox.bean`.
-    var path: String { didSet { UserDefaults.standard.set(path, forKey: Key.path) } }
-    var baseBranch: String { didSet { UserDefaults.standard.set(baseBranch, forKey: Key.base) } }
 
     /// Backed by the Keychain, not UserDefaults. `token`'s presence flips
     /// `hasToken`, which the settings UI observes.
@@ -42,22 +45,18 @@ final class GitHubLedger: LedgerDestination {
         let d = UserDefaults.standard
         owner = d.string(forKey: Key.owner) ?? ""
         repo = d.string(forKey: Key.repo) ?? ""
-        path = d.string(forKey: Key.path) ?? ""
-        baseBranch = d.string(forKey: Key.base) ?? "main"
         token = Keychain.get(Key.token) ?? ""
     }
 
     var isConfigured: Bool {
-        !owner.trimmed.isEmpty && !repo.trimmed.isEmpty
-            && !path.trimmed.isEmpty && !token.trimmed.isEmpty
+        !owner.trimmed.isEmpty && !repo.trimmed.isEmpty && !token.trimmed.isEmpty
     }
 
     func append(_ entry: LedgerEntry) async throws -> LedgerExportOutcome {
         guard isConfigured else {
-            throw LedgerExportError("GitHub isn't fully set up. Add the repo and a token in Settings › Sync.")
+            throw LedgerExportError("GitHub isn't fully set up. Connect and pick a repo in Settings › Sync.")
         }
-        let cfg = Config(owner: owner.trimmed, repo: repo.trimmed, path: path.trimmed,
-                         base: baseBranch.trimmed.isEmpty ? "main" : baseBranch.trimmed,
+        let cfg = Config(owner: owner.trimmed, repo: repo.trimmed, path: Self.ledgerPath,
                          token: token.trimmed)
         let url = try await Self.openPullRequest(cfg: cfg, beancount: entry.beancount,
                                                  document: entry.document)
@@ -67,7 +66,7 @@ final class GitHubLedger: LedgerDestination {
     // MARK: - REST flow
 
     private struct Config {
-        let owner, repo, path, base, token: String
+        let owner, repo, path, token: String
     }
 
     private nonisolated static func openPullRequest(
@@ -75,8 +74,12 @@ final class GitHubLedger: LedgerDestination {
     ) async throws -> URL {
         let repoRoot = "/repos/\(cfg.owner)/\(cfg.repo)"
 
+        // 0. The repo's default branch — we always target it (no branch to pick).
+        let repoInfo: RepoResponse = try await api(cfg, "GET", repoRoot)
+        let base = repoInfo.defaultBranch
+
         // 1. Head commit of the base branch.
-        let ref: RefResponse = try await api(cfg, "GET", "\(repoRoot)/git/ref/heads/\(cfg.base)")
+        let ref: RefResponse = try await api(cfg, "GET", "\(repoRoot)/git/ref/heads/\(base)")
         let baseSha = ref.object.sha
 
         // 2. Current file content + blob sha (404 => file doesn't exist yet).
@@ -84,7 +87,7 @@ final class GitHubLedger: LedgerDestination {
             .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? cfg.path
         let existing: ContentsResponse?
         do {
-            existing = try await api(cfg, "GET", "\(repoRoot)/contents/\(escapedPath)?ref=\(cfg.base)")
+            existing = try await api(cfg, "GET", "\(repoRoot)/contents/\(escapedPath)?ref=\(base)")
         } catch let e as HTTPStatusError where e.status == 404 {
             existing = nil
         }
@@ -120,7 +123,7 @@ final class GitHubLedger: LedgerDestination {
         let pr: PullResponse = try await api(cfg, "POST", "\(repoRoot)/pulls", body: [
             "title": "Add receipt transaction",
             "head": branch,
-            "base": cfg.base,
+            "base": base,
             "body": "Appended a receipt transaction scanned with BeanBeaver iOS.",
         ])
         guard let url = URL(string: pr.htmlUrl) else {
@@ -208,6 +211,10 @@ final class GitHubLedger: LedgerDestination {
     // MARK: - Wire types
 
     private struct GitHubError: Decodable { let message: String }
+    private struct RepoResponse: Decodable {
+        let defaultBranch: String
+        enum CodingKeys: String, CodingKey { case defaultBranch = "default_branch" }
+    }
     private struct RefResponse: Decodable { let object: Obj; struct Obj: Decodable { let sha: String } }
     private struct PutResponse: Decodable { let commit: Commit; struct Commit: Decodable { let sha: String } }
     private struct PullResponse: Decodable {
