@@ -27,6 +27,7 @@
 		1C0000000000000000000012 /* PP-LCNet_x1_0_textline_ori.onnx in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000012 /* PP-LCNet_x1_0_textline_ori.onnx */; };
 		1C0000000000000000000013 /* costco_20260301_redact.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000013 /* costco_20260301_redact.jpg */; };
 		1C0000000000000000000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000014 /* Assets.xcassets */; };
+		1C0000000000000000000015 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000015 /* LaunchScreen.storyboard */; };
 		1C0000000000000000000020 /* BBReceiptKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000012 /* BBReceiptKit */; };
 /* End PBXBuildFile section */
 
@@ -52,6 +53,7 @@
 		1B0000000000000000000012 /* PP-LCNet_x1_0_textline_ori.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = "PP-LCNet_x1_0_textline_ori.onnx"; path = "../models/PP-LCNet_x1_0_textline_ori.onnx"; sourceTree = SOURCE_ROOT; };
 		1B0000000000000000000013 /* costco_20260301_redact.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; name = costco_20260301_redact.jpg; path = ../tests/receipts_e2e/costco_20260301_redact.jpg; sourceTree = SOURCE_ROOT; };
 		1B0000000000000000000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1B0000000000000000000015 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -102,6 +104,7 @@
 				1B000000000000000000000E /* DataDumpView.swift */,
 				1B000000000000000000000F /* ReceiptCaptureStore.swift */,
 				1B0000000000000000000014 /* Assets.xcassets */,
+				1B0000000000000000000015 /* LaunchScreen.storyboard */,
 			);
 			path = BeanBeaver;
 			sourceTree = "<group>";
@@ -186,6 +189,7 @@
 				1C0000000000000000000012 /* PP-LCNet_x1_0_textline_ori.onnx in Resources */,
 				1C0000000000000000000013 /* costco_20260301_redact.jpg in Resources */,
 				1C0000000000000000000014 /* Assets.xcassets in Resources */,
+				1C0000000000000000000015 /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -275,7 +279,7 @@
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save scanned receipts to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = "-lc++";
@@ -301,7 +305,7 @@
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save scanned receipts to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = "-lc++";
