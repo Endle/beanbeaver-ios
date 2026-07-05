@@ -3,6 +3,18 @@ import Observation
 import SwiftUI
 import BBReceiptKit
 
+/// User-facing options for what an export writes. The Settings toggle binds to
+/// the same `@AppStorage` key; `LedgerEntry.make` reads it here so both the
+/// GitHub-PR and Files-inbox backends honor one setting. Default on — the
+/// details file is useful and both backends already carried it for GitHub.
+enum LedgerFileOptions {
+    static let includeDetailsJSONKey = "includeDetailsJSON"
+
+    static var includeDetailsJSON: Bool {
+        UserDefaults.standard.object(forKey: includeDetailsJSONKey) as? Bool ?? true
+    }
+}
+
 /// A receipt image to store alongside the transaction so its `document:` link
 /// resolves for any user. `relpath` is relative to the ledger's documents root
 /// (e.g. `beanbeaver/2026-02-18-costco-a1b2c3d4.jpg`) — exactly the value the
@@ -23,6 +35,10 @@ struct ReceiptExportJSON: Encodable {
         let price: String
         let quantity: Int32
         let category: String?
+        /// Beanbeaver-internal semantic tags (broad→specific), the classification
+        /// the app displays from. Preserved here so the raw parse keeps the full
+        /// tag set even if the beancount account mapping later changes.
+        let tags: [String]
     }
     let merchant: String
     let date: String?
@@ -41,7 +57,8 @@ struct ReceiptExportJSON: Encodable {
         subtotal = result.subtotal
         tax = result.tax
         items = result.items.map {
-            Item(description: $0.description, price: $0.price, quantity: $0.quantity, category: $0.category)
+            Item(description: $0.description, price: $0.price, quantity: $0.quantity,
+                 category: $0.category, tags: $0.tags)
         }
         warnings = result.warnings
     }
@@ -63,15 +80,20 @@ struct LedgerEntry {
     let beanbeaverId: String?
 
     /// Build the entry the export destinations receive from a finished scan.
-    /// `imageURL` is the captured JPEG still on disk, if any.
+    /// `imageURL` is the captured JPEG still on disk, if any. The `.json` sidecar
+    /// is included only when the user has the "details file" option on
+    /// (`LedgerFileOptions.includeDetailsJSON`) — both backends skip a nil `json`.
     static func make(from result: ReceiptResult, imageURL: URL?) -> LedgerEntry {
         let document: ReceiptDocument? = {
             guard let relpath = result.documentRelpath, let imageURL,
                   let data = try? Data(contentsOf: imageURL) else { return nil }
             return ReceiptDocument(data: data, relpath: relpath)
         }()
+        let json = LedgerFileOptions.includeDetailsJSON
+            ? try? Self.jsonEncoder.encode(ReceiptExportJSON(result))
+            : nil
         return LedgerEntry(beancount: result.beancount, document: document,
-                           json: try? Self.jsonEncoder.encode(ReceiptExportJSON(result)),
+                           json: json,
                            merchantSlug: Self.merchantSlug(result.merchant),
                            beanbeaverId: result.beanbeaverId)
     }

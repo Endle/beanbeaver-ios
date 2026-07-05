@@ -55,8 +55,16 @@ final class FilesLedgerInbox: LedgerDestination {
         // Coordinated file IO is blocking; keep it off the main actor.
         let text = entry.beancount
         let document = entry.document
+        // The `.json` details sidecar rides next to the image, sharing its
+        // content-addressed relpath (…-<sha8>.json) — nil when the option is off
+        // or there's no image to anchor it to.
+        let jsonSidecar: ReceiptDocument? = {
+            guard let json = entry.json, let document else { return nil }
+            let relpath = (document.relpath as NSString).deletingPathExtension + ".json"
+            return ReceiptDocument(data: json, relpath: relpath)
+        }()
         let name = try await Task.detached {
-            try Self.appendToBookmark(bookmark, text: text, document: document)
+            try Self.appendToBookmark(bookmark, text: text, document: document, jsonSidecar: jsonSidecar)
         }.value
         // A stale bookmark was refreshed inside the task; re-read the name we stored.
         return .appended(fileName: name)
@@ -66,7 +74,7 @@ final class FilesLedgerInbox: LedgerDestination {
     /// best-effort store `document` beside the ledger file, and return the file's
     /// name. Runs off the main actor.
     private nonisolated static func appendToBookmark(
-        _ bookmark: Data, text: String, document: ReceiptDocument?
+        _ bookmark: Data, text: String, document: ReceiptDocument?, jsonSidecar: ReceiptDocument?
     ) throws -> String {
         var stale = false
         let url = try URL(resolvingBookmarkData: bookmark, options: [],
@@ -105,22 +113,25 @@ final class FilesLedgerInbox: LedgerDestination {
         if let thrown { throw thrown }
 
         if let document {
-            storeDocument(document, besideLedgerFile: url)
+            storeSidecar(document, besideLedgerFile: url)
+        }
+        if let jsonSidecar {
+            storeSidecar(jsonSidecar, besideLedgerFile: url)
         }
         return url.lastPathComponent
     }
 
-    /// Write the receipt image to `<ledger-file-dir>/<relpath>` (i.e. a
-    /// `beanbeaver/` subfolder next to the inbox `.bean`), so the transaction's
-    /// `document:` link resolves when the user's `option "documents"` root points
-    /// at that directory.
+    /// Write a receipt sidecar (the image, or the `.json` details file) to
+    /// `<ledger-file-dir>/<relpath>` (i.e. a `beanbeaver/` subfolder next to the
+    /// inbox `.bean`), so the transaction's `document:` link resolves when the
+    /// user's `option "documents"` root points at that directory.
     ///
     /// Best-effort: the document picker grants a security scope to the *file*,
     /// not its parent, so creating a sibling folder may be denied by the sandbox.
     /// We log and continue rather than fail the (already-written) transaction.
     /// The robust fix is to let the user pick the containing *folder* instead of
     /// a single file — a future settings change.
-    private nonisolated static func storeDocument(_ document: ReceiptDocument, besideLedgerFile ledger: URL) {
+    private nonisolated static func storeSidecar(_ document: ReceiptDocument, besideLedgerFile ledger: URL) {
         let dir = ledger.deletingLastPathComponent()
         let dest = dir.appendingPathComponent(document.relpath)
         let coordinator = NSFileCoordinator()
@@ -134,11 +145,11 @@ final class FilesLedgerInbox: LedgerDestination {
                     try document.data.write(to: writeURL, options: .atomic)
                 }
             } catch {
-                NSLog("[FilesLedgerInbox] receipt image not stored (\(document.relpath)): \(error.localizedDescription)")
+                NSLog("[FilesLedgerInbox] sidecar not stored (\(document.relpath)): \(error.localizedDescription)")
             }
         }
         if let coordError {
-            NSLog("[FilesLedgerInbox] receipt image coordination failed: \(coordError.localizedDescription)")
+            NSLog("[FilesLedgerInbox] sidecar coordination failed: \(coordError.localizedDescription)")
         }
     }
 }

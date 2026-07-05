@@ -141,9 +141,9 @@ dependencies = [
 
 [[package]]
 name = "arrayvec"
-version = "0.7.7"
+version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f02882884d3e1bc524fb12c79f107f6ad0e1cfd498c536ffb494301740995dfe"
+checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "as-slice"
@@ -268,7 +268,7 @@ dependencies = [
 [[package]]
 name = "bb-receipt-ffi"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.2.0#f6ea0f22eef8a15c7b65766c5a19f64640c2e3d1"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.3.0#547d7b89c4d40a805cfdf464e35d866968a34248"
 dependencies = [
  "image",
  "ocr-paddle",
@@ -394,9 +394,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.65"
+version = "1.2.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e228eec9be7c17ccb640b59b36a5cd805ea2a564a4c5e162c2f659fea30d3b96"
+checksum = "f5d6cac793997bd970000024b2934968efe83b382de4fdcf4fcb46b6ee4ad996"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1318,9 +1318,9 @@ dependencies = [
 
 [[package]]
 name = "num-bigint"
-version = "0.4.6"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
+checksum = "c89e69e7e0f03bea5ef08013795c25018e101932225a656383bd384495ecc367"
 dependencies = [
  "num-integer",
  "num-traits",
@@ -1390,7 +1390,7 @@ dependencies = [
 [[package]]
 name = "ocr-paddle"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.2.0#f6ea0f22eef8a15c7b65766c5a19f64640c2e3d1"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.3.0#547d7b89c4d40a805cfdf464e35d866968a34248"
 dependencies = [
  "geo",
  "image",
@@ -1787,7 +1787,7 @@ dependencies = [
 [[package]]
 name = "receipt-core"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.2.0#f6ea0f22eef8a15c7b65766c5a19f64640c2e3d1"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.3.0#547d7b89c4d40a805cfdf464e35d866968a34248"
 dependencies = [
  "regex",
  "serde",
