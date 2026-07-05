@@ -22,7 +22,7 @@ struct ContentView: View {
     @AppStorage("saveScansToPhotos") private var saveScansToPhotos = false
 
     /// Bundled DEBUG sample (a redacted Costco receipt fixture).
-    private let sampleName = "costco_20260218_redact"
+    private let sampleName = "costco_20260301_redact"
 
     /// The result screen has its own toolbar (home + more-options) that
     /// already orients the user, so the "BeanBeaver" title would be redundant
