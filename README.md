@@ -16,9 +16,9 @@ BBReceiptKit/                 local SPM package wrapping the Rust core
     Generated/…               ⚙️ generated UniFFI Swift glue (git-ignored)
   Frameworks/
     BBReceiptFFI.xcframework  ⚙️ built (device + sim slices, git-ignored)
-BeanBeaverScan/                the SwiftUI app
-  BeanBeaverScan.xcodeproj
-  BeanBeaverScan/              App / ContentView / ReceiptPipeline
+BeanBeaver/                the SwiftUI app
+  BeanBeaver.xcodeproj
+  BeanBeaver/              App / ContentView / ReceiptPipeline
 models/                        PP-OCRv5 .onnx weights, bundled as app resources
 ```
 
@@ -35,12 +35,12 @@ models/                        PP-OCRv5 .onnx weights, bundled as app resources
 xcodebuild -downloadPlatform iOS
 
 # 3. Build the app for the simulator.
-cd BeanBeaverScan
-xcodebuild -scheme BeanBeaverScan -sdk iphonesimulator \
+cd BeanBeaver
+xcodebuild -scheme BeanBeaver -sdk iphonesimulator \
   -destination 'platform=iOS Simulator,name=iPhone 16' build
 ```
 
-Or just open `BeanBeaverScan.xcodeproj` in Xcode and run.
+Or just open `BeanBeaver.xcodeproj` in Xcode and run.
 
 ## Iterating on the UI
 

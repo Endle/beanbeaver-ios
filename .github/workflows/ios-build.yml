@@ -64,8 +64,8 @@ jobs:
       - name: Build app (iOS Simulator)
         run: |
           xcodebuild build \
-            -project BeanBeaverScan/BeanBeaverScan.xcodeproj \
-            -scheme BeanBeaverScan \
+            -project BeanBeaver/BeanBeaver.xcodeproj \
+            -scheme BeanBeaver \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
@@ -83,8 +83,8 @@ jobs:
     runs-on: macos-15
     env:
       RUST_TOOLCHAIN: stable
-      BID: com.beanbeaver.BeanBeaverScan
-      SCHEME: BeanBeaverScan
+      BID: com.beanbeaver.BeanBeaver
+      SCHEME: BeanBeaver
       # device_sim live mode is slow (~4s/scan + app launch), and it exists to
       # prove the on-device path works — not to grade the whole corpus (that's
       # done fast on Linux in beanbeaver-core's receipt-core E2E). So run only a
@@ -142,7 +142,7 @@ jobs:
       - name: Build & install app
         run: |
           xcodebuild build \
-            -project BeanBeaverScan/BeanBeaverScan.xcodeproj \
+            -project BeanBeaver/BeanBeaver.xcodeproj \
             -scheme "$SCHEME" -configuration Debug \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath build \

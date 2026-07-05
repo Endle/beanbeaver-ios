@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build → install → launch → screenshot the BeanBeaverScan app on a booted
+# Build → install → launch → screenshot the BeanBeaver app on a booted
 # simulator, then print the screenshot path. This is the visual feedback loop
 # for iterating on SwiftUI: edit a view, run this, look at the PNG.
 #
@@ -14,8 +14,8 @@
 # here — this captures the *running* app, which is the only headless path.
 set -euo pipefail
 
-SCHEME="BeanBeaverScan"
-BID="com.beanbeaver.BeanBeaverScan"
+SCHEME="BeanBeaver"
+BID="com.beanbeaver.BeanBeaver"
 DEST='platform=iOS Simulator,name=iPhone 17 Pro'
 OUT="${TMPDIR:-/tmp}/beanbeaver-sim.png"
 BUILD=1
@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-cd "$(dirname "$0")/BeanBeaverScan"
+cd "$(dirname "$0")/BeanBeaver"
 
 if [[ "$BUILD" == 1 ]]; then
   echo "── build ──────────────────────────────────────────"

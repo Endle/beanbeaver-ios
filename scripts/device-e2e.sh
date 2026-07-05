@@ -21,8 +21,8 @@ set -euo pipefail
 
 FIXTURES="${1:?usage: device-e2e.sh <receipts_e2e-dir> [--all]}"
 MODE="${2:-pilot}"
-BID="com.beanbeaver.BeanBeaverScan"
-SCHEME="BeanBeaverScan"
+BID="com.beanbeaver.BeanBeaver"
+SCHEME="BeanBeaver"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="${WORK:-${TMPDIR:-/tmp}/bb-device-e2e}"
 SEL="$WORK/batch_in"
@@ -67,10 +67,10 @@ json.dump(m, open(sys.argv[2], "w"), indent=2)
 PY
 
 echo "── build & install (device) ──"
-( cd "$HERE/../BeanBeaverScan" && xcodebuild -scheme "$SCHEME" -sdk iphoneos \
+( cd "$HERE/../BeanBeaver" && xcodebuild -scheme "$SCHEME" -sdk iphoneos \
     -destination "platform=iOS,id=$DEVICE_ID" -configuration Debug \
     -allowProvisioningUpdates build | tail -3 )
-APP=$(cd "$HERE/../BeanBeaverScan" && xcodebuild -scheme "$SCHEME" -sdk iphoneos \
+APP=$(cd "$HERE/../BeanBeaver" && xcodebuild -scheme "$SCHEME" -sdk iphoneos \
     -configuration Debug -showBuildSettings 2>/dev/null \
   | awk -F' = ' '/ BUILT_PRODUCTS_DIR =/{d=$2} / FULL_PRODUCT_NAME =/{n=$2} END{print d"/"n}')
 echo "app: $APP"

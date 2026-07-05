@@ -16,8 +16,8 @@ set -euo pipefail
 
 FIXTURES="${1:?usage: sim-e2e.sh <receipts_e2e-dir> [--all]}"
 MODE="${2:-pilot}"
-BID="com.beanbeaver.BeanBeaverScan"
-SCHEME="BeanBeaverScan"
+BID="com.beanbeaver.BeanBeaver"
+SCHEME="BeanBeaver"
 DEST='platform=iOS Simulator,name=iPhone 17 Pro'
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="${WORK:-${TMPDIR:-/tmp}/bb-sim-e2e}"
@@ -57,9 +57,9 @@ json.dump(m, open(sys.argv[2], "w"), indent=2)
 PY
 
 echo "── build & install ──"
-( cd "$HERE/../BeanBeaverScan" && xcodebuild -scheme "$SCHEME" -sdk iphonesimulator \
+( cd "$HERE/../BeanBeaver" && xcodebuild -scheme "$SCHEME" -sdk iphonesimulator \
     -destination "$DEST" -configuration Debug build | tail -2 )
-APP=$(cd "$HERE/../BeanBeaverScan" && xcodebuild -scheme "$SCHEME" -sdk iphonesimulator \
+APP=$(cd "$HERE/../BeanBeaver" && xcodebuild -scheme "$SCHEME" -sdk iphonesimulator \
     -configuration Debug -showBuildSettings 2>/dev/null \
   | awk -F' = ' '/ BUILT_PRODUCTS_DIR =/{d=$2} / FULL_PRODUCT_NAME =/{n=$2} END{print d"/"n}')
 xcrun simctl install booted "$APP"

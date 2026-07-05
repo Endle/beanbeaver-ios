@@ -57,7 +57,7 @@ final class ReceiptPipeline {
     /// Instruments signpost: a "scan" interval per `OcrSession.scan`, so the
     /// on-device latency shows up in the Time Profiler / os_signpost track.
     private static let signposter = OSSignposter(
-        subsystem: "com.beanbeaver.BeanBeaverScan", category: "scan")
+        subsystem: "com.beanbeaver.BeanBeaver", category: "scan")
 
     private func loadedSession() throws -> OcrSession {
         let useCls = Self.useOrientationCls
@@ -67,7 +67,7 @@ final class ReceiptPipeline {
         // OCR runs on CPU: the core is built CPU-only because CPU beats CoreML/ANE
         // on both speed and accuracy for the shipped dynamic-shape mobile models.
         guard let dir = Bundle.main.resourceURL else {
-            throw NSError(domain: "BeanBeaverScan", code: 1,
+            throw NSError(domain: "BeanBeaver", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "No app resource bundle"])
         }
         let s = try OcrSession.load(modelsDirectory: dir, useOrientationCls: useCls)

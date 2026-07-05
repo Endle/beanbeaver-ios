@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "1A0000000000000000000006"
-               BuildableName = "BeanBeaverScan.app"
-               BlueprintName = "BeanBeaverScan"
-               ReferencedContainer = "container:BeanBeaverScan.xcodeproj">
+               BuildableName = "BeanBeaver.app"
+               BlueprintName = "BeanBeaver"
+               ReferencedContainer = "container:BeanBeaver.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -44,9 +44,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1A0000000000000000000006"
-            BuildableName = "BeanBeaverScan.app"
-            BlueprintName = "BeanBeaverScan"
-            ReferencedContainer = "container:BeanBeaverScan.xcodeproj">
+            BuildableName = "BeanBeaver.app"
+            BlueprintName = "BeanBeaver"
+            ReferencedContainer = "container:BeanBeaver.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>

@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct BeanBeaverScanApp: App {
+struct BeanBeaverApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
