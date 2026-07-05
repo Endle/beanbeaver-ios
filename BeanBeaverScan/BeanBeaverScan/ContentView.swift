@@ -533,21 +533,53 @@ struct ReceiptResultView: View {
             .padding(16)
             .bbCard()
 
-            Menu {
-                LedgerExportButtons(result: result,
-                                    imageURL: capturedImageURL,
-                                    exporter: exporter,
-                                    onConfigure: onConfigure)
-            } label: {
-                Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.headline)
+            VStack(spacing: 8) {
+                Button {
+                    Task { await primarySync() }
+                } label: {
+                    HStack {
+                        Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.headline)
+                        if exporter.runningKind != nil {
+                            ProgressView().tint(.white)
+                        }
+                    }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(exporter.syncTint)
+                .controlSize(.large)
+                .disabled(exporter.runningKind != nil)
+
+                // Secondary escape hatch: other configured destinations, Share/Copy,
+                // and Sync Settings — the primary button above fires the first
+                // configured destination directly, no picker in the way.
+                if !exporter.configuredKinds.isEmpty {
+                    Menu {
+                        LedgerExportButtons(result: result,
+                                            imageURL: capturedImageURL,
+                                            exporter: exporter,
+                                            onConfigure: onConfigure)
+                    } label: {
+                        Text("More")
+                            .font(.subheadline)
+                    }
+                    .tint(.secondary)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(exporter.syncTint)
-            .controlSize(.large)
         }
+    }
+
+    /// Fires the first configured destination directly — no menu in the way.
+    /// Falls back to opening Sync Settings when nothing is configured yet.
+    private func primarySync() async {
+        guard let kind = exporter.configuredKinds.first else {
+            onConfigure()
+            return
+        }
+        let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL)
+        await exporter.export(entry, to: kind)
     }
 
     private var header: some View {
