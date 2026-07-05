@@ -5,7 +5,7 @@ import Security
 /// GitHub access token off `UserDefaults` (which is world-readable in backups).
 /// Values are namespaced by `account` under this app's service identifier.
 enum Keychain {
-    private static let service = "com.beanbeaver.BeanBeaverScan.tokens"
+    private static let service = "com.beanbeaver.BeanBeaver.tokens"
 
     /// Store (or replace) a secret. Passing `nil`/empty removes it.
     static func set(_ value: String?, for account: String) {
