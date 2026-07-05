@@ -259,13 +259,16 @@ struct LedgerExportButtons: View {
     /// The captured JPEG on disk, if any — read (off the render pass, at tap
     /// time) into the `LedgerEntry` so it travels alongside the transaction.
     var imageURL: URL?
+    /// Swift-observed total scan time, folded into the exported JSON sidecar's
+    /// timings alongside the Rust per-stage breakdown.
+    var wallMs: Double?
     @Bindable var exporter: LedgerExporter
     var onConfigure: () -> Void
 
     var body: some View {
         ForEach(exporter.configuredKinds) { kind in
             Button {
-                let entry = LedgerEntry.make(from: result, imageURL: imageURL)
+                let entry = LedgerEntry.make(from: result, imageURL: imageURL, wallMs: wallMs)
                 Task { await exporter.export(entry, to: kind) }
             } label: {
                 Label(kind.title, systemImage: kind.systemImage)

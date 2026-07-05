@@ -40,6 +40,20 @@ struct ReceiptExportJSON: Encodable {
         /// tag set even if the beancount account mapping later changes.
         let tags: [String]
     }
+    /// Per-stage on-device timings (ms), mirrored from the Rust `ScanTimings` —
+    /// same shape as `BatchRunner.Timings`, so a PR's sidecar JSON carries the
+    /// same latency breakdown as the headless E2E harness.
+    struct Timings: Encodable {
+        let prepMs: Double
+        let detectMs: Double
+        let classifyMs: Double
+        let recognizeMs: Double
+        let parseMs: Double
+        let totalMs: Double
+        /// Swift-observed total (incl. decode + FFI) — nil when unavailable
+        /// (e.g. exported from a re-opened result screen).
+        let wallMs: Double?
+    }
     let merchant: String
     let date: String?
     let dateIsPlaceholder: Bool
@@ -48,8 +62,9 @@ struct ReceiptExportJSON: Encodable {
     let tax: String?
     let items: [Item]
     let warnings: [String]
+    let timings: Timings
 
-    init(_ result: ReceiptResult) {
+    init(_ result: ReceiptResult, wallMs: Double? = nil) {
         merchant = result.merchant
         date = result.date
         dateIsPlaceholder = result.dateIsPlaceholder
@@ -61,6 +76,11 @@ struct ReceiptExportJSON: Encodable {
                  category: $0.category, tags: $0.tags)
         }
         warnings = result.warnings
+        timings = Timings(
+            prepMs: result.timings.prepMs, detectMs: result.timings.detectMs,
+            classifyMs: result.timings.classifyMs, recognizeMs: result.timings.recognizeMs,
+            parseMs: result.timings.parseMs, totalMs: result.timings.totalMs,
+            wallMs: wallMs)
     }
 }
 
@@ -80,17 +100,19 @@ struct LedgerEntry {
     let beanbeaverId: String?
 
     /// Build the entry the export destinations receive from a finished scan.
-    /// `imageURL` is the captured JPEG still on disk, if any. The `.json` sidecar
-    /// is included only when the user has the "details file" option on
+    /// `imageURL` is the captured JPEG still on disk, if any. `wallMs` is the
+    /// Swift-observed total scan time, folded into the `.json` sidecar's
+    /// timings alongside the Rust per-stage breakdown. The sidecar is included
+    /// only when the user has the "details file" option on
     /// (`LedgerFileOptions.includeDetailsJSON`) — both backends skip a nil `json`.
-    static func make(from result: ReceiptResult, imageURL: URL?) -> LedgerEntry {
+    static func make(from result: ReceiptResult, imageURL: URL?, wallMs: Double? = nil) -> LedgerEntry {
         let document: ReceiptDocument? = {
             guard let relpath = result.documentRelpath, let imageURL,
                   let data = try? Data(contentsOf: imageURL) else { return nil }
             return ReceiptDocument(data: data, relpath: relpath)
         }()
         let json = LedgerFileOptions.includeDetailsJSON
-            ? try? Self.jsonEncoder.encode(ReceiptExportJSON(result))
+            ? try? Self.jsonEncoder.encode(ReceiptExportJSON(result, wallMs: wallMs))
             : nil
         return LedgerEntry(beancount: result.beancount, document: document,
                            json: json,

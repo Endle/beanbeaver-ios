@@ -85,6 +85,7 @@ struct ContentView: View {
                                 Section("Export") {
                                     LedgerExportButtons(result: result,
                                                         imageURL: pipeline.capturedImageURL,
+                                                        wallMs: pipeline.lastWallMs,
                                                         exporter: exporter,
                                                         onConfigure: { showSettings = true })
                                 }
@@ -559,6 +560,7 @@ struct ReceiptResultView: View {
                     Menu {
                         LedgerExportButtons(result: result,
                                             imageURL: capturedImageURL,
+                                            wallMs: wallMs,
                                             exporter: exporter,
                                             onConfigure: onConfigure)
                     } label: {
@@ -582,7 +584,7 @@ struct ReceiptResultView: View {
             onConfigure()
             return
         }
-        let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL)
+        let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL, wallMs: wallMs)
         await exporter.export(entry, to: kind)
     }
 
