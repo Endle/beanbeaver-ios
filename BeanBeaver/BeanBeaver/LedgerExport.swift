@@ -84,6 +84,49 @@ struct ReceiptExportJSON: Encodable {
     }
 }
 
+/// Read-only preview of the `.json` sidecar a sync would attach — lets the
+/// user check the raw parse (and share/copy it) without actually exporting,
+/// even when `LedgerFileOptions.includeDetailsJSON` is off.
+struct ReceiptJSONView: View {
+    let result: ReceiptResult
+    var wallMs: Double?
+    @Environment(\.dismiss) private var dismiss
+
+    private var jsonText: String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(ReceiptExportJSON(result, wallMs: wallMs)),
+              let text = String(data: data, encoding: .utf8) else {
+            return "Unable to encode JSON."
+        }
+        return text
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(jsonText)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .navigationTitle("Receipt JSON")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ShareLink(item: jsonText) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
 /// One transaction to export, plus the optional receipt image that travels with
 /// it. `document` is nil when the scan produced no content hash (older cores) or
 /// the captured JPEG is unavailable — export then falls back to text-only.

@@ -16,6 +16,7 @@ struct ContentView: View {
     /// DEBUG deep-link: `-showDataDump` opens the data-dump debug screen on
     /// launch so it can be screenshotted headlessly.
     @State private var debugShowDataDump = false
+    @State private var showJSONPreview = false
     @Environment(\.openURL) private var openURL
 
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
@@ -87,7 +88,8 @@ struct ContentView: View {
                                                         imageURL: pipeline.capturedImageURL,
                                                         wallMs: pipeline.lastWallMs,
                                                         exporter: exporter,
-                                                        onConfigure: { showSettings = true })
+                                                        onConfigure: { showSettings = true },
+                                                        onViewJSON: { showJSONPreview = true })
                                 }
                             }
                         } label: {
@@ -111,6 +113,11 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showLedgerSettings) {
                 NavigationStack { LedgerSettingsView(exporter: exporter) }
+            }
+            .sheet(isPresented: $showJSONPreview) {
+                if let result = doneResult {
+                    ReceiptJSONView(result: result, wallMs: pipeline.lastWallMs)
+                }
             }
             .sheet(isPresented: $showSettings) {
 #if DEBUG
@@ -475,6 +482,7 @@ struct ReceiptResultView: View {
     var capturedImageURL: URL?
     var exporter: LedgerExporter
     var onConfigure: () -> Void = {}
+    @State private var showJSONPreview = false
 
     private static let displayDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -559,25 +567,29 @@ struct ReceiptResultView: View {
 
                 // Secondary escape hatch: other configured destinations, Share/Copy,
                 // and Sync Settings — the primary button above fires the first
-                // configured destination directly, no picker in the way.
-                if !exporter.configuredKinds.isEmpty {
-                    Menu {
-                        LedgerExportButtons(result: result,
-                                            imageURL: capturedImageURL,
-                                            wallMs: wallMs,
-                                            exporter: exporter,
-                                            onConfigure: onConfigure)
-                    } label: {
-                        Label("More", systemImage: "ellipsis.circle")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.secondary)
-                    .controlSize(.large)
+                // configured destination directly, no picker in the way. Always
+                // shown, even with nothing configured yet, so Share/Copy and
+                // Set Up Sync… stay reachable.
+                Menu {
+                    LedgerExportButtons(result: result,
+                                        imageURL: capturedImageURL,
+                                        wallMs: wallMs,
+                                        exporter: exporter,
+                                        onConfigure: onConfigure,
+                                        onViewJSON: { showJSONPreview = true })
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
+                .buttonStyle(.bordered)
+                .tint(.secondary)
+                .controlSize(.large)
             }
+        }
+        .sheet(isPresented: $showJSONPreview) {
+            ReceiptJSONView(result: result, wallMs: wallMs)
         }
     }
 

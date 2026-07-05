@@ -271,6 +271,7 @@ struct LedgerExportButtons: View {
     var wallMs: Double?
     @Bindable var exporter: LedgerExporter
     var onConfigure: () -> Void
+    var onViewJSON: () -> Void = {}
 
     var body: some View {
         ForEach(exporter.configuredKinds) { kind in
@@ -285,6 +286,12 @@ struct LedgerExportButtons: View {
 
         ShareLink(item: result.beancount) {
             Label("Share / Copy", systemImage: "square.and.arrow.up")
+        }
+
+        Button {
+            onViewJSON()
+        } label: {
+            Label("Read the JSON", systemImage: "curlybraces")
         }
 
         Button {
