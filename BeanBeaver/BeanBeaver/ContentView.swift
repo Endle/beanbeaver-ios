@@ -172,6 +172,10 @@ struct ContentView: View {
                     await pipeline.scan(imageData: data)
                 }
             }
+            // Headless launch-latency probe (process start → first frame); a no-op
+            // unless launched with `-logLaunchTiming`. Not DEBUG-gated so a Release
+            // build can be measured against Debug on a real device.
+            .task { LaunchTiming.recordFirstFrame() }
         }
     }
 

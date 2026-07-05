@@ -22,6 +22,7 @@
 		1C000000000000000000000D /* DataDump.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000000000000000000000D /* DataDump.swift */; };
 		1C000000000000000000000E /* DataDumpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000000000000000000000E /* DataDumpView.swift */; };
 		1C000000000000000000000F /* ReceiptCaptureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000000000000000000000F /* ReceiptCaptureStore.swift */; };
+		1C0000000000000000000016 /* LaunchTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000016 /* LaunchTiming.swift */; };
 		1C0000000000000000000010 /* PP-OCRv5_mobile_det.onnx in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000010 /* PP-OCRv5_mobile_det.onnx */; };
 		1C0000000000000000000011 /* PP-OCRv5_mobile_rec.onnx in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000011 /* PP-OCRv5_mobile_rec.onnx */; };
 		1C0000000000000000000012 /* PP-LCNet_x1_0_textline_ori.onnx in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000012 /* PP-LCNet_x1_0_textline_ori.onnx */; };
@@ -48,6 +49,7 @@
 		1B000000000000000000000D /* DataDump.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataDump.swift; sourceTree = "<group>"; };
 		1B000000000000000000000E /* DataDumpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataDumpView.swift; sourceTree = "<group>"; };
 		1B000000000000000000000F /* ReceiptCaptureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptCaptureStore.swift; sourceTree = "<group>"; };
+		1B0000000000000000000016 /* LaunchTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchTiming.swift; sourceTree = "<group>"; };
 		1B0000000000000000000010 /* PP-OCRv5_mobile_det.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = "PP-OCRv5_mobile_det.onnx"; path = "../models/PP-OCRv5_mobile_det.onnx"; sourceTree = SOURCE_ROOT; };
 		1B0000000000000000000011 /* PP-OCRv5_mobile_rec.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = "PP-OCRv5_mobile_rec.onnx"; path = "../models/PP-OCRv5_mobile_rec.onnx"; sourceTree = SOURCE_ROOT; };
 		1B0000000000000000000012 /* PP-LCNet_x1_0_textline_ori.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = "PP-LCNet_x1_0_textline_ori.onnx"; path = "../models/PP-LCNet_x1_0_textline_ori.onnx"; sourceTree = SOURCE_ROOT; };
@@ -103,6 +105,7 @@
 				1B000000000000000000000D /* DataDump.swift */,
 				1B000000000000000000000E /* DataDumpView.swift */,
 				1B000000000000000000000F /* ReceiptCaptureStore.swift */,
+				1B0000000000000000000016 /* LaunchTiming.swift */,
 				1B0000000000000000000014 /* Assets.xcassets */,
 				1B0000000000000000000015 /* LaunchScreen.storyboard */,
 			);
@@ -215,6 +218,7 @@
 				1C000000000000000000000D /* DataDump.swift in Sources */,
 				1C000000000000000000000E /* DataDumpView.swift in Sources */,
 				1C000000000000000000000F /* ReceiptCaptureStore.swift in Sources */,
+				1C0000000000000000000016 /* LaunchTiming.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,6 +262,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
+				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
