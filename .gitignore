@@ -4,5 +4,6 @@ BBReceiptKit/Sources/BBReceiptKit/Generated/
 **/xcuserdata/
 **/*.xcworkspace/xcuserdata/
 **/build/
+**/.build/
 
 .DS_Store
