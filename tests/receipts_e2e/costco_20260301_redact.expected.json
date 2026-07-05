@@ -1,0 +1,16 @@
+{
+  "merchant": "Costco",
+  "merchant_any_of": ["Costco Wholesale"],
+  "date": "2026-03-01",
+  "total": "72.41",
+
+  "critical_items": [
+    { "description": "KS ORG", "price": "10.29", "category_optional": true },
+    { "description": "2% FINE-FILT", "price": "6.69", "category_optional": true },
+    { "description": "XL EGGS", "price": "19.38", "category_optional": true },
+    { "description": "CHAMP SHORT", "price": "17.99", "category_optional": true },
+    { "description": "KS BAGS 60", "price": "12.99", "category_optional": true }
+  ],
+
+  "known_failures": []
+}

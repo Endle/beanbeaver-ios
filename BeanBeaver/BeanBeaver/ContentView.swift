@@ -22,7 +22,7 @@ struct ContentView: View {
     @AppStorage("saveScansToPhotos") private var saveScansToPhotos = false
 
     /// Bundled DEBUG sample (a redacted Costco receipt fixture).
-    private let sampleName = "costco_20260218_redact"
+    private let sampleName = "costco_20260301_redact"
 
     /// The result screen has its own toolbar (home + more-options) that
     /// already orients the user, so the "BeanBeaver" title would be redundant
@@ -85,6 +85,7 @@ struct ContentView: View {
                                 Section("Export") {
                                     LedgerExportButtons(result: result,
                                                         imageURL: pipeline.capturedImageURL,
+                                                        wallMs: pipeline.lastWallMs,
                                                         exporter: exporter,
                                                         onConfigure: { showSettings = true })
                                 }
@@ -171,6 +172,10 @@ struct ContentView: View {
                     await pipeline.scan(imageData: data)
                 }
             }
+            // Headless launch-latency probe (process start → first frame); a no-op
+            // unless launched with `-logLaunchTiming`. Not DEBUG-gated so a Release
+            // build can be measured against Debug on a real device.
+            .task { LaunchTiming.recordFirstFrame() }
         }
     }
 
@@ -559,6 +564,7 @@ struct ReceiptResultView: View {
                     Menu {
                         LedgerExportButtons(result: result,
                                             imageURL: capturedImageURL,
+                                            wallMs: wallMs,
                                             exporter: exporter,
                                             onConfigure: onConfigure)
                     } label: {
@@ -582,7 +588,7 @@ struct ReceiptResultView: View {
             onConfigure()
             return
         }
-        let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL)
+        let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL, wallMs: wallMs)
         await exporter.export(entry, to: kind)
     }
 

@@ -7,8 +7,10 @@ import BBReceiptKit
 /// iCloud / Dropbox / …) and/or a GitHub pull request. Reached from Settings.
 struct LedgerSettingsView: View {
     @Bindable var exporter: LedgerExporter
-    @State private var showFileImporter = false
-    @State private var importError: String?
+    // Ledger inbox file (Files/iCloud/Dropbox/…) is disabled for now — it will
+    // be back in a future version. GitHub PR is the only sync option meanwhile.
+    // @State private var showFileImporter = false
+    // @State private var importError: String?
     @State private var connection = GitHubConnection()
     @State private var codeCopied = false
     @State private var repoCheck: RepoCheck = .idle
@@ -23,7 +25,10 @@ struct LedgerSettingsView: View {
 
     var body: some View {
         List {
-            filesSection
+            // Ledger inbox file (Files/iCloud/Dropbox/…) is disabled for now —
+            // it will be back in a future version. Re-enable `filesSection`
+            // below (and the .fileImporter/.alert modifiers) to bring it back.
+            // filesSection
             gitHubSection
         }
         .navigationTitle("Ledger Sync")
@@ -33,39 +38,41 @@ struct LedgerSettingsView: View {
                 Button("Done") { dismiss() }
             }
         }
-        .fileImporter(isPresented: $showFileImporter,
-                      allowedContentTypes: [.plainText, .text, .data]) { result in
-            switch result {
-            case .success(let url):
-                do { try exporter.filesInbox.setDestination(url) }
-                catch { importError = String(describing: error) }
-            case .failure(let error):
-                importError = error.localizedDescription
-            }
-        }
-        .alert("Couldn't use that file", isPresented: Binding(
-            get: { importError != nil }, set: { if !$0 { importError = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: { Text(importError ?? "") }
+        // .fileImporter(isPresented: $showFileImporter,
+        //               allowedContentTypes: [.plainText, .text, .data]) { result in
+        //     switch result {
+        //     case .success(let url):
+        //         do { try exporter.filesInbox.setDestination(url) }
+        //         catch { importError = String(describing: error) }
+        //     case .failure(let error):
+        //         importError = error.localizedDescription
+        //     }
+        // }
+        // .alert("Couldn't use that file", isPresented: Binding(
+        //     get: { importError != nil }, set: { if !$0 { importError = nil } })) {
+        //     Button("OK", role: .cancel) {}
+        // } message: { Text(importError ?? "") }
     }
 
     // MARK: - Files inbox
-
-    private var filesSection: some View {
-        Section {
-            if let name = exporter.filesInbox.fileName {
-                LabeledContent("File", value: name)
-                Button("Choose a Different File…") { showFileImporter = true }
-                Button("Remove", role: .destructive) { exporter.filesInbox.clear() }
-            } else {
-                Button("Choose Ledger File…") { showFileImporter = true }
-            }
-        } header: {
-            Label(LedgerDestinationKind.filesInbox.title, systemImage: LedgerDestinationKind.filesInbox.systemImage)
-        } footer: {
-            Text("Pick a `.bean` file kept in any Files provider (iCloud Drive, Dropbox, Box…). New transactions are appended to it. `include` it from your main ledger.\n\nTip: create the (even empty) file in the Files app first, then pick it here.")
-        }
-    }
+    //
+    // Disabled for now — it will be back in a future version.
+    //
+    // private var filesSection: some View {
+    //     Section {
+    //         if let name = exporter.filesInbox.fileName {
+    //             LabeledContent("File", value: name)
+    //             Button("Choose a Different File…") { showFileImporter = true }
+    //             Button("Remove", role: .destructive) { exporter.filesInbox.clear() }
+    //         } else {
+    //             Button("Choose Ledger File…") { showFileImporter = true }
+    //         }
+    //     } header: {
+    //         Label(LedgerDestinationKind.filesInbox.title, systemImage: LedgerDestinationKind.filesInbox.systemImage)
+    //     } footer: {
+    //         Text("Pick a `.bean` file kept in any Files provider (iCloud Drive, Dropbox, Box…). New transactions are appended to it. `include` it from your main ledger.\n\nTip: create the (even empty) file in the Files app first, then pick it here.")
+    //     }
+    // }
 
     // MARK: - GitHub
 
@@ -259,13 +266,16 @@ struct LedgerExportButtons: View {
     /// The captured JPEG on disk, if any — read (off the render pass, at tap
     /// time) into the `LedgerEntry` so it travels alongside the transaction.
     var imageURL: URL?
+    /// Swift-observed total scan time, folded into the exported JSON sidecar's
+    /// timings alongside the Rust per-stage breakdown.
+    var wallMs: Double?
     @Bindable var exporter: LedgerExporter
     var onConfigure: () -> Void
 
     var body: some View {
         ForEach(exporter.configuredKinds) { kind in
             Button {
-                let entry = LedgerEntry.make(from: result, imageURL: imageURL)
+                let entry = LedgerEntry.make(from: result, imageURL: imageURL, wallMs: wallMs)
                 Task { await exporter.export(entry, to: kind) }
             } label: {
                 Label(kind.title, systemImage: kind.systemImage)
