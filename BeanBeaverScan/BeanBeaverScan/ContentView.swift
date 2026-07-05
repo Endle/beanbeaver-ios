@@ -494,7 +494,7 @@ struct ReceiptResultView: View {
                 warningsBanner
             }
 
-            DisclosureGroup("Accounting details (beancount)") {
+            DisclosureGroup {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(result.beancount)
                         .font(.system(.footnote, design: .monospaced))
@@ -502,20 +502,6 @@ struct ReceiptResultView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
                         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-
-                    HStack {
-                        Menu {
-                            LedgerExportButtons(result: result,
-                                                imageURL: capturedImageURL,
-                                                exporter: exporter,
-                                                onConfigure: onConfigure)
-                        } label: {
-                            Label("Add to Ledger", systemImage: "square.and.arrow.up")
-                        }
-                        if exporter.runningKind != nil {
-                            ProgressView().padding(.leading, 6)
-                        }
-                    }
 
 #if DEBUG
                     ScanTimingsView(timings: result.timings, wallMs: wallMs)
@@ -528,9 +514,13 @@ struct ReceiptResultView: View {
                     }
 #endif
                 }
-                .padding(.top, 8)
+                .padding(.top, 12)
+            } label: {
+                Label("Accounting details", systemImage: "text.alignleft")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
             }
-            .padding(16)
+            .tint(.secondary)
             .bbCard()
 
             VStack(spacing: 8) {
@@ -567,7 +557,7 @@ struct ReceiptResultView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .tint(.secondary)
                     .controlSize(.large)
                 }
@@ -654,6 +644,10 @@ struct ReceiptResultView: View {
 
     private func itemRow(_ item: ReceiptItem) -> some View {
         let style = CategoryDisplay.style(for: item.category)
+        // NOTE: intentionally not drawing `style.icon` as a leading category
+        // badge here — tried it, but the per-row icons didn't look good enough
+        // to keep for now. Leaving the text-only row until the treatment is worth
+        // shipping.
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.description.capitalized)
