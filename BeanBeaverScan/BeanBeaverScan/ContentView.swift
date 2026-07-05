@@ -562,10 +562,14 @@ struct ReceiptResultView: View {
                                             exporter: exporter,
                                             onConfigure: onConfigure)
                     } label: {
-                        Text("More")
-                            .font(.subheadline)
+                        Label("More", systemImage: "ellipsis.circle")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
                     }
+                    .buttonStyle(.borderedProminent)
                     .tint(.secondary)
+                    .controlSize(.large)
                 }
             }
         }
