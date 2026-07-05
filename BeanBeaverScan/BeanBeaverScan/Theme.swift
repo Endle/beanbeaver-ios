@@ -45,6 +45,27 @@ enum CategoryDisplay {
         return Style(icon: icon(for: category), label: friendlyLabel(leaf), accented: true)
     }
 
+    /// How an item's beanbeaver-internal tags render in the list. The classifier
+    /// emits tags broad→specific (e.g. `["grocery", "meat", "chicken"]`), so the
+    /// last one is the most specific — we lead with it and keep the rest as
+    /// context. This is the source of truth for the row's category display; the
+    /// beancount account is no longer reverse-engineered for the label.
+    struct TagDisplay {
+        /// Most specific tag, capitalized (e.g. "Chicken"). Empty tags → nil.
+        let primary: String?
+        /// The remaining (broader) tags, capitalized, in classifier order.
+        let rest: [String]
+    }
+
+    static func tagDisplay(for tags: [String]) -> TagDisplay {
+        let cleaned = tags.filter { !$0.isEmpty }
+        guard let last = cleaned.last else {
+            return TagDisplay(primary: nil, rest: [])
+        }
+        let rest = cleaned.dropLast().map { $0.capitalized }
+        return TagDisplay(primary: last.capitalized, rest: rest)
+    }
+
     /// Keyword → SF Symbol, checked as a substring against the whole
     /// (lowercased) category string so both account-path segments (e.g.
     /// "Food", "Driving") and plain leaf words (e.g. "Dairy", "Pharmacy")

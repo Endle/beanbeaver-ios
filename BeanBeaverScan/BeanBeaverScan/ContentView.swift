@@ -368,6 +368,10 @@ struct SettingsView: View {
     /// faster scans. Read globally via `ReceiptPipeline.useOrientationCls`; the
     /// session reloads on the next scan when this changes.
     @AppStorage("skipOrientationCheck") private var skipOrientationCheck = false
+    /// Whether a `.json` details sidecar is written next to each synced receipt.
+    /// Shares its key with `LedgerFileOptions.includeDetailsJSON`, which the
+    /// export path reads. Default on.
+    @AppStorage("includeDetailsJSON") private var includeDetailsJSON = true
     /// The photo behind the result screen currently on top, if any — excluded
     /// from "Clear Old Receipts" so it can't vanish out from under the user
     /// while they're still looking at it.
@@ -395,6 +399,12 @@ struct SettingsView: View {
                     /// TODO there is a bug. this option can't turned off properly. Doesn't matter for now - 2026-07-04
                 } footer: {
                     Text("Skips the per-line upside-down check, which document scans rarely need. Turn on if scans feel slow; turn off if you see garbled or missing lines.")
+                }
+
+                Section {
+                    Toggle("Save details file", isOn: $includeDetailsJSON)
+                } footer: {
+                    Text("Store a .json alongside each synced receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
                 }
 
                 storageSection
@@ -643,19 +653,14 @@ struct ReceiptResultView: View {
     }
 
     private func itemRow(_ item: ReceiptItem) -> some View {
-        let style = CategoryDisplay.style(for: item.category)
-        // NOTE: intentionally not drawing `style.icon` as a leading category
-        // badge here — tried it, but the per-row icons didn't look good enough
-        // to keep for now. Leaving the text-only row until the treatment is worth
-        // shipping.
-        return HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 1) {
+        // NOTE: intentionally no leading category icon — tried it, but the
+        // per-row icons didn't look good enough to keep for now.
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(item.description.capitalized)
                     .lineLimit(1)
                     .font(.subheadline)
-                Text(style.label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                tagRow(for: item)
             }
 
             Spacer()
@@ -670,6 +675,35 @@ struct ReceiptResultView: View {
                 .monospacedDigit()
                 .font(.subheadline)
                 .foregroundStyle(priceDisplay.isNegative ? .green : .primary)
+        }
+    }
+
+    /// The item's classification, straight from the beanbeaver-internal tags:
+    /// the most-specific tag as an accent chip, then the broader tags as quiet
+    /// context on the same line. No tags → a plain "Uncategorized".
+    @ViewBuilder
+    private func tagRow(for item: ReceiptItem) -> some View {
+        let display = CategoryDisplay.tagDisplay(for: item.tags)
+        if let primary = display.primary {
+            HStack(spacing: 8) {
+                Text(primary)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(Color.bbAccent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(Color.bbAccentSoft, in: Capsule())
+
+                if !display.rest.isEmpty {
+                    Text(display.rest.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        } else {
+            Text("Uncategorized")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -754,12 +788,12 @@ extension ReceiptResult {
         tax: "$9.42",
         subtotal: "$139.31",
         items: [
-            ReceiptItem(description: "ORG BANANAS", price: "$2.49", quantity: 1, category: "Expenses:Food:Grocery"),
-            ReceiptItem(description: "ROTISSERIE CHICKEN", price: "$4.99", quantity: 1, category: "Expenses:Food:Grocery:PreparedMeal"),
-            ReceiptItem(description: "KIRKLAND OLIVE OIL 2L", price: "$21.99", quantity: 1, category: "Expenses:Food:Grocery"),
-            ReceiptItem(description: "BATH TISSUE 30 ROLL", price: "$24.99", quantity: 1, category: "Expenses:Home"),
-            ReceiptItem(description: "GASOLINE REGULAR", price: "$58.40", quantity: 1, category: "Expenses:Driving:Gas"),
-            ReceiptItem(description: "MYSTERY ITEM", price: "$3.00", quantity: 2, category: nil),
+            ReceiptItem(description: "ORG BANANAS", price: "$2.49", quantity: 1, category: "Expenses:Food:Grocery", tags: ["grocery", "fruit"]),
+            ReceiptItem(description: "ROTISSERIE CHICKEN", price: "$4.99", quantity: 1, category: "Expenses:Food:Grocery:PreparedMeal", tags: ["grocery", "meat", "chicken", "prepared", "meal"]),
+            ReceiptItem(description: "KIRKLAND OLIVE OIL 2L", price: "$21.99", quantity: 1, category: "Expenses:Food:Grocery", tags: ["grocery", "staple"]),
+            ReceiptItem(description: "BATH TISSUE 30 ROLL", price: "$24.99", quantity: 1, category: "Expenses:Home", tags: ["home", "household"]),
+            ReceiptItem(description: "GASOLINE REGULAR", price: "$58.40", quantity: 1, category: "Expenses:Driving:Gas", tags: ["driving", "gas"]),
+            ReceiptItem(description: "MYSTERY ITEM", price: "$3.00", quantity: 2, category: nil, tags: []),
         ],
         warnings: [],
         beancount: """
@@ -810,8 +844,8 @@ extension ReceiptResult {
         tax: "$2.68",
         subtotal: "$39.42",
         items: [
-            ReceiptItem(description: "PAPER TOWELS", price: "$18.99", quantity: 1, category: "Expenses:Home"),
-            ReceiptItem(description: "ORG EGGS 24CT", price: "$9.49", quantity: 1, category: "Expenses:Food:Grocery"),
+            ReceiptItem(description: "PAPER TOWELS", price: "$18.99", quantity: 1, category: "Expenses:Home", tags: ["home", "household"]),
+            ReceiptItem(description: "ORG EGGS 24CT", price: "$9.49", quantity: 1, category: "Expenses:Food:Grocery", tags: ["grocery", "dairy", "egg"]),
         ],
         warnings: [],
         beancount: """
