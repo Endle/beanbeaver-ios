@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import BBReceiptKit
 
 /// Configure where scanned transactions are sent: a synced `.bean` file (Files /
 /// iCloud / Dropbox / …) and/or a GitHub pull request. Reached from Settings.
@@ -111,8 +112,9 @@ struct LedgerSettingsView: View {
     }
 
     /// Which repo to write to. Owner is pre-filled from the signed-in account but
-    /// stays editable so an org-owned repo can be entered. The file path within
-    /// the repo is fixed (`GitHubLedger.ledgerPath`), so it isn't asked for.
+    /// stays editable so an org-owned repo can be entered. The path each receipt
+    /// lands at within the repo is fixed (`GitHubLedger.rootDir`), so it isn't
+    /// asked for.
     @ViewBuilder
     private var repoConfigRows: some View {
         TextField("Owner (you or an org)", text: $exporter.github.owner)
@@ -253,12 +255,9 @@ struct LedgerSettingsView: View {
 /// configured destination, a Share fallback, and a shortcut to set up sync.
 /// Shared by the result card and the toolbar menu so they never drift.
 struct LedgerExportButtons: View {
-    let beancount: String
-    /// The receipt image's documents-root-relative path (`ReceiptResult
-    /// .documentRelpath`) and the captured JPEG on disk. When both are present
-    /// the image is stored alongside the transaction so its `document:` link
-    /// resolves; otherwise export is text-only.
-    var documentRelpath: String?
+    let result: ReceiptResult
+    /// The captured JPEG on disk, if any — read (off the render pass, at tap
+    /// time) into the `LedgerEntry` so it travels alongside the transaction.
     var imageURL: URL?
     @Bindable var exporter: LedgerExporter
     var onConfigure: () -> Void
@@ -266,9 +265,7 @@ struct LedgerExportButtons: View {
     var body: some View {
         ForEach(exporter.configuredKinds) { kind in
             Button {
-                let entry = LedgerEntry(beancount: beancount,
-                                        document: Self.makeDocument(relpath: documentRelpath,
-                                                                    imageURL: imageURL))
+                let entry = LedgerEntry.make(from: result, imageURL: imageURL)
                 Task { await exporter.export(entry, to: kind) }
             } label: {
                 Label(kind.title, systemImage: kind.systemImage)
@@ -276,7 +273,7 @@ struct LedgerExportButtons: View {
             .disabled(exporter.runningKind != nil)
         }
 
-        ShareLink(item: beancount) {
+        ShareLink(item: result.beancount) {
             Label("Share / Copy", systemImage: "square.and.arrow.up")
         }
 
@@ -286,16 +283,5 @@ struct LedgerExportButtons: View {
             Label(exporter.configuredKinds.isEmpty ? "Set Up Sync…" : "Sync Settings…",
                   systemImage: "gearshape")
         }
-    }
-
-    /// Read the captured JPEG so it can travel with the transaction. Deferred to
-    /// tap time (not view rendering) to avoid re-reading the file on every body
-    /// evaluation. Returns nil (text-only export) if either input is missing or
-    /// the bytes can't be read.
-    private static func makeDocument(relpath: String?, imageURL: URL?) -> ReceiptDocument? {
-        guard let relpath, let imageURL, let data = try? Data(contentsOf: imageURL) else {
-            return nil
-        }
-        return ReceiptDocument(data: data, relpath: relpath)
     }
 }

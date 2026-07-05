@@ -1,15 +1,15 @@
 import Foundation
 import Observation
 
-/// Opens a GitHub pull request that appends a transaction to a file in the
-/// user's ledger repository. No on-device git engine is needed — everything is
-/// the GitHub REST API over HTTPS:
+/// Opens a GitHub pull request that files a scanned receipt into the user's
+/// ledger repository as its own folder — `.beancount`, `.json`, and `.jpg`
+/// side by side — rather than appending to a shared file. No on-device git
+/// engine is needed — everything is the GitHub REST API over HTTPS:
 ///
 ///   1. resolve the repo's default branch and read its head commit,
-///   2. read the target file (content + blob sha; may not exist yet),
-///   3. create a fresh branch off the default branch,
-///   4. PUT the appended file onto that branch (one commit),
-///   5. open a PR from that branch into the default branch.
+///   2. create a fresh branch off the default branch,
+///   3. PUT each of the receipt's files onto that branch (one commit each),
+///   4. open a PR from that branch into the default branch.
 ///
 /// A GitHub App user access token (obtained via device flow, see
 /// `GitHubDeviceFlow.swift`) authorizes the REST calls and is stored in the
@@ -27,10 +27,11 @@ final class GitHubLedger: LedgerDestination {
         static let token = "githubToken"   // Keychain account
     }
 
-    /// Fixed location of the receipts ledger file in the repo. Receipt images
-    /// land in a `beanbeaver/` subfolder beside it (from the document relpath),
-    /// so everything scanned lives under `beanbeaver_receipts/`.
-    static let ledgerPath = "beanbeaver_receipts/receipts.bean"
+    /// Root folder everything scanned lives under. Each receipt gets its own
+    /// subfolder, `<merchant>-<yyyymmdd>-<sha8>/`, holding
+    /// `<merchant>-<yyyymmdd>-<hhmm>-<sha8>.{beancount,json,jpg}` — so a PR
+    /// review shows exactly what was scanned, without touching a shared file.
+    nonisolated static let rootDir = "beanbeaver_receipts"
 
     var owner: String { didSet { UserDefaults.standard.set(owner, forKey: Key.owner) } }
     var repo: String { didSet { UserDefaults.standard.set(repo, forKey: Key.repo) } }
@@ -56,21 +57,29 @@ final class GitHubLedger: LedgerDestination {
         guard isConfigured else {
             throw LedgerExportError("GitHub isn't fully set up. Connect and pick a repo in Settings › Sync.")
         }
-        let cfg = Config(owner: owner.trimmed, repo: repo.trimmed, path: Self.ledgerPath,
-                         token: token.trimmed)
-        let url = try await Self.openPullRequest(cfg: cfg, beancount: entry.beancount,
-                                                 document: entry.document)
+        // `<merchant>-<yyyymmdd|unknowndate>-<sha8>`: the identity token is the
+        // same one baked into the transaction and `document.relpath`, so this
+        // parse can't disagree with what's already on the receipt.
+        guard let idParts = entry.beanbeaverId?.split(separator: "-").map(String.init),
+              idParts.count == 3 else {
+            throw LedgerExportError("This receipt has no captured photo to derive an identity from — can't file it under GitHub.")
+        }
+        let (dateToken, sha8) = (idParts[1], idParts[2])
+        let cfg = Config(owner: owner.trimmed, repo: repo.trimmed, token: token.trimmed)
+        let url = try await Self.openPullRequest(cfg: cfg, entry: entry,
+                                                 merchantSlug: entry.merchantSlug,
+                                                 dateToken: dateToken, sha8: sha8)
         return .pullRequest(url: url)
     }
 
     // MARK: - REST flow
 
     private struct Config {
-        let owner, repo, path, token: String
+        let owner, repo, token: String
     }
 
     private nonisolated static func openPullRequest(
-        cfg: Config, beancount: String, document: ReceiptDocument?
+        cfg: Config, entry: LedgerEntry, merchantSlug: String, dateToken: String, sha8: String
     ) async throws -> URL {
         let repoRoot = "/repos/\(cfg.owner)/\(cfg.repo)"
 
@@ -82,49 +91,37 @@ final class GitHubLedger: LedgerDestination {
         let ref: RefResponse = try await api(cfg, "GET", "\(repoRoot)/git/ref/heads/\(base)")
         let baseSha = ref.object.sha
 
-        // 2. Current file content + blob sha (404 => file doesn't exist yet).
-        let escapedPath = cfg.path
-            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? cfg.path
-        let existing: ContentsResponse?
-        do {
-            existing = try await api(cfg, "GET", "\(repoRoot)/contents/\(escapedPath)?ref=\(base)")
-        } catch let e as HTTPStatusError where e.status == 404 {
-            existing = nil
-        }
-        let currentText = existing?.decodedContent ?? ""
-        let newText = appendEntry(to: currentText, entry: beancount)
-
-        // 3. New branch off the base head.
+        // 2. New branch off the base head.
         let stamp = branchStamp()
         let branch = "beanbeaver/receipt-\(stamp)"
         let _: RefResponse = try await api(cfg, "POST", "\(repoRoot)/git/refs",
             body: ["ref": "refs/heads/\(branch)", "sha": baseSha])
 
-        // 3b. Commit the receipt image onto the same branch so the PR carries it
-        //     and the transaction's `document:` link resolves. Stored beside the
-        //     ledger file under its documents-root-relative path (`beanbeaver/…`).
-        if let document {
-            let dir = (cfg.path as NSString).deletingLastPathComponent
-            let imagePath = dir.isEmpty ? document.relpath : "\(dir)/\(document.relpath)"
-            try await putImageIfAbsent(cfg, repoRoot: repoRoot, path: imagePath,
-                                       data: document.data, branch: branch)
+        // 3. One folder per receipt: beanbeaver_receipts/<merchant>-<date>-<sha8>/,
+        //    holding <merchant>-<date>-<hhmm>-<sha8>.{beancount,json,jpg}.
+        let folder = "\(rootDir)/\(merchantSlug)-\(dateToken)-\(sha8)"
+        let basename = "\(merchantSlug)-\(dateToken)-\(hhmm())-\(sha8)"
+
+        try await putFileIfAbsent(cfg, repoRoot: repoRoot, path: "\(folder)/\(basename).beancount",
+                                  data: Data(entry.beancount.utf8), branch: branch,
+                                  message: "BeanBeaver: add receipt transaction")
+        if let json = entry.json {
+            try await putFileIfAbsent(cfg, repoRoot: repoRoot, path: "\(folder)/\(basename).json",
+                                      data: json, branch: branch,
+                                      message: "BeanBeaver: add receipt JSON")
+        }
+        if let document = entry.document {
+            try await putFileIfAbsent(cfg, repoRoot: repoRoot, path: "\(folder)/\(basename).jpg",
+                                      data: document.data, branch: branch,
+                                      message: "BeanBeaver: add receipt image")
         }
 
-        // 4. Commit the appended file onto the new branch.
-        var putBody: [String: Any] = [
-            "message": "BeanBeaver: add receipt transaction",
-            "content": Data(newText.utf8).base64EncodedString(),
-            "branch": branch,
-        ]
-        if let sha = existing?.sha { putBody["sha"] = sha }
-        let _: PutResponse = try await api(cfg, "PUT", "\(repoRoot)/contents/\(escapedPath)", body: putBody)
-
-        // 5. Open the PR.
+        // 4. Open the PR.
         let pr: PullResponse = try await api(cfg, "POST", "\(repoRoot)/pulls", body: [
-            "title": "Add receipt transaction",
+            "title": "Add receipt: \(merchantSlug) \(dateToken)",
             "head": branch,
             "base": base,
-            "body": "Appended a receipt transaction scanned with BeanBeaver iOS.",
+            "body": "Filed a scanned receipt under `\(folder)/` with BeanBeaver iOS.",
         ])
         guard let url = URL(string: pr.htmlUrl) else {
             throw LedgerExportError("Pull request created but its URL was missing.")
@@ -132,11 +129,11 @@ final class GitHubLedger: LedgerDestination {
         return url
     }
 
-    /// Create `path` on `branch` with `data` if it's not already there. The
-    /// receipt filename carries the image's content hash, so an existing file is
-    /// necessarily identical — we skip it, keeping re-exports idempotent.
-    private nonisolated static func putImageIfAbsent(
-        _ cfg: Config, repoRoot: String, path: String, data: Data, branch: String
+    /// Create `path` on `branch` with `data` if it's not already there. Every
+    /// path here is content-addressed (the sha8 token), so an existing file is
+    /// necessarily identical — skip it, keeping re-exports idempotent.
+    private nonisolated static func putFileIfAbsent(
+        _ cfg: Config, repoRoot: String, path: String, data: Data, branch: String, message: String
     ) async throws {
         let escaped = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
         do {
@@ -147,24 +144,26 @@ final class GitHubLedger: LedgerDestination {
             // not there yet — create it below
         }
         let _: PutResponse = try await api(cfg, "PUT", "\(repoRoot)/contents/\(escaped)", body: [
-            "message": "BeanBeaver: add receipt image",
+            "message": message,
             "content": data.base64EncodedString(),
             "branch": branch,
         ])
-    }
-
-    /// Append `entry` to `existing`, keeping a blank-line separator between txns.
-    private nonisolated static func appendEntry(to existing: String, entry: String) -> String {
-        let trimmedEntry = entry.hasSuffix("\n") ? entry : entry + "\n"
-        if existing.isEmpty { return trimmedEntry }
-        let base = existing.hasSuffix("\n") ? existing : existing + "\n"
-        return base + "\n" + trimmedEntry
     }
 
     private nonisolated static func branchStamp() -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyyMMdd-HHmmss"
+        return f.string(from: Date())
+    }
+
+    /// Export-time hour+minute (`HHmm`) for the file basename — receipts only
+    /// carry a date, so the time distinguishes files if the same receipt is
+    /// re-exported later.
+    private nonisolated static func hhmm() -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "HHmm"
         return f.string(from: Date())
     }
 

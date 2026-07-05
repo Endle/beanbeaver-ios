@@ -53,9 +53,7 @@ struct ContentView: View {
                         ReceiptResultView(result: result, wallMs: pipeline.lastWallMs,
                                           capturedImageURL: pipeline.capturedImageURL,
                                           exporter: exporter,
-                                          onConfigure: { showSettings = true }) {
-                            pipeline.reset()
-                        }
+                                          onConfigure: { showSettings = true })
                     }
                 }
                 .padding()
@@ -85,8 +83,7 @@ struct ContentView: View {
 
                             if let result = doneResult {
                                 Section("Export") {
-                                    LedgerExportButtons(beancount: result.beancount,
-                                                        documentRelpath: result.documentRelpath,
+                                    LedgerExportButtons(result: result,
                                                         imageURL: pipeline.capturedImageURL,
                                                         exporter: exporter,
                                                         onConfigure: { showSettings = true })
@@ -179,14 +176,6 @@ struct ContentView: View {
 
     // MARK: - Home
 
-    /// Short label for the home screen's "Sync:" button — "None" or the
-    /// configured destinations, e.g. "Files" or "Files+GitHub".
-    private var syncIndicator: String {
-        let kinds = exporter.configuredKinds
-        guard !kinds.isEmpty else { return "None" }
-        return kinds.map(\.shortTitle).joined(separator: "+")
-    }
-
     private var homeView: some View {
         VStack(spacing: 28) {
             VStack(spacing: 10) {
@@ -225,13 +214,13 @@ struct ContentView: View {
                 Button {
                     showLedgerSettings = true
                 } label: {
-                    Label("Sync:\(syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
+                    Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
                 .buttonStyle(.bordered)
-                .tint(.secondary)
+                .tint(exporter.syncTint)
                 .controlSize(.large)
 
                 Button {
@@ -471,7 +460,6 @@ struct ReceiptResultView: View {
     var capturedImageURL: URL?
     var exporter: LedgerExporter
     var onConfigure: () -> Void = {}
-    var onScanAnother: () -> Void
 
     private static let displayDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -506,7 +494,7 @@ struct ReceiptResultView: View {
                 warningsBanner
             }
 
-            DisclosureGroup("Accounting details (beancount)") {
+            DisclosureGroup {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(result.beancount)
                         .font(.system(.footnote, design: .monospaced))
@@ -514,21 +502,6 @@ struct ReceiptResultView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
                         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-
-                    HStack {
-                        Menu {
-                            LedgerExportButtons(beancount: result.beancount,
-                                                documentRelpath: result.documentRelpath,
-                                                imageURL: capturedImageURL,
-                                                exporter: exporter,
-                                                onConfigure: onConfigure)
-                        } label: {
-                            Label("Add to Ledger", systemImage: "square.and.arrow.up")
-                        }
-                        if exporter.runningKind != nil {
-                            ProgressView().padding(.leading, 6)
-                        }
-                    }
 
 #if DEBUG
                     ScanTimingsView(timings: result.timings, wallMs: wallMs)
@@ -541,23 +514,66 @@ struct ReceiptResultView: View {
                     }
 #endif
                 }
-                .padding(.top, 8)
+                .padding(.top, 12)
+            } label: {
+                Label("Accounting details", systemImage: "text.alignleft")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
             }
-            .padding(16)
+            .tint(.secondary)
             .bbCard()
 
-            Button {
-                onScanAnother()
-            } label: {
-                Label("Scan Another Receipt", systemImage: "camera.viewfinder")
-                    .font(.headline)
+            VStack(spacing: 8) {
+                Button {
+                    Task { await primarySync() }
+                } label: {
+                    HStack {
+                        Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.headline)
+                        if exporter.runningKind != nil {
+                            ProgressView().tint(.white)
+                        }
+                    }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(exporter.syncTint)
+                .controlSize(.large)
+                .disabled(exporter.runningKind != nil)
+
+                // Secondary escape hatch: other configured destinations, Share/Copy,
+                // and Sync Settings — the primary button above fires the first
+                // configured destination directly, no picker in the way.
+                if !exporter.configuredKinds.isEmpty {
+                    Menu {
+                        LedgerExportButtons(result: result,
+                                            imageURL: capturedImageURL,
+                                            exporter: exporter,
+                                            onConfigure: onConfigure)
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.secondary)
+                    .controlSize(.large)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.bbAccent)
-            .controlSize(.large)
         }
+    }
+
+    /// Fires the first configured destination directly — no menu in the way.
+    /// Falls back to opening Sync Settings when nothing is configured yet.
+    private func primarySync() async {
+        guard let kind = exporter.configuredKinds.first else {
+            onConfigure()
+            return
+        }
+        let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL)
+        await exporter.export(entry, to: kind)
     }
 
     private var header: some View {
@@ -628,6 +644,10 @@ struct ReceiptResultView: View {
 
     private func itemRow(_ item: ReceiptItem) -> some View {
         let style = CategoryDisplay.style(for: item.category)
+        // NOTE: intentionally not drawing `style.icon` as a leading category
+        // badge here — tried it, but the per-row icons didn't look good enough
+        // to keep for now. Leaving the text-only row until the treatment is worth
+        // shipping.
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.description.capitalized)
@@ -807,17 +827,17 @@ extension ReceiptResult {
 }
 
 #Preview("Result – full") {
-    ScrollView { ReceiptResultView(result: .previewFull, wallMs: 816, capturedImageURL: nil, exporter: LedgerExporter(), onScanAnother: {}).padding() }
+    ScrollView { ReceiptResultView(result: .previewFull, wallMs: 816, capturedImageURL: nil, exporter: LedgerExporter()).padding() }
         .background(Color(.systemGroupedBackground))
 }
 
 #Preview("Result – minimal") {
-    ScrollView { ReceiptResultView(result: .previewMinimal, wallMs: 300, capturedImageURL: nil, exporter: LedgerExporter(), onScanAnother: {}).padding() }
+    ScrollView { ReceiptResultView(result: .previewMinimal, wallMs: 300, capturedImageURL: nil, exporter: LedgerExporter()).padding() }
         .background(Color(.systemGroupedBackground))
 }
 
 #Preview("Result – suggested merchant") {
-    ScrollView { ReceiptResultView(result: .previewSuggestedMerchant, wallMs: 640, capturedImageURL: nil, exporter: LedgerExporter(), onScanAnother: {}).padding() }
+    ScrollView { ReceiptResultView(result: .previewSuggestedMerchant, wallMs: 640, capturedImageURL: nil, exporter: LedgerExporter()).padding() }
         .background(Color(.systemGroupedBackground))
 }
 
