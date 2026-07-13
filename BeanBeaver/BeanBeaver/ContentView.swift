@@ -99,7 +99,7 @@ struct ContentView: View {
                 }
             }
             .fullScreenCover(isPresented: $showScanner) {
-                DocumentScanner(
+                ScannerWithHint(
                     onScan: { data in
                         if saveScansToPhotos { PhotoSaver.save(imageData: data) }
                         Task { await pipeline.scan(imageData: data) }
