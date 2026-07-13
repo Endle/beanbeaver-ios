@@ -22,7 +22,8 @@ struct ContentView: View {
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
     @AppStorage("saveScansToPhotos") private var saveScansToPhotos = false
 
-    /// Bundled DEBUG sample (a redacted Costco receipt fixture).
+    /// Bundled sample receipt (a redacted Costco fixture), offered in Settings so
+    /// the app can be tried without a receipt to hand.
     private let sampleName = "costco_20260301_redact"
 
     /// The result screen has its own toolbar (home + more-options) that
@@ -120,15 +121,10 @@ struct ContentView: View {
                 }
             }
             .sheet(isPresented: $showSettings) {
-#if DEBUG
                 SettingsView(saveScansToPhotos: $saveScansToPhotos,
                              currentCaptureURL: pipeline.capturedImageURL) {
                     Task { await pipeline.scanBundledSample(named: sampleName) }
                 }
-#else
-                SettingsView(saveScansToPhotos: $saveScansToPhotos,
-                             currentCaptureURL: pipeline.capturedImageURL)
-#endif
             }
             .alert(exporter.result?.title ?? "", isPresented: Binding(
                 get: { exporter.result != nil },
@@ -250,7 +246,7 @@ struct ContentView: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "lock.shield")
-                Text("Everything is scanned and parsed on your device — nothing is uploaded.")
+                Text("Receipts are scanned and parsed on your device. Nothing leaves it unless you sync — and then only to your own ledger.")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -376,10 +372,6 @@ struct OriginReceiptView: View {
 
 struct SettingsView: View {
     @Binding var saveScansToPhotos: Bool
-    /// When on, the OCR pipeline skips the per-line orientation classifier for
-    /// faster scans. Read globally via `ReceiptPipeline.useOrientationCls`; the
-    /// session reloads on the next scan when this changes.
-    @AppStorage("skipOrientationCheck") private var skipOrientationCheck = false
     /// Whether a `.json` details sidecar is written next to each synced receipt.
     /// Shares its key with `LedgerFileOptions.includeDetailsJSON`, which the
     /// export path reads. Default on.
@@ -388,9 +380,7 @@ struct SettingsView: View {
     /// from "Clear Old Receipts" so it can't vanish out from under the user
     /// while they're still looking at it.
     var currentCaptureURL: URL?
-#if DEBUG
     var onRunSample: () -> Void
-#endif
     @Environment(\.dismiss) private var dismiss
     @State private var capturedBytes = ReceiptCaptureStore.totalBytes()
     @State private var clearResultMessage: String?
@@ -407,13 +397,6 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle("Faster scans", isOn: $skipOrientationCheck)
-                    /// TODO there is a bug. this option can't turned off properly. Doesn't matter for now - 2026-07-04
-                } footer: {
-                    Text("Skips the per-line upside-down check, which document scans rarely need. Turn on if scans feel slow; turn off if you see garbled or missing lines.")
-                }
-
-                Section {
                     Toggle("Save details file", isOn: $includeDetailsJSON)
                 } footer: {
                     Text("Store a .json alongside each synced receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
@@ -421,15 +404,30 @@ struct SettingsView: View {
 
                 storageSection
 
-#if DEBUG
-                Section("Debug") {
-                    Button("Run Bundled Sample") {
+                Section {
+                    Button {
                         // Dismiss first so the home screen's scanning/done
                         // transition is actually visible, not hidden behind
                         // this sheet.
                         dismiss()
                         onRunSample()
+                    } label: {
+                        Label("Scan a Sample Receipt", systemImage: "doc.text.magnifyingglass")
                     }
+                } footer: {
+                    Text("Runs the full on-device scan on a receipt bundled with the app — a way to see what BeanBeaver does without a receipt in hand.")
+                }
+
+                Section {
+                    NavigationLink("Acknowledgements") {
+                        AcknowledgementsView()
+                    }
+                    Link("Privacy Policy",
+                         destination: URL(string: "https://github.com/Endle/beanbeaver-ios/blob/main/PRIVACY.md")!)
+                }
+
+#if DEBUG
+                Section("Debug") {
                     NavigationLink("Dump All Data") {
                         DataDumpView()
                     }
