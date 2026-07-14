@@ -10,12 +10,11 @@ explains what happens to that photo.
 1. **The photo.** You take it with the camera or pick it from your photo library.
    It is written to the app's private storage on your phone.
 2. **Text recognition, on your phone.** The receipt is read by PP-OCRv5, an
-   open-source text-recognition model. The model files ship inside the app —
-   they are roughly 19 MB of the download — and run on your phone's own
-   processor. The photo is not sent anywhere to be read.
-3. **Parsing and categorising, on your phone.** The recognised text is turned
-   into a merchant, a date, line items and a total, and each item is sorted into
-   an expense category, by rules that also ship inside the app.
+   open-source text-recognition model. The model files ship inside the app and
+   run on your phone's own processor — the photo is not sent anywhere to be read.
+3. **Parsing and categorising, on your phone.** The recognised text becomes a
+   merchant, a date, line items and a total, and each item is sorted into an
+   expense category, by rules that also ship inside the app.
 4. **The transaction is shown to you**, ready to copy, share, or sync.
 
 The parser, the categorisation rules and the model loading are open source and
