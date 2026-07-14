@@ -29,7 +29,8 @@
 		1C0000000000000000000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000014 /* Assets.xcassets */; };
 		1C0000000000000000000015 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000015 /* LaunchScreen.storyboard */; };
 		1C0000000000000000000016 /* LaunchTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000016 /* LaunchTiming.swift */; };
-		1C0000000000000000000017 /* AcknowledgementsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000017 /* AcknowledgementsView.swift */; };
+		1C0000000000000000000017 /* BundledDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000017 /* BundledDocumentView.swift */; };
+		1C000000000000000000001A /* PRIVACY.md in Resources */ = {isa = PBXBuildFile; fileRef = 1B000000000000000000001A /* PRIVACY.md */; };
 		1C0000000000000000000018 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000018 /* PrivacyInfo.xcprivacy */; };
 		1C0000000000000000000019 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000019 /* THIRD_PARTY_NOTICES.md */; };
 		1C0000000000000000000020 /* BBReceiptKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000012 /* BBReceiptKit */; };
@@ -59,7 +60,8 @@
 		1B0000000000000000000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1B0000000000000000000015 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		1B0000000000000000000016 /* LaunchTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchTiming.swift; sourceTree = "<group>"; };
-		1B0000000000000000000017 /* AcknowledgementsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcknowledgementsView.swift; sourceTree = "<group>"; };
+		1B0000000000000000000017 /* BundledDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledDocumentView.swift; sourceTree = "<group>"; };
+		1B000000000000000000001A /* PRIVACY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = PRIVACY.md; path = ../PRIVACY.md; sourceTree = SOURCE_ROOT; };
 		1B0000000000000000000018 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1B0000000000000000000019 /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = THIRD_PARTY_NOTICES.md; path = ../THIRD_PARTY_NOTICES.md; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -112,9 +114,10 @@
 				1B000000000000000000000E /* DataDumpView.swift */,
 				1B000000000000000000000F /* ReceiptCaptureStore.swift */,
 				1B0000000000000000000016 /* LaunchTiming.swift */,
-				1B0000000000000000000017 /* AcknowledgementsView.swift */,
+				1B0000000000000000000017 /* BundledDocumentView.swift */,
 				1B0000000000000000000018 /* PrivacyInfo.xcprivacy */,
 				1B0000000000000000000019 /* THIRD_PARTY_NOTICES.md */,
+				1B000000000000000000001A /* PRIVACY.md */,
 				1B0000000000000000000014 /* Assets.xcassets */,
 				1B0000000000000000000015 /* LaunchScreen.storyboard */,
 			);
@@ -204,6 +207,7 @@
 				1C0000000000000000000015 /* LaunchScreen.storyboard in Resources */,
 				1C0000000000000000000018 /* PrivacyInfo.xcprivacy in Resources */,
 				1C0000000000000000000019 /* THIRD_PARTY_NOTICES.md in Resources */,
+				1C000000000000000000001A /* PRIVACY.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -230,7 +234,7 @@
 				1C000000000000000000000E /* DataDumpView.swift in Sources */,
 				1C000000000000000000000F /* ReceiptCaptureStore.swift in Sources */,
 				1C0000000000000000000016 /* LaunchTiming.swift in Sources */,
-				1C0000000000000000000017 /* AcknowledgementsView.swift in Sources */,
+				1C0000000000000000000017 /* BundledDocumentView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

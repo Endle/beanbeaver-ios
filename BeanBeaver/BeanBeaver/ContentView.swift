@@ -16,6 +16,9 @@ struct ContentView: View {
     /// DEBUG deep-link: `-showDataDump` opens the data-dump debug screen on
     /// launch so it can be screenshotted headlessly.
     @State private var debugShowDataDump = false
+    /// DEBUG deep-link: `-showPrivacy` opens the bundled privacy policy, whose
+    /// Markdown rendering is otherwise only checkable by hand in Xcode.
+    @State private var debugShowPrivacy = false
     @State private var showJSONPreview = false
     @Environment(\.openURL) private var openURL
 
@@ -141,6 +144,9 @@ struct ContentView: View {
             .sheet(isPresented: $debugShowDataDump) {
                 NavigationStack { DataDumpView() }
             }
+            .sheet(isPresented: $debugShowPrivacy) {
+                NavigationStack { PrivacyPolicyView() }
+            }
             .task {
                 // Lets `simctl launch … -autoRunSample` exercise the pipeline
                 // headlessly for screenshots/verification.
@@ -152,6 +158,9 @@ struct ContentView: View {
                 }
                 if ProcessInfo.processInfo.arguments.contains("-showDataDump") {
                     debugShowDataDump = true
+                }
+                if ProcessInfo.processInfo.arguments.contains("-showPrivacy") {
+                    debugShowPrivacy = true
                 }
                 // Headless check for `ReceiptCaptureStore.clearOld`: logs before/after
                 // counts so a `simctl launch` run can be grepped for correctness.
@@ -419,11 +428,14 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink("Privacy Policy") {
+                        PrivacyPolicyView()
+                    }
                     NavigationLink("Acknowledgements") {
                         AcknowledgementsView()
                     }
-                    Link("Privacy Policy",
-                         destination: URL(string: "https://github.com/Endle/beanbeaver-ios/blob/main/PRIVACY.md")!)
+                } footer: {
+                    Text("Both ship inside the app, so they're readable offline.")
                 }
 
 #if DEBUG
