@@ -34,6 +34,14 @@ described below.
 analytics, no crash reporting, no advertising, and no server behind the app.
 BeanBeaver cannot see your receipts, your ledger, or how you use it.
 
+## Permissions BeanBeaver asks for
+
+- **Camera** — to photograph a receipt. Used only while the scanner is open.
+- **Add to Photos** — only if you turn on "Save a copy to Photos".
+- **Photo library selection** — handled by the system picker; BeanBeaver only
+  receives the specific image you choose, and has no access to the rest of your
+  library.
+
 ## What stays on your device
 
 **Photos you scan** are stored on your device, in the app's private storage, so
@@ -68,14 +76,6 @@ never synced to iCloud or sent anywhere except to GitHub. Settings → Disconnec
 deletes it.
 
 If you never connect GitHub, nothing ever leaves your device.
-
-## Permissions BeanBeaver asks for
-
-- **Camera** — to photograph a receipt. Used only while the scanner is open.
-- **Add to Photos** — only if you turn on "Save a copy to Photos".
-- **Photo library selection** — handled by the system picker; BeanBeaver only
-  receives the specific image you choose, and has no access to the rest of your
-  library.
 
 ## Children
 
