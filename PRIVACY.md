@@ -43,6 +43,14 @@ and they are deleted along with the app if you delete it. iOS may also clear the
 on its own when the device is short of storage. If you turn on "Save a copy to
 Photos", a copy is additionally written to your own photo library.
 
+**No history is kept.** BeanBeaver has no ledger, no database, and no list of
+past receipts. A parsed transaction lives on the result screen until you copy,
+share or sync it, and is not saved anywhere afterwards.
+
+**The only other things stored** are your settings, the GitHub repository you
+picked, and — if you connect GitHub — its access token, which is held in the iOS
+Keychain (see below).
+
 ## What leaves your device — only when you ask
 
 **GitHub sync is the only feature that sends anything off your device, and only
