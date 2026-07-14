@@ -76,9 +76,10 @@ final class ReceiptPipeline {
         return s
     }
 
-#if DEBUG
-    /// Run the pipeline on a JPEG bundled in the app (debug/demo path that
-    /// bypasses the photo picker).
+    /// Run the pipeline on a JPEG bundled in the app, bypassing the camera and
+    /// photo picker. Shipped (not DEBUG-only) so anyone without a receipt in
+    /// hand — an App Review tester, a curious first-time user — can still see
+    /// the whole scan → beancount flow.
     func scanBundledSample(named name: String) async {
         guard let url = Bundle.main.url(forResource: name, withExtension: "jpg"),
               let data = try? Data(contentsOf: url) else {
@@ -87,7 +88,6 @@ final class ReceiptPipeline {
         }
         await scan(imageData: data)
     }
-#endif
 
     /// Return to the home screen (idle state) so the user can scan another receipt.
     func reset() {

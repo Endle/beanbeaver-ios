@@ -1,10 +1,14 @@
-# BeanBeaver iOS (prototype)
+# BeanBeaver iOS
 
 On-device receipt scanner: pick a photo → PP-OCRv5 OCR + parse + categorize →
 beancount, all in Rust via a UniFFI seam. The Rust core (`bb-receipt-ffi` and
 friends) lives in [`beanbeaver-core`](https://github.com/Endle/beanbeaver-core),
 consumed here via a pinned git dependency (see `Cargo.toml`). Background on the
 original port plan is in `docs/ios_port.md` in the `beanbeaver` (desktop) repo.
+
+Licensed MIT (`LICENSE`); third-party components are credited in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Privacy policy:
+[`PRIVACY.md`](PRIVACY.md).
 
 ## Layout
 
