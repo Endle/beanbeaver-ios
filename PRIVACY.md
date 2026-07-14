@@ -7,23 +7,31 @@ explains what happens to that photo.
 
 ## What happens when you scan a receipt
 
-1. **You provide a photo** — taken with the camera, or picked from your photo
-   library.
-2. **The app reads the text on it.** The text-recognition models are bundled
-   inside the app and run on your phone's processor. The photo is not sent to a
-   server to be read.
-3. **The text is parsed** into a merchant, a date, line items and a total, and
-   each item is sorted into an expense category. This also happens on your
-   phone, using rules that ship inside the app.
-4. **The result is shown to you** as a Beancount transaction, on the result
-   screen, where you can copy or share it.
+1. **The photo.** You take it with the camera or pick it from your photo library.
+   It is written to the app's private storage on your phone.
+2. **Text recognition, on your phone.** The receipt is read by PP-OCRv5, an
+   open-source text-recognition model. The model files ship inside the app —
+   they are roughly 19 MB of the download — and run on your phone's own
+   processor. The photo is not sent anywhere to be read.
+3. **Parsing and categorising, on your phone.** The recognised text is turned
+   into a merchant, a date, line items and a total, and each item is sorted into
+   an expense category, by rules that also ship inside the app.
+4. **The transaction is shown to you**, ready to copy, share, or sync.
 
-No step in that process needs a network. Turn on airplane mode and BeanBeaver
-works exactly the same.
+The parser, the categorisation rules and the model loading are open source and
+auditable: <https://github.com/Endle/beanbeaver-core>. The app itself is at
+<https://github.com/Endle/beanbeaver-ios>.
 
-**BeanBeaver collects nothing.** There is no BeanBeaver account, no analytics, no
-crash reporting, no advertising, and no server behind the app. BeanBeaver cannot
-see your receipts, your ledger, or how you use it.
+**Every step above works with no internet connection.** Put the phone in airplane
+mode and BeanBeaver scans, parses and categorises exactly as it does online.
+
+**The one and only time BeanBeaver uses the network is when you sync a result to
+GitHub** — a feature you have to set up, and then ask for, each time. It is
+described below.
+
+**Beyond that, BeanBeaver collects nothing.** There is no BeanBeaver account, no
+analytics, no crash reporting, no advertising, and no server behind the app.
+BeanBeaver cannot see your receipts, your ledger, or how you use it.
 
 ## What stays on your device
 
