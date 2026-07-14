@@ -67,14 +67,16 @@ private struct MarkdownProseView: View {
     private enum Block: Identifiable {
         case title(String)
         case heading(String)
-        case bullet(String)
+        /// `marker` is the bullet glyph or the list number ("1."), kept so an
+        /// ordered list renders as one.
+        case item(marker: String, text: String)
         case paragraph(String)
 
         var id: String {
             switch self {
             case .title(let s): return "t\(s)"
             case .heading(let s): return "h\(s)"
-            case .bullet(let s): return "b\(s)"
+            case .item(let m, let s): return "i\(m)\(s)"
             case .paragraph(let s): return "p\(s)"
             }
         }
@@ -84,9 +86,14 @@ private struct MarkdownProseView: View {
     /// at a blank line, so consecutive prose lines are joined. Rendering one
     /// source line per paragraph (the obvious implementation) shreds a
     /// hard-wrapped file into fragments broken mid-sentence.
+    ///
+    /// A wrapped line inside a list item continues that item, but only when it
+    /// directly follows it — otherwise the first paragraph after a list would be
+    /// swallowed into the last bullet.
     private var blocks: [Block] {
         var blocks: [Block] = []
         var paragraph: [String] = []
+        var afterBlankLine = true
 
         func flush() {
             guard !paragraph.isEmpty else { return }
@@ -96,6 +103,8 @@ private struct MarkdownProseView: View {
 
         for line in (BundledDocument.text(resource) ?? fallback).components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+            defer { afterBlankLine = trimmed.isEmpty }
+
             if trimmed.isEmpty {
                 flush()
             } else if let heading = trimmed.strippingPrefix("## ") {
@@ -106,10 +115,13 @@ private struct MarkdownProseView: View {
                 blocks.append(.title(title))
             } else if let bullet = trimmed.strippingPrefix("- ") {
                 flush()
-                blocks.append(.bullet(bullet))
-            } else if case .bullet(let previous) = blocks.last, paragraph.isEmpty {
-                // Continuation of the bullet above (an indented wrapped line).
-                blocks[blocks.count - 1] = .bullet(previous + " " + trimmed)
+                blocks.append(.item(marker: "•", text: bullet))
+            } else if let (number, rest) = trimmed.splittingOrderedMarker() {
+                flush()
+                blocks.append(.item(marker: number, text: rest))
+            } else if case .item(let marker, let previous) = blocks.last,
+                      paragraph.isEmpty, !afterBlankLine {
+                blocks[blocks.count - 1] = .item(marker: marker, text: previous + " " + trimmed)
             } else {
                 paragraph.append(trimmed)
             }
@@ -138,9 +150,9 @@ private struct MarkdownProseView: View {
             Text(text).font(.title2.bold())
         case .heading(let text):
             Text(text).font(.headline).padding(.top, 8)
-        case .bullet(let text):
+        case .item(let marker, let text):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("•")
+                Text(marker).monospacedDigit()
                 Text(.init(text))
             }
             .font(.subheadline)
@@ -154,6 +166,17 @@ private extension String {
     /// The remainder after `prefix`, or nil when the string doesn't start with it.
     func strippingPrefix(_ prefix: String) -> String? {
         hasPrefix(prefix) ? String(dropFirst(prefix.count)) : nil
+    }
+
+    /// Splits an ordered-list line ("2. Some text") into its marker and text.
+    /// Nil for anything else — including prose that merely starts with a number,
+    /// since that needs the "N. " shape to match.
+    func splittingOrderedMarker() -> (marker: String, text: String)? {
+        let digits = prefix { $0.isNumber }
+        guard !digits.isEmpty else { return nil }
+        let rest = dropFirst(digits.count)
+        guard rest.hasPrefix(". ") else { return nil }
+        return (marker: "\(digits).", text: String(rest.dropFirst(2)))
     }
 }
 

@@ -2,20 +2,30 @@
 
 _Last updated: 2026-07-13_
 
-BeanBeaver turns a photo of a receipt into a [Beancount](https://beancount.github.io)
-transaction. It works with no account and no network connection.
+BeanBeaver turns a photo of a receipt into a Beancount transaction. This policy
+explains what happens to that photo.
 
-## What BeanBeaver collects
+## What happens when you scan a receipt
 
-**Nothing.** There is no BeanBeaver account, no analytics, no crash reporting, no
-advertising, and no server behind the app. BeanBeaver cannot see your receipts,
-your ledger, or how you use it.
+1. **You provide a photo** — taken with the camera, or picked from your photo
+   library.
+2. **The app reads the text on it.** The text-recognition models are bundled
+   inside the app and run on your phone's processor. The photo is not sent to a
+   server to be read.
+3. **The text is parsed** into a merchant, a date, line items and a total, and
+   each item is sorted into an expense category. This also happens on your
+   phone, using rules that ship inside the app.
+4. **The result is shown to you** as a Beancount transaction, on the result
+   screen, where you can copy or share it.
+
+No step in that process needs a network. Turn on airplane mode and BeanBeaver
+works exactly the same.
+
+**BeanBeaver collects nothing.** There is no BeanBeaver account, no analytics, no
+crash reporting, no advertising, and no server behind the app. BeanBeaver cannot
+see your receipts, your ledger, or how you use it.
 
 ## What stays on your device
-
-**Scanning happens entirely on your device.** The text-recognition models are
-bundled inside the app and run locally. A receipt photo is never sent anywhere
-as part of scanning — turn on airplane mode and BeanBeaver still works.
 
 **Photos you scan** are stored on your device, in the app's private storage, so
 you can review the original behind a scan later. They are never uploaded as part
