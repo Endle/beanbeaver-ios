@@ -45,24 +45,40 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    switch pipeline.status {
-                    case .idle:
-                        homeView
-                    case .scanning:
-                        scanningView
-                    case .failed(let message):
-                        failedView(message)
-                    case .done(let result):
-                        ReceiptResultView(result: result, wallMs: pipeline.lastWallMs,
-                                          capturedImageURL: pipeline.capturedImageURL,
-                                          exporter: exporter,
-                                          onConfigure: { showSettings = true })
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 20) {
+                        switch pipeline.status {
+                        case .idle:
+                            homeView
+                        case .scanning:
+                            scanningView
+                        case .failed(let message):
+                            failedView(message)
+                        case .done(let result):
+                            ReceiptResultView(result: result, wallMs: pipeline.lastWallMs,
+                                              capturedImageURL: pipeline.capturedImageURL,
+                                              exporter: exporter,
+                                              onConfigure: { showSettings = true })
+                        }
                     }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+#if DEBUG
+                    // Screenshot scaffold: with `-expandAccounting`, bring the opened
+                    // beancount disclosure to the top of the viewport — its clean
+                    // postings, above the raw-text/debug tail below.
+                    .onChange(of: isDone) { _, done in
+                        guard done,
+                              ProcessInfo.processInfo.arguments.contains("-expandAccounting")
+                        else { return }
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(700))
+                            proxy.scrollTo("beancount", anchor: .top)
+                        }
+                    }
+#endif
                 }
-                .padding()
-                .frame(maxWidth: .infinity)
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle(isDone ? "" : "BeanBeaver")
@@ -493,6 +509,7 @@ struct ReceiptResultView: View {
     var exporter: LedgerExporter
     var onConfigure: () -> Void = {}
     @State private var showJSONPreview = false
+    @State private var expandAccounting = false
 
     private static let displayDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -527,7 +544,7 @@ struct ReceiptResultView: View {
                 warningsBanner
             }
 
-            DisclosureGroup {
+            DisclosureGroup(isExpanded: $expandAccounting) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(result.beancount)
                         .font(.system(.footnote, design: .monospaced))
@@ -555,6 +572,16 @@ struct ReceiptResultView: View {
             }
             .tint(.secondary)
             .bbCard()
+            .id("beancount")
+#if DEBUG
+            // Screenshot scaffold: `-expandAccounting` opens the beancount
+            // disclosure so a `simctl` capture can show the generated ledger.
+            .task {
+                if ProcessInfo.processInfo.arguments.contains("-expandAccounting") {
+                    expandAccounting = true
+                }
+            }
+#endif
 
             VStack(spacing: 8) {
                 Button {
