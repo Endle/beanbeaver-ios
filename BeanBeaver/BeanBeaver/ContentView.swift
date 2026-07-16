@@ -19,6 +19,9 @@ struct ContentView: View {
     /// DEBUG deep-link: `-showPrivacy` opens the bundled privacy policy, whose
     /// Markdown rendering is otherwise only checkable by hand in Xcode.
     @State private var debugShowPrivacy = false
+    /// DEBUG deep-link: `-showDebugInfoList` opens "Stored Debug Info" on
+    /// launch so what `DebugInfoStore` captured can be screenshotted headlessly.
+    @State private var debugShowDebugInfoList = false
     @State private var showJSONPreview = false
     @Environment(\.openURL) private var openURL
 
@@ -163,6 +166,9 @@ struct ContentView: View {
             .sheet(isPresented: $debugShowPrivacy) {
                 NavigationStack { PrivacyPolicyView() }
             }
+            .sheet(isPresented: $debugShowDebugInfoList) {
+                NavigationStack { DebugInfoListView() }
+            }
             .task {
                 // Lets `simctl launch … -autoRunSample` exercise the pipeline
                 // headlessly for screenshots/verification.
@@ -172,11 +178,17 @@ struct ContentView: View {
                 if ProcessInfo.processInfo.arguments.contains("-showLedgerSettings") {
                     showLedgerSettings = true
                 }
+                if ProcessInfo.processInfo.arguments.contains("-showSettings") {
+                    showSettings = true
+                }
                 if ProcessInfo.processInfo.arguments.contains("-showDataDump") {
                     debugShowDataDump = true
                 }
                 if ProcessInfo.processInfo.arguments.contains("-showPrivacy") {
                     debugShowPrivacy = true
+                }
+                if ProcessInfo.processInfo.arguments.contains("-showDebugInfoList") {
+                    debugShowDebugInfoList = true
                 }
                 // Headless check for `ReceiptCaptureStore.clearOld`: logs before/after
                 // counts so a `simctl launch` run can be grepped for correctness.
@@ -401,6 +413,9 @@ struct SettingsView: View {
     /// Shares its key with `LedgerFileOptions.includeDetailsJSON`, which the
     /// export path reads. Default on.
     @AppStorage("includeDetailsJSON") private var includeDetailsJSON = true
+    /// "Store detailed debug info" (Settings › Debug). Off by default — see
+    /// `DebugInfoStore` for what turning it on actually keeps around.
+    @AppStorage(DebugInfoStore.enabledKey) private var storeDetailedDebugInfo = false
     /// The photo behind the result screen currently on top, if any — excluded
     /// from "Clear Old Receipts" so it can't vanish out from under the user
     /// while they're still looking at it.
@@ -412,6 +427,7 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             List {
                 if VNDocumentCameraViewController.isSupported {
                     Section {
@@ -454,13 +470,22 @@ struct SettingsView: View {
                     Text("Both ship inside the app, so they're readable offline.")
                 }
 
+                Section {
+                    Toggle("Store detailed debug info", isOn: $storeDetailedDebugInfo)
 #if DEBUG
-                Section("Debug") {
                     NavigationLink("Dump All Data") {
                         DataDumpView()
                     }
-                }
 #endif
+                    NavigationLink("Stored Debug Info") {
+                        DebugInfoListView()
+                    }
+                } header: {
+                    Text("Debug")
+                } footer: {
+                    Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices) and internal error detail in a debug log on this device — more than the app normally keeps. Turn it off again once you're done.")
+                }
+                .id("debug")
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -469,6 +494,16 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+#if DEBUG
+            // Screenshot scaffold: `-scrollToDebug` jumps straight to the
+            // Debug section so it can be captured without manual scrolling.
+            .task {
+                if ProcessInfo.processInfo.arguments.contains("-scrollToDebug") {
+                    try? await Task.sleep(for: .milliseconds(300))
+                    proxy.scrollTo("debug", anchor: .top)
+                }
+            }
+#endif
             .alert("Storage", isPresented: Binding(
                 get: { clearResultMessage != nil },
                 set: { if !$0 { clearResultMessage = nil } }
@@ -476,6 +511,7 @@ struct SettingsView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(clearResultMessage ?? "")
+            }
             }
         }
     }

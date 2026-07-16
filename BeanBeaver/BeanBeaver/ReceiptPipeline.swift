@@ -121,9 +121,11 @@ final class ReceiptPipeline {
             progressTask?.cancel()
             scanProgress = 1
             status = .done(result)
+            DebugInfoStore.recordSuccess(result: result, wallMs: lastWallMs)
         } catch {
             progressTask?.cancel()
             status = .failed(String(describing: error))
+            DebugInfoStore.recordFailure(error)
         }
     }
 
