@@ -131,6 +131,61 @@ enum GitHubApp {
         return ((json["total_count"] as? Int) ?? 0) > 0
     }
 
+    /// A repository BeanBeaver is installed on.
+    struct Repo: Identifiable, Hashable, Comparable {
+        let owner: String
+        let name: String
+        var fullName: String { "\(owner)/\(name)" }
+        var id: String { fullName }
+
+        static func < (a: Repo, b: Repo) -> Bool {
+            a.fullName.localizedCaseInsensitiveCompare(b.fullName) == .orderedAscending
+        }
+    }
+
+    /// Every repo BeanBeaver is installed on, flattened across the user's
+    /// installations (their own account plus any orgs) and sorted.
+    ///
+    /// The installation *is* the per-repo write grant, so membership in this list
+    /// is itself proof the export path can reach the repo — a repo picked from
+    /// here needs no separate access check.
+    static func listInstallationRepos(token: String) async throws -> [Repo] {
+        let json = try await getJSON("https://api.github.com/user/installations", token: token)
+        guard let installations = json["installations"] as? [[String: Any]] else {
+            throw FlowError(json["message"] as? String ?? "Couldn't read your installations.")
+        }
+        var repos: Set<Repo> = []
+        for installation in installations {
+            guard let id = installation["id"] as? Int else { continue }
+            repos.formUnion(try await installationRepos(id: id, token: token))
+        }
+        return repos.sorted()
+    }
+
+    /// One installation's repos. Paginated: an "All repositories" installation on
+    /// a busy account can run to hundreds, and the default page is only 30 — a
+    /// truncated list would silently hide the repo the user is looking for.
+    private static func installationRepos(id: Int, token: String) async throws -> [Repo] {
+        let perPage = 100
+        var repos: [Repo] = []
+        var page = 1
+        while true {
+            let json = try await getJSON(
+                "https://api.github.com/user/installations/\(id)/repositories?per_page=\(perPage)&page=\(page)",
+                token: token)
+            guard let batch = json["repositories"] as? [[String: Any]] else { break }
+            for entry in batch {
+                guard let name = entry["name"] as? String,
+                      let owner = (entry["owner"] as? [String: Any])?["login"] as? String else { continue }
+                repos.append(Repo(owner: owner, name: name))
+            }
+            // A short page is the last page; this also terminates on an empty one.
+            if batch.count < perPage { break }
+            page += 1
+        }
+        return repos
+    }
+
     /// The signed-in account's login, used to pre-fill the repo owner.
     static func fetchLogin(token: String) async throws -> String {
         let json = try await getJSON("https://api.github.com/user", token: token)
