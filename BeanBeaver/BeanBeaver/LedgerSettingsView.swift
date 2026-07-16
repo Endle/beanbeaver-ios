@@ -218,6 +218,7 @@ struct LedgerSettingsView: View {
             repoState = .loaded(try await GitHubApp.listInstallationRepos(token: exporter.github.token))
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            DebugInfoStore.recordSyncFailure(context: "load GitHub repos", message: message)
             repoState = .failed(message)
         }
     }
@@ -374,6 +375,7 @@ struct ManualRepoEntryView: View {
                     : .failed("Reachable, but no write access. Install BeanBeaver on this repo with Contents + Pull requests write.")
             } catch {
                 let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                DebugInfoStore.recordSyncFailure(context: "verify repo access", message: message)
                 repoCheck = .failed(message)
             }
         }

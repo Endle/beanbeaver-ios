@@ -187,9 +187,21 @@ final class GitHubLedger: LedgerDestination {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
 
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: req)
+        } catch {
+            // A transport failure (dropped connection, timeout, offline) throws
+            // before there's any HTTP response to inspect — without the method
+            // and path here, "the network connection was lost" gives no clue
+            // which of the PR flow's several requests actually failed.
+            let nsError = error as NSError
+            throw LedgerExportError(
+                "GitHub \(method) \(pathAndQuery) failed: \(nsError.localizedDescription) (\(nsError.domain) \(nsError.code))")
+        }
         guard let http = response as? HTTPURLResponse else {
-            throw LedgerExportError("No response from GitHub.")
+            throw LedgerExportError("No response from GitHub \(method) \(pathAndQuery).")
         }
         guard (200..<300).contains(http.statusCode) else {
             let message = (try? JSONDecoder().decode(GitHubError.self, from: data))?.message
