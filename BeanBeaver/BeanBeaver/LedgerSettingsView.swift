@@ -13,8 +13,15 @@ struct LedgerSettingsView: View {
     // @State private var importError: String?
     @State private var connection = GitHubConnection()
     @State private var codeCopied = false
+    @State private var repoState: RepoState = .idle
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
+
+    private enum RepoState {
+        case idle, loading
+        case loaded([GitHubApp.Repo])
+        case failed(String)
+    }
 
     var body: some View {
         List {
@@ -30,6 +37,13 @@ struct LedgerSettingsView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Done") { dismiss() }
             }
+        }
+        // Keyed on the token so the list loads once connected, and clears on
+        // disconnect — without it the rows would sit stale behind a signed-out
+        // account.
+        .task(id: exporter.github.token) {
+            guard isGitHubConnected else { repoState = .idle; return }
+            await loadRepos()
         }
         // .fileImporter(isPresented: $showFileImporter,
         //               allowedContentTypes: [.plainText, .text, .data]) { result in
@@ -69,18 +83,27 @@ struct LedgerSettingsView: View {
 
     // MARK: - GitHub
 
+    /// The whole GitHub destination as one flat card: connection, repository,
+    /// then the occasional actions.
     private var gitHubSection: some View {
         Section {
             if isGitHubConnected {
-                gitHubConnectedRows
-                repoConfigRows
+                gitHubConnectedRows   // 1
+                repositoryRow         // 2
+                repoActionRows        // 3+
             } else {
                 gitHubConnectFlow
             }
         } header: {
             Label(LedgerDestinationKind.githubPR.title, systemImage: LedgerDestinationKind.githubPR.systemImage)
         } footer: {
-            Text("Each export opens a pull request that appends the transaction to the ledger file on the repo's default branch. Connect your GitHub account: authorize in the browser, then install BeanBeaver on the one repo you pick — it can't touch your other repos. The token is stored in the device Keychain.")
+            // Once connected, the walkthrough is spent text — keep only what's
+            // still true.
+            if isGitHubConnected {
+                Text("Each export opens a pull request against the repository's default branch. Only repositories BeanBeaver is installed on are listed. The token is stored in the device Keychain.")
+            } else {
+                Text("Each export opens a pull request that appends the transaction to the ledger file on the repo's default branch. Connect your GitHub account: authorize in the browser, then install BeanBeaver on the one repo you pick — it can't touch your other repos. The token is stored in the device Keychain.")
+            }
         }
     }
 
@@ -112,15 +135,90 @@ struct LedgerSettingsView: View {
         }
     }
 
-    /// Which repo to write to — picked from the ones BeanBeaver is installed on
-    /// rather than typed. The path each receipt lands at within the repo is fixed
+    /// Which repo to write to: one row that opens a menu of the repos BeanBeaver
+    /// is installed on. The installation *is* the per-repo write grant, so every
+    /// option is known-writable and choosing one needs no follow-up check. The
+    /// path each receipt lands at within the repo is fixed
     /// (`GitHubLedger.rootDir`), so it isn't asked for.
     @ViewBuilder
-    private var repoConfigRows: some View {
-        NavigationLink {
-            RepoPickerView(github: exporter.github)
+    private var repositoryRow: some View {
+        switch repoState {
+        case .idle, .loading:
+            LabeledContent("Repository") {
+                HStack(spacing: 6) { ProgressView(); Text("Loading…").foregroundStyle(.secondary) }
+            }
+        case .failed(let message):
+            LabeledContent("Repository", value: chosenRepo ?? "Unavailable")
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red).font(.footnote)
+            Button("Try Again") { Task { await loadRepos() } }
+        case .loaded(let repos):
+            if repos.isEmpty {
+                LabeledContent("Repository", value: "None installed")
+            } else {
+                Picker("Repository", selection: repoSelection) {
+                    Text("Choose…").tag(GitHubApp.Repo?.none)
+                    ForEach(repoOptions(repos)) { repo in
+                        Text(repo.fullName).tag(GitHubApp.Repo?.some(repo))
+                    }
+                }
+            }
+        }
+    }
+
+    /// The occasional actions — rare next to picking a repo, so they sit below it.
+    @ViewBuilder
+    private var repoActionRows: some View {
+        if let installURL = GitHubApp.installURL {
+            Button {
+                openURL(installURL)
+            } label: {
+                Label("Install on Another Repository…", systemImage: "square.and.arrow.down")
+            }
+        }
+        Button {
+            Task { await loadRepos() }
         } label: {
-            LabeledContent("Repository", value: chosenRepo ?? "Choose…")
+            Label("Refresh", systemImage: "arrow.clockwise")
+        }
+        NavigationLink {
+            ManualRepoEntryView(github: exporter.github)
+        } label: {
+            Label("Enter Manually…", systemImage: "keyboard")
+        }
+    }
+
+    /// Bridges the picker to the two stored strings. Selecting "Choose…" (nil)
+    /// clears them, which is the only way back to an unset repo.
+    private var repoSelection: Binding<GitHubApp.Repo?> {
+        Binding(
+            get: {
+                let owner = exporter.github.owner.trimmingCharacters(in: .whitespacesAndNewlines)
+                let repo = exporter.github.repo.trimmingCharacters(in: .whitespacesAndNewlines)
+                return owner.isEmpty || repo.isEmpty ? nil : GitHubApp.Repo(owner: owner, name: repo)
+            },
+            set: { selection in
+                exporter.github.owner = selection?.owner ?? ""
+                exporter.github.repo = selection?.name ?? ""
+            }
+        )
+    }
+
+    /// A repo set by hand won't be in the installation list; without it as an
+    /// option the picker would have no tag to match and would render blank.
+    private func repoOptions(_ repos: [GitHubApp.Repo]) -> [GitHubApp.Repo] {
+        guard let chosen = repoSelection.wrappedValue, !repos.contains(chosen) else { return repos }
+        return [chosen] + repos
+    }
+
+    @MainActor
+    private func loadRepos() async {
+        repoState = .loading
+        do {
+            repoState = .loaded(try await GitHubApp.listInstallationRepos(token: exporter.github.token))
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            repoState = .failed(message)
         }
     }
 
@@ -198,144 +296,10 @@ struct LedgerSettingsView: View {
     }
 }
 
-/// Pick the ledger repo from the ones BeanBeaver is installed on, instead of
-/// typing `owner/repo` from memory.
-///
-/// The installation *is* the per-repo write grant, so every row here is known to
-/// be writable — there's nothing to verify after picking, and a repo the app
-/// can't reach can't be chosen by mistake. The list is usually one row (the repo
-/// just installed on during the connect flow); it only gets long if the user
-/// granted "All repositories" at install time, which is what the filter is for.
-struct RepoPickerView: View {
-    @Bindable var github: GitHubLedger
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
-    @State private var state: LoadState = .loading
-    @State private var search = ""
-
-    private enum LoadState {
-        case loading
-        case loaded([GitHubApp.Repo])
-        case failed(String)
-    }
-
-    var body: some View {
-        List {
-            switch state {
-            case .loading:
-                HStack(spacing: 8) { ProgressView(); Text("Loading your repositories…") }
-            case .failed(let message):
-                Section {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red).font(.footnote)
-                    Button("Try Again") { Task { await loadRepos() } }
-                }
-            case .loaded(let repos):
-                repoSection(repos)
-            }
-            escapeHatchSection
-        }
-        .navigationTitle("Repository")
-        .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $search, prompt: "Filter repositories")
-        .task { await loadRepos() }
-    }
-
-    @ViewBuilder
-    private func repoSection(_ repos: [GitHubApp.Repo]) -> some View {
-        let matches = filtered(repos)
-        Section {
-            if repos.isEmpty {
-                Text("BeanBeaver isn't installed on any repository yet.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            } else if matches.isEmpty {
-                Text("No repository matches “\(search)”.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            } else {
-                ForEach(matches) { repo in
-                    Button {
-                        choose(repo)
-                    } label: {
-                        HStack {
-                            Text(repo.fullName)
-                            Spacer()
-                            if isChosen(repo) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Color.accentColor)
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                        // Keep the row tappable across the Spacer, not just the text.
-                        .contentShape(Rectangle())
-                    }
-                    // Without this a List button tints its whole label blue; picker
-                    // rows want primary text with only the checkmark accented.
-                    .buttonStyle(.plain)
-                }
-            }
-        } footer: {
-            if !repos.isEmpty {
-                Text("Pull requests will target the repository's default branch.")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var escapeHatchSection: some View {
-        Section {
-            if let installURL = GitHubApp.installURL {
-                Button {
-                    openURL(installURL)
-                } label: {
-                    Label("Install on Another Repository…", systemImage: "square.and.arrow.down")
-                }
-            }
-            Button {
-                Task { await loadRepos() }
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-            }
-            NavigationLink {
-                ManualRepoEntryView(github: github)
-            } label: {
-                Label("Enter Manually…", systemImage: "keyboard")
-            }
-        } footer: {
-            Text("Only repositories BeanBeaver is installed on can be written to, so only those are listed. Just installed it somewhere new? Tap Refresh.")
-        }
-    }
-
-    private func filtered(_ repos: [GitHubApp.Repo]) -> [GitHubApp.Repo] {
-        let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return repos }
-        return repos.filter { $0.fullName.localizedCaseInsensitiveContains(needle) }
-    }
-
-    private func isChosen(_ repo: GitHubApp.Repo) -> Bool {
-        repo.owner == github.owner && repo.name == github.repo
-    }
-
-    private func choose(_ repo: GitHubApp.Repo) {
-        github.owner = repo.owner
-        github.repo = repo.name
-        dismiss()
-    }
-
-    @MainActor
-    private func loadRepos() async {
-        state = .loading
-        do {
-            state = .loaded(try await GitHubApp.listInstallationRepos(token: github.token))
-        } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            state = .failed(message)
-        }
-    }
-}
-
-/// Escape hatch: type `owner/repo` by hand. Needed when the picker can't show the
-/// repo — most likely a stale installation list. Nothing typed here proves the
-/// token can write to it, so unlike the picker this path keeps an access check.
+/// Escape hatch: type `owner/repo` by hand. Needed when the list on the sync
+/// screen can't show the repo — most likely a stale installation list. Nothing
+/// typed here proves the token can write to it, so unlike picking from that list
+/// this path keeps an access check.
 struct ManualRepoEntryView: View {
     @Bindable var github: GitHubLedger
     @State private var repoCheck: RepoCheck = .idle
