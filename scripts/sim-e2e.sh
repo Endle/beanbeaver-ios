@@ -77,4 +77,8 @@ for _ in $(seq 1 180); do [ -f "$OUT" ] && break; sleep 2; done
 cp "$OUT" "$WORK/batch_out.json"
 
 echo "── compare ──"
-python3 "$HERE/compare-e2e.py" --results "$WORK/batch_out.json" --manifest "$WORK/manifest.json"
+# PRIVATE_RULES (optional): when set, categories the private suite gets from
+# private_rules.toml are tolerated — the app runs public rules only. Unset in CI
+# (public fixtures), so the comparison is unchanged there.
+python3 "$HERE/compare-e2e.py" --results "$WORK/batch_out.json" --manifest "$WORK/manifest.json" \
+  ${PRIVATE_RULES:+--private-rules "$PRIVATE_RULES"}

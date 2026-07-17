@@ -7,8 +7,20 @@ Consumes the `batch_out.json` produced by the app's `-autoRunBatch` harness
 desktop pytest suite (test_e2e_receipts.py): fuzzy merchant, exact date/total,
 and critical-item description/price/category checks, honoring `known_failures`.
 
+Sim path vs. desktop suite — categories:
+  The desktop suite resolves item categories from beanbeaver's PUBLIC rules PLUS
+  the private suite's `private_rules.toml`. The shipping app bundles only the
+  PUBLIC rules and cannot inject private ones at runtime, so any expected
+  category that comes from `private_rules.toml` can't reproduce here. Pass
+  `--private-rules <private_rules.toml>` and those items' category assertions are
+  tolerated (their expected description contains a private keyword). Description
+  and price stay hard-checked, and every PUBLIC-rule category is still enforced —
+  so a genuine public-rule category regression still fails. As that debt file
+  trends to empty, the sim path tightens automatically.
+
 Usage:
-  compare-e2e.py --results batch_out.json --manifest manifest.json
+  compare-e2e.py --results batch_out.json --manifest manifest.json \
+                 [--private-rules /path/to/private_rules.toml]
 """
 import argparse
 import json
@@ -41,7 +53,27 @@ def dec(v):
         return None
 
 
-def check_merchant(res, exp):
+def load_private_keywords(path) -> frozenset:
+    """Collect the (upper-cased) keyword set from a private_rules.toml so the sim
+    path can tolerate categories the public rules don't produce. Best-effort: a
+    missing file or missing TOML parser yields an empty set (nothing tolerated)."""
+    try:
+        try:
+            import tomllib  # Python 3.11+
+            with open(path, "rb") as f:
+                data = tomllib.load(f)
+        except ModuleNotFoundError:  # fall back to a tolerant scan of keyword arrays
+            import re
+            text = open(path, encoding="utf-8").read()
+            data = {"rules": [{"keywords": re.findall(r'"([^"]*)"', block)}
+                              for block in re.findall(r"keywords\s*=\s*\[(.*?)\]", text, re.S)]}
+    except FileNotFoundError:
+        print(f"warning: --private-rules {path} not found; no categories tolerated", file=sys.stderr)
+        return frozenset()
+    return frozenset(kw.upper() for rule in data.get("rules", []) for kw in rule.get("keywords", []))
+
+
+def check_merchant(res, exp, tol=frozenset()):
     if "merchant" not in exp:
         return None
     if exp.get("merchant_optional"):
@@ -49,19 +81,26 @@ def check_merchant(res, exp):
     return merchant_matches(exp["merchant"], res.get("merchant", ""), exp.get("merchant_any_of"))
 
 
-def check_date(res, exp):
+def check_date(res, exp, tol=frozenset()):
     if "date" not in exp:
         return None
     return res.get("date") == exp["date"]
 
 
-def check_total(res, exp):
+def check_total(res, exp, tol=frozenset()):
     if "total" not in exp:
         return None
     return dec(res.get("total")) is not None and dec(res.get("total")) == dec(exp["total"])
 
 
-def check_items(res, exp):
+def category_tolerated(desc_upper: str, tol) -> bool:
+    """True when this item's expected category comes from private_rules (its
+    description contains a private keyword), so the public-rules-only app can't
+    reproduce it and the category assertion is skipped on the sim path."""
+    return any(kw in desc_upper for kw in tol)
+
+
+def check_items(res, exp, tol=frozenset()):
     crit = exp.get("critical_items")
     if not crit:
         return None
@@ -78,7 +117,7 @@ def check_items(res, exp):
         if want_price not in prices:
             return False
         want_cat = c.get("category")
-        if want_cat and not c.get("category_optional"):
+        if want_cat and not c.get("category_optional") and not category_tolerated(pat, tol):
             cats = [it.get("category") or "" for it in matches if dec(it.get("price")) == want_price]
             if not any(want_cat in cat for cat in cats):
                 return False
@@ -93,16 +132,23 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", required=True)
     ap.add_argument("--manifest", required=True)
+    ap.add_argument("--private-rules",
+                    help="path to private_rules.toml; item categories whose expected description "
+                         "matches one of its keywords are tolerated (the app runs public rules only)")
     args = ap.parse_args()
+
+    tol = load_private_keywords(args.private_rules) if args.private_rules else frozenset()
 
     results = {r["name"]: r for r in json.load(open(args.results))["results"]}
     manifest = json.load(open(args.manifest))
 
-    rows, total_fail = [], 0
+    rows, total_fail, tol_hits = [], 0, 0
     for name in sorted(manifest):
         exp = json.load(open(manifest[name]))
         res = results.get(name)
         known = set(exp.get("known_failures", []))
+        tol_hits += sum(1 for c in (exp.get("critical_items") or [])
+                        if c.get("category") and category_tolerated(c["description"].upper(), tol))
         if res is None:
             rows.append((name, "NO RESULT", {}, "—"))
             total_fail += 1
@@ -114,7 +160,7 @@ def main():
         outcomes = {}
         case_bad = 0
         for field, fn in CHECKS:
-            ok = fn(res, exp)
+            ok = fn(res, exp, tol)
             if ok is None:
                 continue
             if ok:
@@ -136,6 +182,9 @@ def main():
         print(f"{name:<{w}}  {verdict:<8}  {flags:<16}  {detail}")
     passed = sum(1 for r in rows if r[1] in ("ok",))
     print(f"\n{passed}/{len(rows)} cases fully pass; {total_fail} field assertion(s) failed.")
+    if tol:
+        print(f"(public-rules-only sim path: tolerated {tol_hits} private-rule "
+              f"categorie(s) from {len(tol)} keyword(s) in --private-rules)")
     return 1 if total_fail else 0
 
 
