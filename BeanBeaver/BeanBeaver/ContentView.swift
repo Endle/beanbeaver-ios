@@ -1,13 +1,17 @@
 import SwiftUI
-import PhotosUI
 import VisionKit
 import BBReceiptKit
 
 struct ContentView: View {
     @State private var pipeline = ReceiptPipeline()
     @State private var exporter = LedgerExporter()
-    @State private var photoItem: PhotosPickerItem?
+    /// The pending photo-library import. Owned here rather than by the page that
+    /// shows it so backing out of that page doesn't throw the work away, and so
+    /// the home button can show what's still waiting.
+    @State private var batch = ReceiptBatch()
     @State private var showScanner = false
+    /// Also opened by the `-showBatchImport` DEBUG deep-link.
+    @State private var showBatchImport = false
     @State private var showOriginReceipt = false
     @State private var showSettings = false
     /// Also opened by the `-showLedgerSettings` DEBUG deep-link, so it can be
@@ -44,6 +48,22 @@ struct ContentView: View {
     private var doneResult: ReceiptResult? {
         if case .done(let result) = pipeline.status { return result }
         return nil
+    }
+
+    /// Pending-count suffix for the import button, mirroring the Sync button's
+    /// "Sync:…" indicator so a batch left half-done is visible from home
+    /// without inventing a second idiom for it.
+    private var batchBadge: String {
+        batch.isEmpty ? "" : " (\(batch.drafts.count))"
+    }
+
+    /// Every capture "Clear Old Receipts" must spare: the photo behind the
+    /// result currently on screen, plus every photo the pending batch still
+    /// needs to parse, review, or sync.
+    private var keptCaptureFilenames: Set<String> {
+        var kept = batch.liveCaptureFilenames
+        if let name = pipeline.capturedImageURL?.lastPathComponent { kept.insert(name) }
+        return kept
     }
 
     var body: some View {
@@ -121,6 +141,10 @@ struct ContentView: View {
                     }
                 }
             }
+            .navigationDestination(isPresented: $showBatchImport) {
+                BatchImportView(batch: batch, exporter: exporter,
+                                onConfigure: { showLedgerSettings = true })
+            }
             .fullScreenCover(isPresented: $showScanner) {
                 ScannerWithHint(
                     onScan: { data in
@@ -144,20 +168,9 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView(saveScansToPhotos: $saveScansToPhotos,
-                             currentCaptureURL: pipeline.capturedImageURL) {
+                             keptCaptureFilenames: keptCaptureFilenames) {
                     Task { await pipeline.scanBundledSample(named: sampleName) }
                 }
-            }
-            .alert(exporter.result?.title ?? "", isPresented: Binding(
-                get: { exporter.result != nil },
-                set: { if !$0 { exporter.result = nil } }
-            ), presenting: exporter.result) { result in
-                if let url = result.openURL {
-                    Button("Open") { openURL(url) }
-                }
-                Button("OK", role: .cancel) {}
-            } message: { result in
-                Text(result.message)
             }
 #if DEBUG
             .sheet(isPresented: $debugShowDataDump) {
@@ -181,6 +194,9 @@ struct ContentView: View {
                 if ProcessInfo.processInfo.arguments.contains("-showSettings") {
                     showSettings = true
                 }
+                if ProcessInfo.processInfo.arguments.contains("-showBatchImport") {
+                    showBatchImport = true
+                }
                 if ProcessInfo.processInfo.arguments.contains("-showDataDump") {
                     debugShowDataDump = true
                 }
@@ -194,7 +210,7 @@ struct ContentView: View {
                 // counts so a `simctl launch` run can be grepped for correctness.
                 if ProcessInfo.processInfo.arguments.contains("-clearOldReceipts") {
                     let before = ReceiptCaptureStore.totalBytes()
-                    let result = ReceiptCaptureStore.clearOld(keeping: pipeline.capturedImageURL)
+                    let result = ReceiptCaptureStore.clearOld(keeping: keptCaptureFilenames)
                     let after = ReceiptCaptureStore.totalBytes()
                     NSLog("[ClearOldReceipts] before=\(before)B after=\(after)B removed=\(result.count) freed=\(result.bytes)B")
                 }
@@ -202,20 +218,43 @@ struct ContentView: View {
                 if BatchRunner.isRequested {
                     await BatchRunner.run()
                 }
-            }
-#endif
-            .onChange(of: photoItem) { _, item in
-                guard let item else { return }
-                Task {
-                    defer { photoItem = nil }
-                    guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-                    await pipeline.scan(imageData: data)
+                // Photo-import batch, headless: `-dumpBatch` logs what came back
+                // off disk (run it alone on a second launch to check a parsed
+                // batch survived), `-seedPhotoBatch <n>` fills one and parses it.
+                if ProcessInfo.processInfo.arguments.contains("-dumpBatch") {
+                    batch.logState("loaded")
+                }
+                if let count = BatchRunner.argValue("-seedPhotoBatch").flatMap(Int.init) {
+                    await batch.seedFromBundledSample(count: count)
+                }
+                if ProcessInfo.processInfo.arguments.contains("-fakeSyncProgress") {
+                    Task { await exporter.simulateProgress() }
+                }
+                if ProcessInfo.processInfo.arguments.contains("-discardBatch") {
+                    batch.discardAll()
+                    batch.logState("after discard")
                 }
             }
+#endif
             // Headless launch-latency probe (process start → first frame); a no-op
             // unless launched with `-logLaunchTiming`. Not DEBUG-gated so a Release
             // build can be measured against Debug on a real device.
             .task { LaunchTiming.recordFirstFrame() }
+        }
+        // Outside the NavigationStack on purpose. Attached to the stack's content
+        // it anchors to the home screen, so a sync started from the pushed batch
+        // page tried to present from a covered view and the confirmation arrived
+        // seconds late — long after the page had reacted to the sync finishing.
+        .alert(exporter.result?.title ?? "", isPresented: Binding(
+            get: { exporter.result != nil },
+            set: { if !$0 { exporter.result = nil } }
+        ), presenting: exporter.result) { result in
+            if let url = result.openURL {
+                Button("Open") { openURL(url) }
+            }
+            Button("OK", role: .cancel) {}
+        } message: { result in
+            Text(result.message)
         }
     }
 
@@ -246,8 +285,16 @@ struct ContentView: View {
                     .controlSize(.large)
                 }
 
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label("Choose from Photos", systemImage: "photo.on.rectangle")
+                // A workspace rather than a picker: importing from the library
+                // means working through a pile, which wants somewhere to come
+                // back to. The camera button above stays the one-receipt path.
+                // Driven through `navigationDestination` rather than a
+                // NavigationLink so the `-showBatchImport` DEBUG deep-link can
+                // open it headlessly for screenshots.
+                Button {
+                    showBatchImport = true
+                } label: {
+                    Label("Import from Photos\(batchBadge)", systemImage: "photo.on.rectangle")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
@@ -272,13 +319,8 @@ struct ContentView: View {
                     showSettings = true
                 } label: {
                     Label("Settings", systemImage: "gearshape")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
                 }
-                .buttonStyle(.bordered)
-                .tint(.secondary)
-                .controlSize(.large)
+                .buttonStyle(BBQuietButtonStyle())
             }
 
             HStack(spacing: 8) {
@@ -416,10 +458,11 @@ struct SettingsView: View {
     /// "Store detailed debug info" (Settings › Debug). Off by default — see
     /// `DebugInfoStore` for what turning it on actually keeps around.
     @AppStorage(DebugInfoStore.enabledKey) private var storeDetailedDebugInfo = false
-    /// The photo behind the result screen currently on top, if any — excluded
-    /// from "Clear Old Receipts" so it can't vanish out from under the user
-    /// while they're still looking at it.
-    var currentCaptureURL: URL?
+    /// Captures "Clear Old Receipts" must spare: the photo behind the result
+    /// screen currently on top, so it can't vanish out from under the user while
+    /// they're still looking at it, and every photo the pending import batch
+    /// still needs.
+    var keptCaptureFilenames: Set<String>
     var onRunSample: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var capturedBytes = ReceiptCaptureStore.totalBytes()
@@ -521,7 +564,7 @@ struct SettingsView: View {
             LabeledContent("Captured receipt photos",
                            value: ByteCountFormatter.string(fromByteCount: capturedBytes, countStyle: .file))
             Button(role: .destructive) {
-                let result = ReceiptCaptureStore.clearOld(keeping: currentCaptureURL)
+                let result = ReceiptCaptureStore.clearOld(keeping: keptCaptureFilenames)
                 capturedBytes = ReceiptCaptureStore.totalBytes()
                 clearResultMessage = result.count > 0
                     ? "Cleared \(result.count) receipt photo\(result.count == 1 ? "" : "s"), "
@@ -531,39 +574,24 @@ struct SettingsView: View {
                 Label("Clear Old Receipts", systemImage: "trash")
             }
         } footer: {
-            Text("Each scan keeps a copy of the receipt photo on your device so you can review the original later. This removes all of them except the one you're currently viewing.")
+            Text("Each scan keeps a copy of the receipt photo on your device so you can review the original later. This removes all of them except the one you're currently viewing and any still waiting in a photo import.")
         }
     }
 }
 
 // MARK: - Result card
 
-struct ReceiptResultView: View {
+/// The parsed receipt itself — merchant, totals, items, warnings, and the
+/// generated beancount. Shared by the single-scan result screen and the batch
+/// detail, which differ only in the actions sitting under it: a batch syncs as
+/// a whole, so its rows have no sync button of their own.
+struct ReceiptCard: View {
     let result: ReceiptResult
     var wallMs: Double?
     var capturedImageURL: URL?
-    var exporter: LedgerExporter
-    var onConfigure: () -> Void = {}
-    @State private var showJSONPreview = false
     @State private var expandAccounting = false
 
-    private static let displayDateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d, yyyy"
-        return f
-    }()
-
-    private static let isoDateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    private var friendlyDate: String? {
-        guard let date = result.date else { return nil }
-        guard let parsed = Self.isoDateFormatter.date(from: date) else { return date }
-        return Self.displayDateFormatter.string(from: parsed)
-    }
+    private var friendlyDate: String? { ReceiptDateFormat.friendly(result.date) }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -618,63 +646,7 @@ struct ReceiptResultView: View {
                 }
             }
 #endif
-
-            VStack(spacing: 8) {
-                Button {
-                    Task { await primarySync() }
-                } label: {
-                    HStack {
-                        Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
-                            .font(.headline)
-                        if exporter.runningKind != nil {
-                            ProgressView().tint(.white)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(exporter.syncTint)
-                .controlSize(.large)
-                .disabled(exporter.runningKind != nil)
-
-                // Secondary escape hatch: other configured destinations, Share/Copy,
-                // and Sync Settings — the primary button above fires the first
-                // configured destination directly, no picker in the way. Always
-                // shown, even with nothing configured yet, so Share/Copy and
-                // Set Up Sync… stay reachable.
-                Menu {
-                    LedgerExportButtons(result: result,
-                                        imageURL: capturedImageURL,
-                                        wallMs: wallMs,
-                                        exporter: exporter,
-                                        onConfigure: onConfigure,
-                                        onViewJSON: { showJSONPreview = true })
-                } label: {
-                    Label("More", systemImage: "ellipsis.circle")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.bordered)
-                .tint(.secondary)
-                .controlSize(.large)
-            }
         }
-        .sheet(isPresented: $showJSONPreview) {
-            ReceiptJSONView(result: result, wallMs: wallMs)
-        }
-    }
-
-    /// Fires the first configured destination directly — no menu in the way.
-    /// Falls back to opening Sync Settings when nothing is configured yet.
-    private func primarySync() async {
-        guard let kind = exporter.configuredKinds.first else {
-            onConfigure()
-            return
-        }
-        let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL, wallMs: wallMs)
-        await exporter.export(entry, to: kind)
     }
 
     private var header: some View {
@@ -810,6 +782,68 @@ struct ReceiptResultView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(Color.bbAccentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+/// The single-scan result screen: the receipt card, plus the actions for the one
+/// receipt just scanned.
+struct ReceiptResultView: View {
+    let result: ReceiptResult
+    var wallMs: Double?
+    var capturedImageURL: URL?
+    var exporter: LedgerExporter
+    var onConfigure: () -> Void = {}
+    @State private var showJSONPreview = false
+
+    var body: some View {
+        VStack(spacing: 16) {
+            ReceiptCard(result: result, wallMs: wallMs, capturedImageURL: capturedImageURL)
+
+            VStack(spacing: 8) {
+                Button {
+                    Task { await primarySync() }
+                } label: {
+                    SyncButtonLabel(idleLabel: "Sync:\(exporter.syncIndicator)", exporter: exporter)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(exporter.syncTint)
+                .controlSize(.large)
+                // See the batch page's sync button: staying enabled keeps the
+                // fill and the white spinner legible while it runs.
+                .allowsHitTesting(exporter.runningKind == nil)
+
+                // Secondary escape hatch: other configured destinations, Share/Copy,
+                // and Sync Settings — the primary button above fires the first
+                // configured destination directly, no picker in the way. Always
+                // shown, even with nothing configured yet, so Share/Copy and
+                // Set Up Sync… stay reachable.
+                Menu {
+                    LedgerExportButtons(result: result,
+                                        imageURL: capturedImageURL,
+                                        wallMs: wallMs,
+                                        exporter: exporter,
+                                        onConfigure: onConfigure,
+                                        onViewJSON: { showJSONPreview = true })
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+                .buttonStyle(BBQuietButtonStyle())
+            }
+        }
+        .sheet(isPresented: $showJSONPreview) {
+            ReceiptJSONView(result: result, wallMs: wallMs)
+        }
+    }
+
+    /// Fires the first configured destination directly — no menu in the way.
+    /// Falls back to opening Sync Settings when nothing is configured yet.
+    private func primarySync() async {
+        guard let kind = exporter.configuredKinds.first else {
+            onConfigure()
+            return
+        }
+        let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL, wallMs: wallMs)
+        await exporter.export([entry], to: kind)
     }
 }
 

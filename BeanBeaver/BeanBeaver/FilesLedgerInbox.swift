@@ -48,33 +48,41 @@ final class FilesLedgerInbox: LedgerDestination {
         fileName = nil
     }
 
-    func append(_ entry: LedgerEntry) async throws -> LedgerExportOutcome {
+    func append(_ entries: [LedgerEntry],
+                progress: @escaping LedgerProgressReporter) async throws -> LedgerExportOutcome {
         guard let bookmark else {
             throw LedgerExportError("No ledger file chosen yet. Pick one in Settings › Sync.")
         }
-        // Coordinated file IO is blocking; keep it off the main actor.
-        let text = entry.beancount
-        let document = entry.document
-        // The `.json` details sidecar rides next to the image, sharing its
-        // content-addressed relpath (…-<sha8>.json) — nil when the option is off
-        // or there's no image to anchor it to.
-        let jsonSidecar: ReceiptDocument? = {
-            guard let json = entry.json, let document else { return nil }
+        // Local file IO, so this is quick — one message is enough to fill the
+        // moment rather than leave a bare spinner.
+        progress(entries.count == 1
+            ? "Writing the transaction…"
+            : "Writing \(entries.count) transactions…")
+        // Coordinated file IO is blocking; keep it off the main actor. The whole
+        // batch is one read-modify-write — the file is rewritten wholesale, so
+        // appending per entry would re-read and re-write it N times.
+        let texts = entries.map(\.beancount)
+        let documents = entries.flatMap { entry -> [ReceiptDocument] in
+            guard let document = entry.document else { return [] }
+            // The `.json` details sidecar rides next to the image, sharing its
+            // content-addressed relpath (…-<sha8>.json) — absent when the option
+            // is off or there's no image to anchor it to.
+            guard let json = entry.json else { return [document] }
             let relpath = (document.relpath as NSString).deletingPathExtension + ".json"
-            return ReceiptDocument(data: json, relpath: relpath)
-        }()
+            return [document, ReceiptDocument(data: json, relpath: relpath)]
+        }
         let name = try await Task.detached {
-            try Self.appendToBookmark(bookmark, text: text, document: document, jsonSidecar: jsonSidecar)
+            try Self.appendToBookmark(bookmark, texts: texts, documents: documents)
         }.value
         // A stale bookmark was refreshed inside the task; re-read the name we stored.
-        return .appended(fileName: name)
+        return .appended(fileName: name, count: entries.count)
     }
 
-    /// Resolve the bookmark, append `text` (ensuring a blank-line separator),
-    /// best-effort store `document` beside the ledger file, and return the file's
-    /// name. Runs off the main actor.
+    /// Resolve the bookmark, append every text in `texts` (ensuring a blank-line
+    /// separator between them), best-effort store `documents` beside the ledger
+    /// file, and return the file's name. Runs off the main actor.
     private nonisolated static func appendToBookmark(
-        _ bookmark: Data, text: String, document: ReceiptDocument?, jsonSidecar: ReceiptDocument?
+        _ bookmark: Data, texts: [String], documents: [ReceiptDocument]
     ) throws -> String {
         var stale = false
         let url = try URL(resolvingBookmarkData: bookmark, options: [],
@@ -93,17 +101,10 @@ final class FilesLedgerInbox: LedgerDestination {
         var thrown: Error?
         coordinator.coordinate(writingItemAt: url, options: .forMerging, error: &coordError) { writeURL in
             do {
-                let existing = (try? Data(contentsOf: writeURL)) ?? Data()
-                var out = existing
-                // Separate transactions with a blank line; beancount is newline-oriented.
-                if !out.isEmpty {
-                    let nl = Data("\n".utf8)
-                    if !out.suffix(2).elementsEqual(Data("\n\n".utf8)) {
-                        out.append(out.suffix(1).elementsEqual(nl) ? nl : Data("\n\n".utf8))
-                    }
+                var out = (try? Data(contentsOf: writeURL)) ?? Data()
+                for text in texts {
+                    appendTransaction(text, to: &out)
                 }
-                out.append(Data(text.utf8))
-                if !text.hasSuffix("\n") { out.append(Data("\n".utf8)) }
                 try out.write(to: writeURL, options: .atomic)
             } catch {
                 thrown = error
@@ -112,13 +113,23 @@ final class FilesLedgerInbox: LedgerDestination {
         if let coordError { throw coordError }
         if let thrown { throw thrown }
 
-        if let document {
+        for document in documents {
             storeSidecar(document, besideLedgerFile: url)
         }
-        if let jsonSidecar {
-            storeSidecar(jsonSidecar, besideLedgerFile: url)
-        }
         return url.lastPathComponent
+    }
+
+    /// Append one transaction to `out`, separated from whatever precedes it by a
+    /// blank line — beancount is newline-oriented.
+    private nonisolated static func appendTransaction(_ text: String, to out: inout Data) {
+        if !out.isEmpty {
+            let nl = Data("\n".utf8)
+            if !out.suffix(2).elementsEqual(Data("\n\n".utf8)) {
+                out.append(out.suffix(1).elementsEqual(nl) ? nl : Data("\n\n".utf8))
+            }
+        }
+        out.append(Data(text.utf8))
+        if !text.hasSuffix("\n") { out.append(Data("\n".utf8)) }
     }
 
     /// Write a receipt sidecar (the image, or the `.json` details file) to
