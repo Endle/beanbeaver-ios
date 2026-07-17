@@ -921,6 +921,10 @@ extension ReceiptResult {
             ReceiptItem(description: "MYSTERY ITEM", price: "$3.00", quantity: 2, category: nil, tags: []),
         ],
         warnings: [],
+        warningAfterItemIndices: [],
+        rawText: "",
+        imageFilename: "receipt.jpg",
+        tenders: [],
         beancount: """
         2026-02-18 * "Costco Wholesale"
           Expenses:Food:Grocery        54.45 USD
@@ -931,7 +935,9 @@ extension ReceiptResult {
         """,
         beanbeaverId: nil,
         documentRelpath: nil,
-        timings: .preview
+        timings: .preview,
+        confidence: FieldConfidences(
+            merchant: 1.0, date: 0.98, total: 0.99, itemsCategorized: 0.83, needsReview: false)
     )
 
     /// A sparse result: no line items, inferred date, parser warnings.
@@ -946,6 +952,10 @@ extension ReceiptResult {
         subtotal: nil,
         items: [],
         warnings: ["No line items detected", "Date inferred from today"],
+        warningAfterItemIndices: [-1, -1],
+        rawText: "",
+        imageFilename: "receipt.jpg",
+        tenders: [],
         beancount: """
         2026-06-24 * "Corner Cafe"
           Expenses:Uncategorized       6.50 USD
@@ -953,7 +963,9 @@ extension ReceiptResult {
         """,
         beanbeaverId: nil,
         documentRelpath: nil,
-        timings: .preview
+        timings: .preview,
+        confidence: FieldConfidences(
+            merchant: 0.2, date: 0.1, total: 0.9, itemsCategorized: 0.0, needsReview: true)
     )
 
     /// A low-confidence merchant: OCR read "COSCO" and the matcher offers
@@ -973,6 +985,10 @@ extension ReceiptResult {
             ReceiptItem(description: "ORG EGGS 24CT", price: "$9.49", quantity: 1, category: "Expenses:Food:Grocery", tags: ["grocery", "dairy", "egg"]),
         ],
         warnings: [],
+        warningAfterItemIndices: [],
+        rawText: "",
+        imageFilename: "receipt.jpg",
+        tenders: [],
         beancount: """
         2026-02-18 * "Cosco"
           Expenses:Home                18.99 USD
@@ -981,7 +997,9 @@ extension ReceiptResult {
         """,
         beanbeaverId: nil,
         documentRelpath: nil,
-        timings: .preview
+        timings: .preview,
+        confidence: FieldConfidences(
+            merchant: 0.83, date: 0.95, total: 0.9, itemsCategorized: 1.0, needsReview: true)
     )
 }
 
