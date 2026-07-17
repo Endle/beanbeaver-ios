@@ -526,7 +526,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Debug")
                 } footer: {
-                    Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices), plus error detail from failed scans and ledger syncs, in a debug log on this device — more than the app normally keeps. Turn it off again once you're done.")
+                    Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger syncs, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.")
                 }
                 .id("debug")
             }

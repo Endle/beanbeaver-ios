@@ -25,7 +25,7 @@ struct DebugInfoListView: View {
                     }
                 }
             } footer: {
-                Text("Only written while \"Store detailed debug info\" is on. Each entry is either a full copy of one scan's parsed contents (receipt items and prices included) or the detail behind a failed ledger sync.")
+                Text("Only written while \"Store detailed debug info\" is on. Each entry is either a full copy of one scan's parsed contents (items, prices, the raw OCR text, and the generated ledger entry) or the detail behind a failed ledger sync.")
             }
         }
         .navigationTitle("Stored Debug Info")
