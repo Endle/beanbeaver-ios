@@ -3,8 +3,47 @@ import Observation
 import os
 import BBReceiptKit
 
-/// Drives the on-device scan: load models once, then run `OcrSession.scan`
-/// off the main thread and publish the result for SwiftUI.
+/// The process's one loaded `OcrSession`, shared by the single-receipt camera
+/// flow (`ReceiptPipeline`) and the photo-library batch (`ReceiptBatch`). A
+/// second session would load the models a second time, and they aren't small.
+@MainActor
+enum OcrSessionProvider {
+    private static var session: OcrSession?
+    /// Whether `session` was built with the orientation classifier — so a change
+    /// to the setting reloads the session on the next scan.
+    private static var loadedWithOrientationCls: Bool?
+
+    /// The one global switch for the orientation classifier, read from the
+    /// `skipOrientationCheck` default (default off = keep the classifier —
+    /// current behavior). Drives both interactive scans and the headless
+    /// `BatchRunner`. For a headless A/B it can be overridden per launch via
+    /// `-skipOrientationCheck YES|NO` (NSUserDefaults argument domain).
+    nonisolated static var useOrientationCls: Bool {
+        !UserDefaults.standard.bool(forKey: "skipOrientationCheck")
+    }
+
+    static func loaded() throws -> OcrSession {
+        let useCls = useOrientationCls
+        // Reuse the cached session only if the orientation-cls setting is
+        // unchanged; otherwise reload (the classifier is loaded at construction).
+        if let session, loadedWithOrientationCls == useCls { return session }
+        // OCR runs on CPU: the core is built CPU-only because CPU beats CoreML/ANE
+        // on both speed and accuracy for the shipped dynamic-shape mobile models.
+        guard let dir = Bundle.main.resourceURL else {
+            throw NSError(domain: "BeanBeaver", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "No app resource bundle"])
+        }
+        let s = try OcrSession.load(modelsDirectory: dir, useOrientationCls: useCls)
+        session = s
+        loadedWithOrientationCls = useCls
+        return s
+    }
+}
+
+/// Drives the on-device scan of a single camera-captured receipt: run
+/// `OcrSession.scan` off the main thread and publish the result for SwiftUI.
+/// The photo-library batch has its own driver (`ReceiptBatch`) but shares the
+/// session and `ReceiptCaptureStore`.
 @Observable
 @MainActor
 final class ReceiptPipeline {
@@ -39,42 +78,12 @@ final class ReceiptPipeline {
     /// Default credit-card account for the placeholder posting; tweak in UI later.
     var creditCardAccount = "Liabilities:CreditCard"
 
-    private var session: OcrSession?
-    /// Whether `session` was built with the orientation classifier — so a change
-    /// to the setting reloads the session on the next scan.
-    private var sessionUsesOrientationCls: Bool?
     private var progressTask: Task<Void, Never>?
-
-    /// The one global switch for the orientation classifier, read from the
-    /// `skipOrientationCheck` default (Settings toggle; default off = keep the
-    /// classifier — current behavior). Drives both interactive scans and the
-    /// headless `BatchRunner`. For a headless A/B it can be overridden per launch
-    /// via `-skipOrientationCheck YES|NO` (NSUserDefaults argument domain).
-    nonisolated static var useOrientationCls: Bool {
-        !UserDefaults.standard.bool(forKey: "skipOrientationCheck")
-    }
 
     /// Instruments signpost: a "scan" interval per `OcrSession.scan`, so the
     /// on-device latency shows up in the Time Profiler / os_signpost track.
     private static let signposter = OSSignposter(
         subsystem: "com.beanbeaver.BeanBeaver", category: "scan")
-
-    private func loadedSession() throws -> OcrSession {
-        let useCls = Self.useOrientationCls
-        // Reuse the cached session only if the orientation-cls setting is
-        // unchanged; otherwise reload (the classifier is loaded at construction).
-        if let session, sessionUsesOrientationCls == useCls { return session }
-        // OCR runs on CPU: the core is built CPU-only because CPU beats CoreML/ANE
-        // on both speed and accuracy for the shipped dynamic-shape mobile models.
-        guard let dir = Bundle.main.resourceURL else {
-            throw NSError(domain: "BeanBeaver", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "No app resource bundle"])
-        }
-        let s = try OcrSession.load(modelsDirectory: dir, useOrientationCls: useCls)
-        session = s
-        sessionUsesOrientationCls = useCls
-        return s
-    }
 
     /// Run the pipeline on a JPEG bundled in the app, bypassing the camera and
     /// photo picker. Shipped (not DEBUG-only) so anyone without a receipt in
@@ -109,7 +118,7 @@ final class ReceiptPipeline {
         progressTask = Task { await self.animateEstimatedProgress() }
         let account = creditCardAccount
         do {
-            let session = try loadedSession()
+            let session = try OcrSessionProvider.loaded()
             let signpost = Self.signposter.beginInterval("scan")
             let started = Date()
             // OCR is CPU-heavy; keep it off the main actor.
@@ -274,7 +283,7 @@ enum BatchRunner {
         NSLog("[Batch] \(images.count) image(s), delay=\(delaySec)s")
 
         let session = try? OcrSession.load(modelsDirectory: Bundle.main.resourceURL!,
-                                           useOrientationCls: ReceiptPipeline.useOrientationCls)
+                                           useOrientationCls: OcrSessionProvider.useOrientationCls)
         var results: [Result] = []
         for (i, url) in images.enumerated() {
             let name = url.deletingPathExtension().lastPathComponent

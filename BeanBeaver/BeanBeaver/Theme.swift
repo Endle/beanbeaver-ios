@@ -108,6 +108,29 @@ enum CategoryDisplay {
     }
 }
 
+/// Receipt dates arrive from the parser as ISO `YYYY-MM-DD` — render them the
+/// way a person writes a date. Falls back to the raw string unchanged if it
+/// isn't parseable, so nothing is ever hidden.
+enum ReceiptDateFormat {
+    private static let isoFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private static let displayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy"
+        return f
+    }()
+
+    static func friendly(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        guard let parsed = isoFormatter.date(from: raw) else { return raw }
+        return displayFormatter.string(from: parsed)
+    }
+}
+
 /// Receipt prices/totals arrive as loosely-formatted strings from the OCR
 /// pipeline (e.g. "17.1900", "-3.5000", or already-clean "$2.49") — normalize
 /// them to a consistent "$X.XX" for display. Falls back to the raw string

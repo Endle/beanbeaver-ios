@@ -53,23 +53,14 @@ final class GitHubLedger: LedgerDestination {
         !owner.trimmed.isEmpty && !repo.trimmed.isEmpty && !token.trimmed.isEmpty
     }
 
-    func append(_ entry: LedgerEntry) async throws -> LedgerExportOutcome {
+    func append(_ entries: [LedgerEntry]) async throws -> LedgerExportOutcome {
         guard isConfigured else {
             throw LedgerExportError("GitHub isn't fully set up. Connect and pick a repo in Settings › Sync.")
         }
-        // `<merchant>-<yyyymmdd|unknowndate>-<sha8>`: the identity token is the
-        // same one baked into the transaction and `document.relpath`, so this
-        // parse can't disagree with what's already on the receipt.
-        guard let idParts = entry.beanbeaverId?.split(separator: "-").map(String.init),
-              idParts.count == 3 else {
-            throw LedgerExportError("This receipt has no captured photo to derive an identity from — can't file it under GitHub.")
-        }
-        let (dateToken, sha8) = (idParts[1], idParts[2])
+        let filings = try entries.map(Filing.init)
         let cfg = Config(owner: owner.trimmed, repo: repo.trimmed, token: token.trimmed)
-        let url = try await Self.openPullRequest(cfg: cfg, entry: entry,
-                                                 merchantSlug: entry.merchantSlug,
-                                                 dateToken: dateToken, sha8: sha8)
-        return .pullRequest(url: url)
+        let url = try await Self.openPullRequest(cfg: cfg, filings: filings)
+        return .pullRequest(url: url, count: filings.count)
     }
 
     // MARK: - REST flow
@@ -78,8 +69,61 @@ final class GitHubLedger: LedgerDestination {
         let owner, repo, token: String
     }
 
+    /// One file destined for the repo, with the commit message that carries it.
+    private struct RepoFile {
+        let path: String
+        let data: Data
+        let message: String
+    }
+
+    /// One receipt resolved to where it lands in the repo. Splitting this out of
+    /// the REST flow means a batch fails before it creates a branch if any one
+    /// receipt is unfilable, rather than stranding a half-populated branch.
+    private struct Filing {
+        let entry: LedgerEntry
+        let folder: String
+        let basename: String
+        let dateToken: String
+
+        /// What this receipt contributes to the repo, in commit order.
+        var files: [RepoFile] {
+            var out = [RepoFile(path: "\(folder)/\(basename).beancount",
+                                data: Data(entry.beancount.utf8),
+                                message: "BeanBeaver: add receipt transaction")]
+            if let json = entry.json {
+                out.append(RepoFile(path: "\(folder)/\(basename).json", data: json,
+                                    message: "BeanBeaver: add receipt JSON"))
+            }
+            if let document = entry.document {
+                out.append(RepoFile(path: "\(folder)/\(basename).jpg", data: document.data,
+                                    message: "BeanBeaver: add receipt image"))
+            }
+            return out
+        }
+
+        init(_ entry: LedgerEntry) throws {
+            // `<merchant>-<yyyymmdd|unknowndate>-<sha8>`: the identity token is
+            // the same one baked into the transaction and `document.relpath`, so
+            // this parse can't disagree with what's already on the receipt.
+            guard let idParts = entry.beanbeaverId?.split(separator: "-").map(String.init),
+                  idParts.count == 3 else {
+                throw LedgerExportError("This receipt has no captured photo to derive an identity from — can't file it under GitHub.")
+            }
+            self.entry = entry
+            dateToken = idParts[1]
+            let sha8 = idParts[2]
+            // One folder per receipt: beanbeaver_receipts/<merchant>-<date>-<sha8>/,
+            // holding <merchant>-<date>-<hhmm>-<sha8>.{beancount,json,jpg}.
+            folder = "\(rootDir)/\(entry.merchantSlug)-\(dateToken)-\(sha8)"
+            basename = "\(entry.merchantSlug)-\(dateToken)-\(hhmm())-\(sha8)"
+        }
+    }
+
+    /// The whole batch goes onto one branch and into one pull request: a PR is a
+    /// review unit, and a receipt per PR would make a pile of receipts a pile of
+    /// PRs to merge one by one.
     private nonisolated static func openPullRequest(
-        cfg: Config, entry: LedgerEntry, merchantSlug: String, dateToken: String, sha8: String
+        cfg: Config, filings: [Filing]
     ) async throws -> URL {
         let repoRoot = "/repos/\(cfg.owner)/\(cfg.repo)"
 
@@ -91,37 +135,41 @@ final class GitHubLedger: LedgerDestination {
         let ref: RefResponse = try await api(cfg, "GET", "\(repoRoot)/git/ref/heads/\(base)")
         let baseSha = ref.object.sha
 
-        // 2. New branch off the base head.
+        // 2. Work out what's actually missing before touching anything. Checked
+        //    against `base`, which a fresh branch is a copy of, so the answer is
+        //    the same — but doing it first means a batch of receipts already in
+        //    the repo doesn't leave an orphan branch behind, and reports itself
+        //    instead of failing later on GitHub's "no commits between" for a PR
+        //    with an empty diff.
+        var pending: [RepoFile] = []
+        for file in filings.flatMap(\.files) {
+            if try await fileExists(cfg, repoRoot: repoRoot, path: file.path, ref: base) { continue }
+            pending.append(file)
+        }
+        guard !pending.isEmpty else {
+            throw LedgerExportError(filings.count == 1
+                ? "This receipt is already filed in the repo — nothing to open a pull request for."
+                : "All \(filings.count) receipts are already filed in the repo — nothing to open a pull request for.")
+        }
+
+        // 3. New branch off the base head.
         let stamp = branchStamp()
         let branch = "beanbeaver/receipt-\(stamp)"
         let _: RefResponse = try await api(cfg, "POST", "\(repoRoot)/git/refs",
             body: ["ref": "refs/heads/\(branch)", "sha": baseSha])
 
-        // 3. One folder per receipt: beanbeaver_receipts/<merchant>-<date>-<sha8>/,
-        //    holding <merchant>-<date>-<hhmm>-<sha8>.{beancount,json,jpg}.
-        let folder = "\(rootDir)/\(merchantSlug)-\(dateToken)-\(sha8)"
-        let basename = "\(merchantSlug)-\(dateToken)-\(hhmm())-\(sha8)"
-
-        try await putFileIfAbsent(cfg, repoRoot: repoRoot, path: "\(folder)/\(basename).beancount",
-                                  data: Data(entry.beancount.utf8), branch: branch,
-                                  message: "BeanBeaver: add receipt transaction")
-        if let json = entry.json {
-            try await putFileIfAbsent(cfg, repoRoot: repoRoot, path: "\(folder)/\(basename).json",
-                                      data: json, branch: branch,
-                                      message: "BeanBeaver: add receipt JSON")
-        }
-        if let document = entry.document {
-            try await putFileIfAbsent(cfg, repoRoot: repoRoot, path: "\(folder)/\(basename).jpg",
-                                      data: document.data, branch: branch,
-                                      message: "BeanBeaver: add receipt image")
+        // 4. One folder per receipt (see `Filing`), one commit per file — the
+        //    contents API has no way to put several files in a single commit.
+        for file in pending {
+            try await putFile(cfg, repoRoot: repoRoot, file: file, branch: branch)
         }
 
-        // 4. Open the PR.
+        // 5. Open the PR.
         let pr: PullResponse = try await api(cfg, "POST", "\(repoRoot)/pulls", body: [
-            "title": "Add receipt: \(merchantSlug) \(dateToken)",
+            "title": title(for: filings),
             "head": branch,
             "base": base,
-            "body": "Filed a scanned receipt under `\(folder)/` with BeanBeaver iOS.",
+            "body": prBody(for: filings),
         ])
         guard let url = URL(string: pr.htmlUrl) else {
             throw LedgerExportError("Pull request created but its URL was missing.")
@@ -129,23 +177,44 @@ final class GitHubLedger: LedgerDestination {
         return url
     }
 
-    /// Create `path` on `branch` with `data` if it's not already there. Every
-    /// path here is content-addressed (the sha8 token), so an existing file is
-    /// necessarily identical — skip it, keeping re-exports idempotent.
-    private nonisolated static func putFileIfAbsent(
-        _ cfg: Config, repoRoot: String, path: String, data: Data, branch: String, message: String
-    ) async throws {
+    private nonisolated static func title(for filings: [Filing]) -> String {
+        guard let only = filings.first, filings.count == 1 else {
+            return "Add \(filings.count) receipts"
+        }
+        return "Add receipt: \(only.entry.merchantSlug) \(only.dateToken)"
+    }
+
+    private nonisolated static func prBody(for filings: [Filing]) -> String {
+        guard let only = filings.first, filings.count == 1 else {
+            return "Filed \(filings.count) scanned receipts with BeanBeaver iOS.\n\n"
+                + filings.map { "- `\($0.folder)/`" }.joined(separator: "\n")
+        }
+        return "Filed a scanned receipt under `\(only.folder)/` with BeanBeaver iOS."
+    }
+
+    /// Whether `path` already exists at `ref`. Every path here is
+    /// content-addressed (the sha8 token), so a file that's present is
+    /// necessarily identical — which is what keeps re-exports idempotent.
+    private nonisolated static func fileExists(
+        _ cfg: Config, repoRoot: String, path: String, ref: String
+    ) async throws -> Bool {
         let escaped = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
         do {
             let _: ContentsResponse = try await api(
-                cfg, "GET", "\(repoRoot)/contents/\(escaped)?ref=\(branch)")
-            return // already present on the branch
+                cfg, "GET", "\(repoRoot)/contents/\(escaped)?ref=\(ref)")
+            return true
         } catch let e as HTTPStatusError where e.status == 404 {
-            // not there yet — create it below
+            return false
         }
+    }
+
+    private nonisolated static func putFile(
+        _ cfg: Config, repoRoot: String, file: RepoFile, branch: String
+    ) async throws {
+        let escaped = file.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? file.path
         let _: PutResponse = try await api(cfg, "PUT", "\(repoRoot)/contents/\(escaped)", body: [
-            "message": message,
-            "content": data.base64EncodedString(),
+            "message": file.message,
+            "content": file.data.base64EncodedString(),
             "branch": branch,
         ])
     }

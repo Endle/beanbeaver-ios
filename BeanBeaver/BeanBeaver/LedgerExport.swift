@@ -203,10 +203,16 @@ protocol LedgerDestination: AnyObject {
     /// Whether the user has finished configuring this backend (picked a file,
     /// entered a repo + token, …). Drives whether the export button is offered.
     var isConfigured: Bool { get }
-    /// Append one transaction and, when present, store its receipt image so the
-    /// `document:` link resolves. `entry.beancount` is `ReceiptResult.beancount`
-    /// verbatim.
-    func append(_ entry: LedgerEntry) async throws -> LedgerExportOutcome
+    /// Append `entries` in order and, when present, store each receipt image so
+    /// the `document:` links resolve. `entry.beancount` is
+    /// `ReceiptResult.beancount` verbatim.
+    ///
+    /// Array-shaped rather than one-at-a-time because both backends collapse a
+    /// batch into a single operation — one branch and one pull request, one
+    /// read-modify-write of the inbox file — which is also fewer round trips per
+    /// receipt than looping would be. A single scan just passes `[entry]`.
+    /// Callers must not pass an empty array.
+    func append(_ entries: [LedgerEntry]) async throws -> LedgerExportOutcome
 }
 
 enum LedgerDestinationKind: String, CaseIterable, Identifiable {
@@ -249,9 +255,10 @@ enum LedgerDestinationKind: String, CaseIterable, Identifiable {
 }
 
 /// What happened on a successful export — used to build the confirmation.
+/// `count` is how many transactions went in, so a batch can say so.
 enum LedgerExportOutcome {
-    case appended(fileName: String)
-    case pullRequest(url: URL)
+    case appended(fileName: String, count: Int)
+    case pullRequest(url: URL, count: Int)
 
     var title: String {
         switch self {
@@ -262,14 +269,18 @@ enum LedgerExportOutcome {
 
     var message: String {
         switch self {
-        case .appended(let name): return "Appended the transaction to \(name)."
-        case .pullRequest(let url): return url.absoluteString
+        case .appended(let name, let count):
+            return count == 1
+                ? "Appended the transaction to \(name)."
+                : "Appended \(count) transactions to \(name)."
+        case .pullRequest(let url, _):
+            return url.absoluteString
         }
     }
 
     /// A URL the confirmation can offer to open (the PR page), if any.
     var openableURL: URL? {
-        if case .pullRequest(let url) = self { return url }
+        if case .pullRequest(let url, _) = self { return url }
         return nil
     }
 }
@@ -333,19 +344,26 @@ final class LedgerExporter {
         configuredKinds.isEmpty ? .secondary : .green
     }
 
-    func export(_ entry: LedgerEntry, to kind: LedgerDestinationKind) async {
-        guard runningKind == nil else { return }
+    /// Send `entries` to `kind`, publishing a confirmation (or a failure) for the
+    /// UI's alert. Returns whether it succeeded, so a batch can drain only the
+    /// receipts that actually landed. A no-op if an export is already running or
+    /// there's nothing to send.
+    @discardableResult
+    func export(_ entries: [LedgerEntry], to kind: LedgerDestinationKind) async -> Bool {
+        guard runningKind == nil, !entries.isEmpty else { return false }
         runningKind = kind
         defer { runningKind = nil }
         do {
-            let outcome = try await destination(for: kind).append(entry)
+            let outcome = try await destination(for: kind).append(entries)
             result = Result(title: outcome.title, message: outcome.message,
                             openURL: outcome.openableURL, isError: false)
+            return true
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             DebugInfoStore.recordSyncFailure(context: "export to \(kind.shortTitle)", message: message)
             result = Result(title: "Export failed", message: message,
                             openURL: nil, isError: true)
+            return false
         }
     }
 }

@@ -401,7 +401,7 @@ struct LedgerExportButtons: View {
         ForEach(exporter.configuredKinds) { kind in
             Button {
                 let entry = LedgerEntry.make(from: result, imageURL: imageURL, wallMs: wallMs)
-                Task { await exporter.export(entry, to: kind) }
+                Task { await exporter.export([entry], to: kind) }
             } label: {
                 Label(kind.title, systemImage: kind.systemImage)
             }
