@@ -343,6 +343,7 @@ final class LedgerExporter {
                             openURL: outcome.openableURL, isError: false)
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            DebugInfoStore.recordSyncFailure(context: "export to \(kind.shortTitle)", message: message)
             result = Result(title: "Export failed", message: message,
                             openURL: nil, isError: true)
         }

@@ -47,6 +47,7 @@ struct DataDump {
         "ledgerInboxName",
         "githubOwner",
         "githubRepo",
+        "storeDetailedDebugInfo",
     ]
 
     private static func captureUserDefaults() -> [Entry] {

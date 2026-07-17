@@ -217,6 +217,22 @@ enum GitHubApp {
 
     // MARK: - Transport
 
+    /// Runs the request, wrapping a transport-level failure (dropped connection,
+    /// timeout, offline) with which request it was — otherwise it surfaces to
+    /// the user as just "the network connection was lost" with no clue which
+    /// of this flow's several requests actually failed.
+    private static func send(_ req: URLRequest) async throws -> Data {
+        do {
+            let (data, _) = try await URLSession.shared.data(for: req)
+            return data
+        } catch {
+            let nsError = error as NSError
+            let path = req.url?.path ?? "?"
+            throw FlowError(
+                "GitHub \(req.httpMethod ?? "GET") \(path) failed: \(nsError.localizedDescription) (\(nsError.domain) \(nsError.code))")
+        }
+    }
+
     private static func postForm(_ urlString: String, body: String) async throws -> [String: Any] {
         guard let url = URL(string: urlString) else { throw FlowError("Bad URL.") }
         var req = URLRequest(url: url)
@@ -224,7 +240,7 @@ enum GitHubApp {
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         req.httpBody = Data(body.utf8)
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let data = try await send(req)
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw FlowError("Couldn't read GitHub's response.")
         }
@@ -237,7 +253,7 @@ enum GitHubApp {
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let data = try await send(req)
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw FlowError("Couldn't read GitHub's response.")
         }
