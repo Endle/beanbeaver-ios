@@ -84,6 +84,36 @@ struct ReceiptExportJSON: Encodable {
     }
 }
 
+/// A sync button's contents: normally its label, and while an export runs, what
+/// that export is actually doing. Shared by the single-scan result screen and
+/// the batch page so the two can't drift.
+///
+/// The live message matters more than it looks — a batch is tens of seconds of
+/// sequential network calls, and a spinner alone doesn't distinguish "working"
+/// from "wedged".
+struct SyncButtonLabel: View {
+    let idleLabel: String
+    var exporter: LedgerExporter
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if exporter.runningKind != nil {
+                ProgressView().tint(.white)
+                Text(exporter.runningMessage ?? "Syncing…")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .contentTransition(.opacity)
+                    .animation(.default, value: exporter.runningMessage)
+            } else {
+                Label(idleLabel, systemImage: "arrow.triangle.2.circlepath")
+                    .font(.headline)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+    }
+}
+
 /// Read-only preview of the `.json` sidecar a sync would attach — lets the
 /// user check the raw parse (and share/copy it) without actually exporting,
 /// even when `LedgerFileOptions.includeDetailsJSON` is off.
@@ -192,6 +222,12 @@ struct LedgerEntry {
     }
 }
 
+/// Called by a destination to say what it's doing, so a long export can show it.
+/// A batch of eight receipts is ~50 sequential GitHub round trips; twenty
+/// seconds of unlabelled spinner is indistinguishable from a hang, which is the
+/// whole reason this exists. Calls land on the main actor, in order.
+typealias LedgerProgressReporter = @MainActor @Sendable (String) -> Void
+
 /// A place a parsed receipt's beancount transaction can be sent. Concrete
 /// backends (a synced `.bean` file via the Files layer, a GitHub pull request)
 /// live in their own files; the UI only talks to this seam.
@@ -212,7 +248,10 @@ protocol LedgerDestination: AnyObject {
     /// read-modify-write of the inbox file — which is also fewer round trips per
     /// receipt than looping would be. A single scan just passes `[entry]`.
     /// Callers must not pass an empty array.
-    func append(_ entries: [LedgerEntry]) async throws -> LedgerExportOutcome
+    ///
+    /// Report each step through `progress` — this can take tens of seconds.
+    func append(_ entries: [LedgerEntry],
+                progress: @escaping LedgerProgressReporter) async throws -> LedgerExportOutcome
 }
 
 enum LedgerDestinationKind: String, CaseIterable, Identifiable {
@@ -306,6 +345,10 @@ final class LedgerExporter {
     /// The backend currently running an export (for a per-button spinner), or nil.
     private(set) var runningKind: LedgerDestinationKind?
 
+    /// What that export is doing right now, straight from the backend. Nil
+    /// between steps and when nothing is running.
+    private(set) var runningMessage: String?
+
     /// Set when an export finishes; the view binds an alert to it.
     var result: Result?
 
@@ -316,6 +359,28 @@ final class LedgerExporter {
         let openURL: URL?
         let isError: Bool
     }
+
+#if DEBUG
+    /// Walk the sync button through a realistic run without a configured
+    /// backend, so the running state can be seen headlessly (`-fakeSyncProgress`).
+    /// Lives here because `runningKind`/`runningMessage` are `private(set)`.
+    func simulateProgress() async {
+        runningKind = .githubPR
+        defer {
+            runningKind = nil
+            runningMessage = nil
+        }
+        let steps = ["Reading Endle/my_beancount_record…",
+                     "Checking receipt 1 of 3…", "Checking receipt 2 of 3…",
+                     "Checking receipt 3 of 3…", "Creating the branch…",
+                     "Uploading receipt 1 of 3…", "Uploading receipt 2 of 3…",
+                     "Uploading receipt 3 of 3…", "Opening the pull request…"]
+        for step in steps {
+            runningMessage = step
+            try? await Task.sleep(for: .seconds(2))
+        }
+    }
+#endif
 
     func destination(for kind: LedgerDestinationKind) -> any LedgerDestination {
         switch kind {
@@ -352,9 +417,15 @@ final class LedgerExporter {
     func export(_ entries: [LedgerEntry], to kind: LedgerDestinationKind) async -> Bool {
         guard runningKind == nil, !entries.isEmpty else { return false }
         runningKind = kind
-        defer { runningKind = nil }
+        runningMessage = nil
+        defer {
+            runningKind = nil
+            runningMessage = nil
+        }
         do {
-            let outcome = try await destination(for: kind).append(entries)
+            let outcome = try await destination(for: kind).append(entries) { [weak self] message in
+                self?.runningMessage = message
+            }
             result = Result(title: outcome.title, message: outcome.message,
                             openURL: outcome.openableURL, isError: false)
             return true

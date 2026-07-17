@@ -48,10 +48,16 @@ final class FilesLedgerInbox: LedgerDestination {
         fileName = nil
     }
 
-    func append(_ entries: [LedgerEntry]) async throws -> LedgerExportOutcome {
+    func append(_ entries: [LedgerEntry],
+                progress: @escaping LedgerProgressReporter) async throws -> LedgerExportOutcome {
         guard let bookmark else {
             throw LedgerExportError("No ledger file chosen yet. Pick one in Settings › Sync.")
         }
+        // Local file IO, so this is quick — one message is enough to fill the
+        // moment rather than leave a bare spinner.
+        progress(entries.count == 1
+            ? "Writing the transaction…"
+            : "Writing \(entries.count) transactions…")
         // Coordinated file IO is blocking; keep it off the main actor. The whole
         // batch is one read-modify-write — the file is rewritten wholesale, so
         // appending per entry would re-read and re-write it N times.

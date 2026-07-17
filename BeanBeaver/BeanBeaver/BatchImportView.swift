@@ -192,20 +192,17 @@ struct BatchImportView: View {
             Button {
                 Task { await sync() }
             } label: {
-                HStack {
-                    Label(syncLabel, systemImage: "arrow.triangle.2.circlepath")
-                        .font(.headline)
-                    if exporter.runningKind != nil {
-                        ProgressView().tint(.white)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
+                SyncButtonLabel(idleLabel: syncLabel, exporter: exporter)
             }
             .buttonStyle(.borderedProminent)
             .tint(exporter.syncTint)
             .controlSize(.large)
-            .disabled(batch.parsedCount == 0 || exporter.runningKind != nil)
+            .disabled(batch.parsedCount == 0)
+            // Deliberately not `.disabled` while syncing: a disabled prominent
+            // button renders washed out with its spinner greyed into the fill —
+            // the exact "nothing is happening" look this is meant to fix. Block
+            // the tap instead; `export` already refuses a second concurrent run.
+            .allowsHitTesting(exporter.runningKind == nil)
         }
         .padding(.horizontal)
         .padding(.vertical, 12)

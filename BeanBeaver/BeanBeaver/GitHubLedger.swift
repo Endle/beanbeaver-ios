@@ -53,13 +53,14 @@ final class GitHubLedger: LedgerDestination {
         !owner.trimmed.isEmpty && !repo.trimmed.isEmpty && !token.trimmed.isEmpty
     }
 
-    func append(_ entries: [LedgerEntry]) async throws -> LedgerExportOutcome {
+    func append(_ entries: [LedgerEntry],
+                progress: @escaping LedgerProgressReporter) async throws -> LedgerExportOutcome {
         guard isConfigured else {
             throw LedgerExportError("GitHub isn't fully set up. Connect and pick a repo in Settings › Sync.")
         }
         let filings = try entries.map(Filing.init)
         let cfg = Config(owner: owner.trimmed, repo: repo.trimmed, token: token.trimmed)
-        let url = try await Self.openPullRequest(cfg: cfg, filings: filings)
+        let url = try await Self.openPullRequest(cfg: cfg, filings: filings, progress: progress)
         return .pullRequest(url: url, count: filings.count)
     }
 
@@ -123,11 +124,12 @@ final class GitHubLedger: LedgerDestination {
     /// review unit, and a receipt per PR would make a pile of receipts a pile of
     /// PRs to merge one by one.
     private nonisolated static func openPullRequest(
-        cfg: Config, filings: [Filing]
+        cfg: Config, filings: [Filing], progress: @escaping LedgerProgressReporter
     ) async throws -> URL {
         let repoRoot = "/repos/\(cfg.owner)/\(cfg.repo)"
 
         // 0. The repo's default branch — we always target it (no branch to pick).
+        await progress("Reading \(cfg.owner)/\(cfg.repo)…")
         let repoInfo: RepoResponse = try await api(cfg, "GET", repoRoot)
         let base = repoInfo.defaultBranch
 
@@ -141,10 +143,19 @@ final class GitHubLedger: LedgerDestination {
         //    the repo doesn't leave an orphan branch behind, and reports itself
         //    instead of failing later on GitHub's "no commits between" for a PR
         //    with an empty diff.
-        var pending: [RepoFile] = []
-        for file in filings.flatMap(\.files) {
-            if try await fileExists(cfg, repoRoot: repoRoot, path: file.path, ref: base) { continue }
-            pending.append(file)
+        // Grouped by receipt rather than flattened, so progress can be reported
+        // in the unit the user is thinking in.
+        var pending: [[RepoFile]] = []
+        for (index, filing) in filings.enumerated() {
+            await progress(filings.count == 1
+                ? "Checking what's already filed…"
+                : "Checking receipt \(index + 1) of \(filings.count)…")
+            var missing: [RepoFile] = []
+            for file in filing.files {
+                if try await fileExists(cfg, repoRoot: repoRoot, path: file.path, ref: base) { continue }
+                missing.append(file)
+            }
+            if !missing.isEmpty { pending.append(missing) }
         }
         guard !pending.isEmpty else {
             throw LedgerExportError(filings.count == 1
@@ -153,6 +164,7 @@ final class GitHubLedger: LedgerDestination {
         }
 
         // 3. New branch off the base head.
+        await progress("Creating the branch…")
         let stamp = branchStamp()
         let branch = "beanbeaver/receipt-\(stamp)"
         let _: RefResponse = try await api(cfg, "POST", "\(repoRoot)/git/refs",
@@ -160,11 +172,19 @@ final class GitHubLedger: LedgerDestination {
 
         // 4. One folder per receipt (see `Filing`), one commit per file — the
         //    contents API has no way to put several files in a single commit.
-        for file in pending {
-            try await putFile(cfg, repoRoot: repoRoot, file: file, branch: branch)
+        //    Serial by necessity: each commit builds on the last, so uploading
+        //    in parallel would race on the branch head.
+        for (position, group) in pending.enumerated() {
+            await progress(pending.count == 1
+                ? "Uploading the receipt…"
+                : "Uploading receipt \(position + 1) of \(pending.count)…")
+            for file in group {
+                try await putFile(cfg, repoRoot: repoRoot, file: file, branch: branch)
+            }
         }
 
         // 5. Open the PR.
+        await progress("Opening the pull request…")
         let pr: PullResponse = try await api(cfg, "POST", "\(repoRoot)/pulls", body: [
             "title": title(for: filings),
             "head": branch,

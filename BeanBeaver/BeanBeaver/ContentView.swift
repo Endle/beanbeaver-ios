@@ -238,6 +238,9 @@ struct ContentView: View {
                 if let count = BatchRunner.argValue("-seedPhotoBatch").flatMap(Int.init) {
                     await batch.seedFromBundledSample(count: count)
                 }
+                if ProcessInfo.processInfo.arguments.contains("-fakeSyncProgress") {
+                    Task { await exporter.simulateProgress() }
+                }
                 if ProcessInfo.processInfo.arguments.contains("-discardBatch") {
                     batch.discardAll()
                     batch.logState("after discard")
@@ -801,20 +804,14 @@ struct ReceiptResultView: View {
                 Button {
                     Task { await primarySync() }
                 } label: {
-                    HStack {
-                        Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
-                            .font(.headline)
-                        if exporter.runningKind != nil {
-                            ProgressView().tint(.white)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    SyncButtonLabel(idleLabel: "Sync:\(exporter.syncIndicator)", exporter: exporter)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(exporter.syncTint)
                 .controlSize(.large)
-                .disabled(exporter.runningKind != nil)
+                // See the batch page's sync button: staying enabled keeps the
+                // fill and the white spinner legible while it runs.
+                .allowsHitTesting(exporter.runningKind == nil)
 
                 // Secondary escape hatch: other configured destinations, Share/Copy,
                 // and Sync Settings — the primary button above fires the first
