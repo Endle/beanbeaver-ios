@@ -17,6 +17,11 @@ struct BatchImportView: View {
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var isLoadingPicked = false
     @State private var confirmDiscard = false
+    /// A sync landed and its confirmation is up; the batch drains when that's
+    /// dismissed. Lost if the app dies with the alert open, which leaves the
+    /// receipts in the batch — a re-sync then reports them already filed, which
+    /// is recoverable with Discard Batch.
+    @State private var awaitingConfirmation = false
     /// How many of the last selection were already in the batch — surfaced once,
     /// as a note under the header, rather than as an alert per photo.
     @State private var duplicatesSkipped = 0
@@ -66,6 +71,9 @@ struct BatchImportView: View {
         .onChange(of: pickerItems) { _, items in
             guard !items.isEmpty else { return }
             Task { await load(items) }
+        }
+        .onChange(of: exporter.result?.id) { _, resultID in
+            drainOnConfirmation(resultID)
         }
         // These are receipts the user already asked to have parsed, so resuming
         // needs no button: anything queued or interrupted just picks up here.
@@ -202,7 +210,9 @@ struct BatchImportView: View {
             // button renders washed out with its spinner greyed into the fill —
             // the exact "nothing is happening" look this is meant to fix. Block
             // the tap instead; `export` already refuses a second concurrent run.
-            .allowsHitTesting(exporter.runningKind == nil)
+            // Also inert while the confirmation is up, since the receipts are
+            // still listed at that point and a second tap would re-file them.
+            .allowsHitTesting(exporter.runningKind == nil && !awaitingConfirmation)
         }
         .padding(.horizontal)
         .padding(.vertical, 12)
@@ -218,6 +228,10 @@ struct BatchImportView: View {
     /// Sends every parsed receipt to the first configured destination — one pull
     /// request, or one append, for the whole batch. Only drains on success, so a
     /// failed sync leaves the batch exactly as it was to retry.
+    ///
+    /// Draining is deferred to `drainOnConfirmation` rather than done here: the
+    /// confirmation is about to appear, and emptying the list out from under it
+    /// reads as the receipts having vanished rather than having been filed.
     private func sync() async {
         guard let kind = exporter.configuredKinds.first else {
             onConfigure()
@@ -226,8 +240,18 @@ struct BatchImportView: View {
         let entries = batch.syncableEntries
         guard !entries.isEmpty else { return }
         if await exporter.export(entries, to: kind) {
-            batch.removeParsed()
+            awaitingConfirmation = true
         }
+    }
+
+    /// Drain once the user has actually seen the confirmation — spotted by
+    /// `exporter.result` going back to nil, which is the alert closing. Tying it
+    /// to the dismissal rather than a delay means there's no interval to guess
+    /// at, and the list emptying reads as a consequence of tapping OK.
+    private func drainOnConfirmation(_ resultID: UUID?) {
+        guard awaitingConfirmation, resultID == nil else { return }
+        awaitingConfirmation = false
+        batch.removeParsed()
     }
 
     // MARK: - Loading picked photos

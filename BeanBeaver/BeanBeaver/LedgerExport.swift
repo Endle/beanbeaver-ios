@@ -379,6 +379,13 @@ final class LedgerExporter {
             runningMessage = step
             try? await Task.sleep(for: .seconds(2))
         }
+        // Ends by publishing a result, so the confirmation's presentation can be
+        // checked from wherever the sync was started — the alert used to anchor
+        // to the home screen and arrive late when it was the batch page.
+        result = Result(title: "Pull request opened",
+                        message: "https://github.com/Endle/my_beancount_record/pull/6",
+                        openURL: URL(string: "https://github.com/Endle/my_beancount_record/pull/6"),
+                        isError: false)
     }
 #endif
 

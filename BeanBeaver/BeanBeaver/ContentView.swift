@@ -172,17 +172,6 @@ struct ContentView: View {
                     Task { await pipeline.scanBundledSample(named: sampleName) }
                 }
             }
-            .alert(exporter.result?.title ?? "", isPresented: Binding(
-                get: { exporter.result != nil },
-                set: { if !$0 { exporter.result = nil } }
-            ), presenting: exporter.result) { result in
-                if let url = result.openURL {
-                    Button("Open") { openURL(url) }
-                }
-                Button("OK", role: .cancel) {}
-            } message: { result in
-                Text(result.message)
-            }
 #if DEBUG
             .sheet(isPresented: $debugShowDataDump) {
                 NavigationStack { DataDumpView() }
@@ -251,6 +240,21 @@ struct ContentView: View {
             // unless launched with `-logLaunchTiming`. Not DEBUG-gated so a Release
             // build can be measured against Debug on a real device.
             .task { LaunchTiming.recordFirstFrame() }
+        }
+        // Outside the NavigationStack on purpose. Attached to the stack's content
+        // it anchors to the home screen, so a sync started from the pushed batch
+        // page tried to present from a covered view and the confirmation arrived
+        // seconds late — long after the page had reacted to the sync finishing.
+        .alert(exporter.result?.title ?? "", isPresented: Binding(
+            get: { exporter.result != nil },
+            set: { if !$0 { exporter.result = nil } }
+        ), presenting: exporter.result) { result in
+            if let url = result.openURL {
+                Button("Open") { openURL(url) }
+            }
+            Button("OK", role: .cancel) {}
+        } message: { result in
+            Text(result.message)
         }
     }
 
