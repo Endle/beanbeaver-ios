@@ -10,8 +10,10 @@ publish = false
 # reads from). v0.2.0 added portable-receipt-identity (beanbeaver_id/
 # document_relpath + real `document:` metadata). v0.3.2 is parser/field-extraction
 # robustness + item-classifier/merchant-family rule fixes (no FFI/API change).
+# v0.3.3 DOES change the FFI surface: parse-only entry point, rule overlays,
+# per-field confidences, and reformat (plus receipt-core/ocr-paddle refactors).
 # After bumping, rerun ./build-xcframework.sh to regenerate the Swift glue + xcframework.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.3.2" }
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.3.3" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
