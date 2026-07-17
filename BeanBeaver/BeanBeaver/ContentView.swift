@@ -319,13 +319,8 @@ struct ContentView: View {
                     showSettings = true
                 } label: {
                     Label("Settings", systemImage: "gearshape")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
                 }
-                .buttonStyle(.bordered)
-                .tint(.secondary)
-                .controlSize(.large)
+                .buttonStyle(BBQuietButtonStyle())
             }
 
             HStack(spacing: 8) {
@@ -831,13 +826,8 @@ struct ReceiptResultView: View {
                                         onViewJSON: { showJSONPreview = true })
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
                 }
-                .buttonStyle(.bordered)
-                .tint(.secondary)
-                .controlSize(.large)
+                .buttonStyle(BBQuietButtonStyle())
             }
         }
         .sheet(isPresented: $showJSONPreview) {

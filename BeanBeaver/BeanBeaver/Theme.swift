@@ -8,6 +8,53 @@ extension Color {
     static let bbAccentSoft = Color.bbAccent.opacity(0.12)
 }
 
+/// The quiet tier: actions that are valid and safe to try, but that we don't
+/// want to advertise — Settings, More. Sits below the brand buttons (solid
+/// `bbAccent` → soft `bbAccentSoft`) and above nothing.
+///
+/// Outlined rather than filled. Two reasons, both load-bearing:
+///
+/// 1. It can't read as disabled. iOS renders a disabled button as a *washed-out
+///    fill*, so a crisp border plus a full-strength label is a combination the
+///    platform never uses for "you can't tap this". Tinting fill *and* label
+///    `.secondary` — the thing this replaces — is pixel-for-pixel the disabled
+///    look, which is why those buttons read as broken.
+/// 2. It keeps the pill rhythm. On the home screen these sit in a stack of
+///    capsules; bare text would break the composition and push Settings further
+///    down than it deserves. An outline weighs less than a fill without leaving
+///    the family.
+///
+/// The label stays `.primary` deliberately: dimming it is how a *borderless*
+/// button renders its disabled state, so a grey label would reintroduce the
+/// exact problem the outline is here to solve. `.primary` also flips with the
+/// colour scheme — a literal dark grey would be invisible in dark mode.
+///
+/// Apply via `.buttonStyle(BBQuietButtonStyle())`. The look lives in a
+/// ViewModifier so it can also be reached directly as `.bbQuietButton()` on a
+/// bare label, but prefer the ButtonStyle — it carries the pressed state.
+struct BBQuietButton: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Capsule().strokeBorder(Color.primary.opacity(0.22), lineWidth: 1))
+            .contentShape(Capsule())
+    }
+}
+
+/// `BBQuietButton` as a ButtonStyle, so the press reads as a press. Dimming the
+/// whole pill (border included) is the feedback — the quiet tier has no fill to
+/// darken the way the brand buttons do.
+struct BBQuietButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .bbQuietButton()
+            .opacity(configuration.isPressed ? 0.45 : 1)
+    }
+}
+
 /// Card container: system background, rounded corners, soft shadow.
 struct BBCard: ViewModifier {
     func body(content: Content) -> some View {
@@ -20,6 +67,10 @@ struct BBCard: ViewModifier {
 
 extension View {
     func bbCard() -> some View { modifier(BBCard()) }
+
+    /// The quiet-tier look on a bare view. For an actual control reach for
+    /// `.buttonStyle(BBQuietButtonStyle())` instead — same look, plus the press.
+    func bbQuietButton() -> some View { modifier(BBQuietButton()) }
 }
 
 /// A receipt line item's category may come back as a colon-delimited
