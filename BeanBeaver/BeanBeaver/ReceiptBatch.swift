@@ -227,9 +227,16 @@ struct ReceiptDraft: Identifiable, Codable {
 @MainActor
 final class ReceiptBatch {
     private(set) var drafts: [ReceiptDraft] = []
-    /// When the first photo of the current batch was added; nil when empty.
-    private(set) var createdAt: Date?
     private(set) var isParsing = false
+
+    /// When the oldest receipt still here was added; nil when empty.
+    ///
+    /// Derived rather than stored, because a stored stamp outlives its own
+    /// batch: syncing drains what parsed but leaves failures behind, so a stamp
+    /// pinned to the original import would go on dating a pile that is by then
+    /// mostly new photos. Taking it from the drafts keeps it true by
+    /// construction.
+    var createdAt: Date? { drafts.map(\.addedAt).min() }
 
     /// Default credit-card account for the placeholder posting, mirroring
     /// `ReceiptPipeline`.
@@ -245,7 +252,6 @@ final class ReceiptBatch {
     }
 
     private struct Persisted: Codable {
-        let createdAt: Date
         let drafts: [ReceiptDraft]
     }
 
@@ -322,7 +328,6 @@ final class ReceiptBatch {
         } catch {
             return .failed
         }
-        if drafts.isEmpty { createdAt = Date() }
         drafts.append(ReceiptDraft(id: UUID(), captureFilename: url.lastPathComponent,
                                    contentHash: hash, state: .queued, wallMs: nil,
                                    addedAt: Date()))
@@ -330,19 +335,38 @@ final class ReceiptBatch {
         return .added
     }
 
-    /// Drop a draft. Its photo stays on disk for `Clear Old Receipts` to
-    /// collect — leaving the batch is precisely what makes it collectable.
+    /// Drop a draft, photo and all. Removing a row means the user doesn't want
+    /// it: nothing else refers to the photo, and it's their storage.
     func remove(_ id: UUID) {
-        drafts.removeAll { $0.id == id }
-        if drafts.isEmpty { createdAt = nil }
+        guard let index = drafts.firstIndex(where: { $0.id == id }) else { return }
+        deleteCapture(drafts.remove(at: index))
+        save()
+    }
+
+    /// Throw the whole batch away — the only bulk exit other than syncing, and
+    /// the one that makes a batch of receipts that will never parse endable.
+    /// Cancels any scan in flight: no point finishing one for a draft that's
+    /// going anyway.
+    func discardAll() {
+        stopParsing()
+        drafts.forEach(deleteCapture)
+        drafts = []
         save()
     }
 
     /// Drop everything that parsed — what a successful sync drains.
+    ///
+    /// Photos deliberately stay for `Clear Old Receipts`: they're in the ledger
+    /// now, and what to keep after a sync is the cleanup workflow that hasn't
+    /// been designed yet. Leaving the batch is what makes them collectable.
     func removeParsed() {
         drafts.removeAll { $0.state.result != nil }
-        if drafts.isEmpty { createdAt = nil }
         save()
+    }
+
+    private func deleteCapture(_ draft: ReceiptDraft) {
+        try? FileManager.default.removeItem(
+            at: ReceiptCaptureStore.url(forFilename: draft.captureFilename))
     }
 
     func retry(_ id: UUID) {
@@ -449,16 +473,14 @@ final class ReceiptBatch {
             if isScanning(draft.state) { draft.state = .interrupted }
             return draft
         }
-        createdAt = drafts.isEmpty ? nil : stored.createdAt
     }
 
     private func save() {
-        guard let createdAt else {
+        guard !drafts.isEmpty else {
             try? FileManager.default.removeItem(at: Self.fileURL)
             return
         }
-        guard let data = try? JSONEncoder().encode(
-            Persisted(createdAt: createdAt, drafts: drafts)) else { return }
+        guard let data = try? JSONEncoder().encode(Persisted(drafts: drafts)) else { return }
         try? data.write(to: Self.fileURL, options: .atomic)
     }
 }

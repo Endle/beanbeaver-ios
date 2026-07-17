@@ -16,6 +16,7 @@ struct BatchImportView: View {
 
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var isLoadingPicked = false
+    @State private var confirmDiscard = false
     /// How many of the last selection were already in the batch — surfaced once,
     /// as a note under the header, rather than as an alert per photo.
     @State private var duplicatesSkipped = 0
@@ -34,11 +35,33 @@ struct BatchImportView: View {
         .toolbar {
             if !batch.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(role: .destructive) {
+                            confirmDiscard = true
+                        } label: {
+                            Label("Discard Batch", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     addPhotosPicker {
                         Image(systemName: "plus")
                     }
                 }
             }
+        }
+        .confirmationDialog("Discard this batch?", isPresented: $confirmDiscard,
+                            titleVisibility: .visible) {
+            Button("Discard \(batch.drafts.count) Receipt\(batch.drafts.count == 1 ? "" : "s")",
+                   role: .destructive) {
+                batch.discardAll()
+            }
+        } message: {
+            Text("Removes every receipt waiting here, and its photo, from this device. "
+                 + "Anything already synced to your ledger is untouched, and the originals "
+                 + "stay in your photo library.")
         }
         .onChange(of: pickerItems) { _, items in
             guard !items.isEmpty else { return }

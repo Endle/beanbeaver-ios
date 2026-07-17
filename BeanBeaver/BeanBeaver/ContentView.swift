@@ -238,6 +238,10 @@ struct ContentView: View {
                 if let count = BatchRunner.argValue("-seedPhotoBatch").flatMap(Int.init) {
                     await batch.seedFromBundledSample(count: count)
                 }
+                if ProcessInfo.processInfo.arguments.contains("-discardBatch") {
+                    batch.discardAll()
+                    batch.logState("after discard")
+                }
             }
 #endif
             // Headless launch-latency probe (process start → first frame); a no-op
