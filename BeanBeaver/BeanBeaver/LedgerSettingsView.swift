@@ -432,10 +432,15 @@ struct LedgerExportButtons: View {
             .disabled(exporter.runningKind != nil)
         }
 
-        Button {
-            onExportMoneyManager()
-        } label: {
-            Label("Export to Money Manager", systemImage: "tablecells")
+        // Premium: hidden entirely for free users (no lock, no paywall). One
+        // gate — `Entitlements.isPremium` — so the eventual purchase check lands
+        // in a single place.
+        if Entitlements.isPremium {
+            Button {
+                onExportMoneyManager()
+            } label: {
+                Label("Export to Money Manager", systemImage: "tablecells")
+            }
         }
 
         ShareLink(item: result.beancount) {

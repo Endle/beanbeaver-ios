@@ -43,12 +43,14 @@ struct BatchImportView: View {
             if !batch.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button {
-                            presentMoneyManager()
-                        } label: {
-                            Label("Export to Money Manager", systemImage: "tablecells")
+                        if Entitlements.isPremium {
+                            Button {
+                                presentMoneyManager()
+                            } label: {
+                                Label("Export to Money Manager", systemImage: "tablecells")
+                            }
+                            .disabled(batch.parsedResults.isEmpty)
                         }
-                        .disabled(batch.parsedResults.isEmpty)
 
                         Button(role: .destructive) {
                             confirmDiscard = true
@@ -97,6 +99,7 @@ struct BatchImportView: View {
     /// batch in place. A temp-write failure is rare and non-fatal; it's captured
     /// for support rather than surfaced.
     private func presentMoneyManager() {
+        guard Entitlements.isPremium else { return }
         do {
             moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: batch.parsedResults))
         } catch {

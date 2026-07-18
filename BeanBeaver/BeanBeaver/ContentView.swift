@@ -73,6 +73,7 @@ struct ContentView: View {
     /// A failure here is a rare temp-file write error and non-fatal — captured for
     /// support rather than surfaced, matching the ledger exporter's error handling.
     private func presentMoneyManager(for results: [ReceiptResult]) {
+        guard Entitlements.isPremium else { return }
         do {
             moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: results))
         } catch {
@@ -494,6 +495,12 @@ struct SettingsView: View {
     /// "Store detailed debug info" (Settings › Debug). Off by default — see
     /// `DebugInfoStore` for what turning it on actually keeps around.
     @AppStorage(DebugInfoStore.enabledKey) private var storeDetailedDebugInfo = false
+#if DEBUG
+    /// DEBUG-only override for `Entitlements.isPremium` — the "Enable premium
+    /// features" toggle in Settings › Debug, so the gated UI (and its locked
+    /// state) can be exercised locally without a TestFlight/sandbox build.
+    @AppStorage(Entitlements.debugPremiumKey) private var debugPremiumEnabled = false
+#endif
     /// Captures "Clear Old Receipts" must spare: the photo behind the result
     /// screen currently on top, so it can't vanish out from under the user while
     /// they're still looking at it, and every photo the pending import batch
@@ -522,14 +529,18 @@ struct SettingsView: View {
                     Text("Store a .json alongside each synced receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
                 }
 
-                Section {
-                    TextField("Account name", text: $moneyManagerAccount)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                } header: {
-                    Text("Money Manager Export")
-                } footer: {
-                    Text("Receipts you export for the Money Manager app land in this account — use the exact account name from that app. Item categories are exported best-effort; you may need to match them in Money Manager after importing.")
+                // Premium: only shown when the Money Manager export is available,
+                // so free users never see a setting for a feature they can't reach.
+                if Entitlements.isPremium {
+                    Section {
+                        TextField("Account name", text: $moneyManagerAccount)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                    } header: {
+                        Text("Money Manager Export")
+                    } footer: {
+                        Text("Receipts you export for the Money Manager app land in this account — use the exact account name from that app. Item categories are exported best-effort; you may need to match them in Money Manager after importing.")
+                    }
                 }
 
                 storageSection
@@ -562,6 +573,7 @@ struct SettingsView: View {
                 Section {
                     Toggle("Store detailed debug info", isOn: $storeDetailedDebugInfo)
 #if DEBUG
+                    Toggle("Enable premium features", isOn: $debugPremiumEnabled)
                     NavigationLink("Dump All Data") {
                         DataDumpView()
                     }

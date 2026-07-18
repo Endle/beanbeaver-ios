@@ -39,6 +39,7 @@
 		1C000000000000000000001E /* BatchImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000000000000000000001E /* BatchImportView.swift */; };
 		1C000000000000000000001F /* MoneyManagerWorkbook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000000000000000000001F /* MoneyManagerWorkbook.swift */; };
 		1C0000000000000000000021 /* MoneyManagerExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000021 /* MoneyManagerExport.swift */; };
+		1C0000000000000000000022 /* Entitlements.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000022 /* Entitlements.swift */; };
 		1C0000000000000000000020 /* BBReceiptKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000012 /* BBReceiptKit */; };
 /* End PBXBuildFile section */
 
@@ -76,6 +77,7 @@
 		1B000000000000000000001E /* BatchImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchImportView.swift; sourceTree = "<group>"; };
 		1B000000000000000000001F /* MoneyManagerWorkbook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyManagerWorkbook.swift; sourceTree = "<group>"; };
 		1B0000000000000000000021 /* MoneyManagerExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyManagerExport.swift; sourceTree = "<group>"; };
+		1B0000000000000000000022 /* Entitlements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entitlements.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,6 +130,7 @@
 				1B000000000000000000001E /* BatchImportView.swift */,
 				1B000000000000000000001F /* MoneyManagerWorkbook.swift */,
 				1B0000000000000000000021 /* MoneyManagerExport.swift */,
+				1B0000000000000000000022 /* Entitlements.swift */,
 				1B000000000000000000001D /* ReceiptBatch.swift */,
 				1B000000000000000000001B /* DebugInfoStore.swift */,
 				1B000000000000000000001C /* DebugInfoListView.swift */,
@@ -254,6 +257,7 @@
 				1C000000000000000000001E /* BatchImportView.swift in Sources */,
 				1C000000000000000000001F /* MoneyManagerWorkbook.swift in Sources */,
 				1C0000000000000000000021 /* MoneyManagerExport.swift in Sources */,
+				1C0000000000000000000022 /* Entitlements.swift in Sources */,
 				1C000000000000000000001D /* ReceiptBatch.swift in Sources */,
 				1C000000000000000000001B /* DebugInfoStore.swift in Sources */,
 				1C000000000000000000001C /* DebugInfoListView.swift in Sources */,
