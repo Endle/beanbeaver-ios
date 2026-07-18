@@ -342,6 +342,8 @@ struct ContentView: View {
                 } label: {
                     Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
                         .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
@@ -878,15 +880,19 @@ struct ReceiptResultView: View {
         }
     }
 
-    /// Fires the first configured destination directly — no menu in the way.
-    /// Falls back to opening Sync Settings when nothing is configured yet.
+    /// Sends the receipt to the selected exporter: an append to its ledger
+    /// destination, or — for Money Manager — the share-sheet Excel export. Falls
+    /// back to opening the Sync page when the exporter isn't ready (destination
+    /// unconfigured, or premium locked).
     private func primarySync() async {
-        guard let kind = exporter.configuredKinds.first else {
-            onConfigure()
-            return
+        if let kind = exporter.selectedExporter.ledgerKind {
+            guard exporter.destination(for: kind).isConfigured else { onConfigure(); return }
+            let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL, wallMs: wallMs)
+            await exporter.export([entry], to: kind)
+        } else {
+            guard Entitlements.isPremium else { onConfigure(); return }
+            onExportMoneyManager()
         }
-        let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL, wallMs: wallMs)
-        await exporter.export([entry], to: kind)
     }
 }
 

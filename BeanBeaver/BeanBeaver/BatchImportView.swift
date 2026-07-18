@@ -248,27 +248,32 @@ struct BatchImportView: View {
     }
 
     private var syncLabel: String {
-        guard exporter.configuredKinds.isEmpty == false else { return "Set Up Sync…" }
+        guard exporter.selectedExporterReady else { return "Set Up Sync…" }
         let count = batch.parsedCount
-        return count == 1 ? "Sync 1 Receipt" : "Sync \(count) Receipts"
+        // Money Manager is a share export, not a ledger append — say "Export".
+        let verb = exporter.selectedExporter.ledgerKind == nil ? "Export" : "Sync"
+        return count == 1 ? "\(verb) 1 Receipt" : "\(verb) \(count) Receipts"
     }
 
-    /// Sends every parsed receipt to the first configured destination — one pull
-    /// request, or one append, for the whole batch. Only drains on success, so a
-    /// failed sync leaves the batch exactly as it was to retry.
+    /// Sends every parsed receipt to the selected exporter — one pull request or
+    /// append for a ledger destination, or the Money Manager share export for the
+    /// whole batch. Ledger syncs only drain on success (a failure leaves the batch
+    /// to retry); the Money Manager export is non-destructive and never drains.
     ///
     /// Draining is deferred to `drainOnConfirmation` rather than done here: the
     /// confirmation is about to appear, and emptying the list out from under it
     /// reads as the receipts having vanished rather than having been filed.
     private func sync() async {
-        guard let kind = exporter.configuredKinds.first else {
-            onConfigure()
-            return
-        }
-        let entries = batch.syncableEntries
-        guard !entries.isEmpty else { return }
-        if await exporter.export(entries, to: kind) {
-            awaitingConfirmation = true
+        if let kind = exporter.selectedExporter.ledgerKind {
+            guard exporter.destination(for: kind).isConfigured else { onConfigure(); return }
+            let entries = batch.syncableEntries
+            guard !entries.isEmpty else { return }
+            if await exporter.export(entries, to: kind) {
+                awaitingConfirmation = true
+            }
+        } else {
+            guard Entitlements.isPremium else { onConfigure(); return }
+            presentMoneyManager()
         }
     }
 

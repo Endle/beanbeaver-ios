@@ -19,10 +19,6 @@ struct LedgerSettingsView: View {
     /// Account the Money Manager export files its rows under. Key matches
     /// `MoneyManagerExport.accountKey`; default `MoneyManagerExport.defaultAccount`.
     @AppStorage("moneyManagerAccount") private var moneyManagerAccount = "Cash"
-    /// Which exporter's detail the Sync page shows, persisted across launches.
-    /// See ``selectedExporter`` for the fallback when the stored choice isn't
-    /// currently available.
-    @AppStorage("syncSelectedExporter") private var selectedExporterRaw = SyncExporter.github.rawValue
 
     private enum RepoState {
         case idle, loading
@@ -30,67 +26,42 @@ struct LedgerSettingsView: View {
         case failed(String)
     }
 
-    /// The downstream exporters the Sync page can configure. Not every one is a
-    /// `LedgerDestination` — Money Manager is a share-sheet file export — so this
-    /// is the Sync page's own list, broader than `LedgerDestinationKind`. Add a
-    /// new target as a case here (plus a `switch` arm below), not another
-    /// always-stacked section.
-    private enum SyncExporter: String, CaseIterable, Identifiable {
-        case github
-        case moneyManager
-        var id: String { rawValue }
-        /// Compact label for the exporter picker.
-        var pickerLabel: String {
-            switch self {
-            case .github: return "GitHub"
-            case .moneyManager: return "Money Manager"
-            }
-        }
-    }
-
-    /// Exporters available to this user right now — Money Manager only once
-    /// premium is unlocked.
-    private var availableExporters: [SyncExporter] {
-        var exporters: [SyncExporter] = [.github]
-        if Entitlements.isPremium { exporters.append(.moneyManager) }
-        return exporters
-    }
-
-    /// The exporter whose detail is shown. Falls back to GitHub when the stored
-    /// choice isn't currently available (e.g. premium was turned off), so the
-    /// page never lands on an empty selection.
-    private var selectedExporter: SyncExporter {
-        let stored = SyncExporter(rawValue: selectedExporterRaw) ?? .github
-        return availableExporters.contains(stored) ? stored : .github
+    /// Label for an exporter in the picker — its name, plus a lock when it's a
+    /// premium exporter that isn't unlocked yet (shown rather than hidden, so a
+    /// GitHub-only user still sees Money Manager exists without any friction).
+    private func exporterLabel(_ option: SyncExporter) -> String {
+        var label = option.label
+        if option.requiresPremium && !Entitlements.isPremium { label += " 🔒" }
+        return label
     }
 
     var body: some View {
         List {
             // Pick one exporter and show only its detail below, so the page stays
-            // short as downstream targets (Money Manager, and later Files/Dropbox…)
-            // are added rather than stacking every one's config. Offered only when
-            // there's actually a choice to make.
-            if availableExporters.count > 1 {
-                Section {
-                    Picker("Exporter", selection: $selectedExporterRaw) {
-                        ForEach(availableExporters) { exporter in
-                            Text(exporter.pickerLabel).tag(exporter.rawValue)
-                        }
+            // short as downstream targets (Money Manager, later Files/Dropbox…) are
+            // added rather than stacking every one's config. A menu picker keeps it
+            // compact as the list grows past what segments could hold.
+            Section {
+                Picker("Send receipts to", selection: $exporter.selectedExporter) {
+                    ForEach(SyncExporter.allCases) { option in
+                        Text(exporterLabel(option)).tag(option)
                     }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("Send receipts to")
                 }
+                .pickerStyle(.menu)
             }
 
             // Ledger inbox file (Files/iCloud/Dropbox/…) is disabled for now — it
             // will be back in a future version. Re-enable `filesSection` (and the
             // .fileImporter/.alert modifiers) to bring it back as another case.
-            switch selectedExporter {
+            switch exporter.selectedExporter {
             case .github:
                 gitHubSection
             case .moneyManager:
-                moneyManagerSection
+                if Entitlements.isPremium {
+                    moneyManagerSection
+                } else {
+                    moneyManagerLockedSection
+                }
             }
         }
         .navigationTitle("Ledger Sync")
@@ -182,6 +153,20 @@ struct LedgerSettingsView: View {
             Label("Money Manager", systemImage: "tablecells")
         } footer: {
             Text("Export a scanned receipt — or a whole photo batch — to a Money Manager Excel file from its share menu, then import it in Money Manager via More → Backup → Import excel file. Rows are filed under this account, so use the exact account name from that app. Categories are best-effort; you may need to match them after importing.")
+        }
+    }
+
+    /// Non-premium view of the Money Manager exporter — shown in place of the
+    /// account field so a locked user still sees what it is. No purchase flow yet
+    /// (premium is open through the TestFlight phase), so this is informational.
+    private var moneyManagerLockedSection: some View {
+        Section {
+            Label("Premium feature", systemImage: "lock.fill")
+                .foregroundStyle(.secondary)
+        } header: {
+            Label("Money Manager", systemImage: "tablecells")
+        } footer: {
+            Text("Exporting scanned receipts to a Money Manager Excel file is a premium feature.")
         }
     }
 
