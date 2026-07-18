@@ -308,6 +308,13 @@ final class ReceiptBatch {
         }
     }
 
+    /// Every parsed receipt's result, oldest first — the raw parses a Money
+    /// Manager export turns into spreadsheet rows. Unlike ``syncableEntries`` this
+    /// needs no ledger entry or photo, and exporting it doesn't drain the batch.
+    var parsedResults: [ReceiptResult] {
+        drafts.compactMap { $0.state.result }
+    }
+
     func url(for draft: ReceiptDraft) -> URL {
         ReceiptCaptureStore.url(forFilename: draft.captureFilename)
     }

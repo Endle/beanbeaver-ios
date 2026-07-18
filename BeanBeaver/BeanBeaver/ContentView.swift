@@ -27,6 +27,9 @@ struct ContentView: View {
     /// launch so what `DebugInfoStore` captured can be screenshotted headlessly.
     @State private var debugShowDebugInfoList = false
     @State private var showJSONPreview = false
+    /// The Money Manager `.xlsx` awaiting the share sheet — one presentation point
+    /// for both the toolbar menu and the result card's menu.
+    @State private var moneyManagerShare: ShareFile?
     @Environment(\.openURL) private var openURL
 
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
@@ -66,6 +69,18 @@ struct ContentView: View {
         return kept
     }
 
+    /// Build the Money Manager `.xlsx` for `results` and present its share sheet.
+    /// A failure here is a rare temp-file write error and non-fatal — captured for
+    /// support rather than surfaced, matching the ledger exporter's error handling.
+    private func presentMoneyManager(for results: [ReceiptResult]) {
+        do {
+            moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: results))
+        } catch {
+            DebugInfoStore.recordSyncFailure(context: "Money Manager export",
+                                             message: error.localizedDescription)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
@@ -82,7 +97,8 @@ struct ContentView: View {
                             ReceiptResultView(result: result, wallMs: pipeline.lastWallMs,
                                               capturedImageURL: pipeline.capturedImageURL,
                                               exporter: exporter,
-                                              onConfigure: { showSettings = true })
+                                              onConfigure: { showSettings = true },
+                                              onExportMoneyManager: { presentMoneyManager(for: [result]) })
                         }
                     }
                     .padding()
@@ -132,7 +148,8 @@ struct ContentView: View {
                                                         wallMs: pipeline.lastWallMs,
                                                         exporter: exporter,
                                                         onConfigure: { showSettings = true },
-                                                        onViewJSON: { showJSONPreview = true })
+                                                        onViewJSON: { showJSONPreview = true },
+                                                        onExportMoneyManager: { presentMoneyManager(for: [result]) })
                                 }
                             }
                         } label: {
@@ -166,6 +183,9 @@ struct ContentView: View {
                     ReceiptJSONView(result: result, wallMs: pipeline.lastWallMs)
                 }
             }
+            .sheet(item: $moneyManagerShare) { share in
+                ActivityView(items: [share.url])
+            }
             .sheet(isPresented: $showSettings) {
                 SettingsView(saveScansToPhotos: $saveScansToPhotos,
                              keptCaptureFilenames: keptCaptureFilenames) {
@@ -187,6 +207,19 @@ struct ContentView: View {
                 // headlessly for screenshots/verification.
                 if ProcessInfo.processInfo.arguments.contains("-autoRunSample") {
                     await pipeline.scanBundledSample(named: sampleName)
+                }
+                // `-dumpMoneyManager` (paired with `-autoRunSample`): after the
+                // sample scan, write its Money Manager `.xlsx` to Documents so a
+                // headless `simctl` run can pull and validate the real export end
+                // to end — the share sheet can't be driven from a script.
+                if ProcessInfo.processInfo.arguments.contains("-dumpMoneyManager"),
+                   case .done(let result) = pipeline.status,
+                   let src = try? MoneyManagerExport.makeFile(for: [result]) {
+                    let dest = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                        .appendingPathComponent("moneymanager-dump.xlsx")
+                    try? FileManager.default.removeItem(at: dest)
+                    try? FileManager.default.copyItem(at: src, to: dest)
+                    NSLog("[MoneyManager] dumped export to \(dest.path)")
                 }
                 if ProcessInfo.processInfo.arguments.contains("-showLedgerSettings") {
                     showLedgerSettings = true
@@ -455,6 +488,9 @@ struct SettingsView: View {
     /// Shares its key with `LedgerFileOptions.includeDetailsJSON`, which the
     /// export path reads. Default on.
     @AppStorage("includeDetailsJSON") private var includeDetailsJSON = true
+    /// Account name stamped into the `Account` column of a Money Manager export.
+    /// Key matches `MoneyManagerExport.accountKey`; default `.defaultAccount`.
+    @AppStorage("moneyManagerAccount") private var moneyManagerAccount = "Cash"
     /// "Store detailed debug info" (Settings › Debug). Off by default — see
     /// `DebugInfoStore` for what turning it on actually keeps around.
     @AppStorage(DebugInfoStore.enabledKey) private var storeDetailedDebugInfo = false
@@ -484,6 +520,16 @@ struct SettingsView: View {
                     Toggle("Save details file", isOn: $includeDetailsJSON)
                 } footer: {
                     Text("Store a .json alongside each synced receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
+                }
+
+                Section {
+                    TextField("Account name", text: $moneyManagerAccount)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Money Manager Export")
+                } footer: {
+                    Text("Receipts you export for the Money Manager app land in this account — use the exact account name from that app. Item categories are exported best-effort; you may need to match them in Money Manager after importing.")
                 }
 
                 storageSection
@@ -793,6 +839,7 @@ struct ReceiptResultView: View {
     var capturedImageURL: URL?
     var exporter: LedgerExporter
     var onConfigure: () -> Void = {}
+    var onExportMoneyManager: () -> Void = {}
     @State private var showJSONPreview = false
 
     var body: some View {
@@ -823,7 +870,8 @@ struct ReceiptResultView: View {
                                         wallMs: wallMs,
                                         exporter: exporter,
                                         onConfigure: onConfigure,
-                                        onViewJSON: { showJSONPreview = true })
+                                        onViewJSON: { showJSONPreview = true },
+                                        onExportMoneyManager: onExportMoneyManager)
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
                 }

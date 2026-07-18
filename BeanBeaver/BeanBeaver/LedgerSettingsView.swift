@@ -382,9 +382,30 @@ struct ManualRepoEntryView: View {
     }
 }
 
+/// A file to hand to the system share sheet, wrapped so `.sheet(item:)` has a
+/// stable identity to key on.
+struct ShareFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// Thin SwiftUI wrapper over `UIActivityViewController` for sharing a file — the
+/// share sheet's "Save to Files" / AirDrop / "Open in…" is how the Money Manager
+/// `.xlsx` reaches that app's importer. Presented from a parent's `.sheet(item:)`
+/// rather than from inside a `Menu`, where a `ShareLink` would eagerly rebuild
+/// its payload on every render.
+struct ActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
 /// The set of export actions offered for a parsed result: one button per
-/// configured destination, a Share fallback, and a shortcut to set up sync.
-/// Shared by the result card and the toolbar menu so they never drift.
+/// configured destination, a Money Manager `.xlsx` export, a Share fallback, and
+/// a shortcut to set up sync. Shared by the result card and the toolbar menu so
+/// they never drift.
 struct LedgerExportButtons: View {
     let result: ReceiptResult
     /// The captured JPEG on disk, if any — read (off the render pass, at tap
@@ -396,6 +417,9 @@ struct LedgerExportButtons: View {
     @Bindable var exporter: LedgerExporter
     var onConfigure: () -> Void
     var onViewJSON: () -> Void = {}
+    /// Build the Money Manager `.xlsx` and present its share sheet. Handled by the
+    /// parent (not here) so the sheet isn't anchored to this transient `Menu`.
+    var onExportMoneyManager: () -> Void = {}
 
     var body: some View {
         ForEach(exporter.configuredKinds) { kind in
@@ -406,6 +430,12 @@ struct LedgerExportButtons: View {
                 Label(kind.title, systemImage: kind.systemImage)
             }
             .disabled(exporter.runningKind != nil)
+        }
+
+        Button {
+            onExportMoneyManager()
+        } label: {
+            Label("Export to Money Manager", systemImage: "tablecells")
         }
 
         ShareLink(item: result.beancount) {

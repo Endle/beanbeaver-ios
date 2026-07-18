@@ -25,6 +25,8 @@ struct BatchImportView: View {
     /// How many of the last selection were already in the batch — surfaced once,
     /// as a note under the header, rather than as an alert per photo.
     @State private var duplicatesSkipped = 0
+    /// The Money Manager `.xlsx` for the whole batch, awaiting the share sheet.
+    @State private var moneyManagerShare: ShareFile?
 
     var body: some View {
         Group {
@@ -41,6 +43,13 @@ struct BatchImportView: View {
             if !batch.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        Button {
+                            presentMoneyManager()
+                        } label: {
+                            Label("Export to Money Manager", systemImage: "tablecells")
+                        }
+                        .disabled(batch.parsedResults.isEmpty)
+
                         Button(role: .destructive) {
                             confirmDiscard = true
                         } label: {
@@ -78,6 +87,22 @@ struct BatchImportView: View {
         // These are receipts the user already asked to have parsed, so resuming
         // needs no button: anything queued or interrupted just picks up here.
         .task { batch.startParsing() }
+        .sheet(item: $moneyManagerShare) { share in
+            ActivityView(items: [share.url])
+        }
+    }
+
+    /// Export every parsed receipt in the batch to one Money Manager `.xlsx` and
+    /// present its share sheet. Non-destructive — unlike `sync()`, it leaves the
+    /// batch in place. A temp-write failure is rare and non-fatal; it's captured
+    /// for support rather than surfaced.
+    private func presentMoneyManager() {
+        do {
+            moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: batch.parsedResults))
+        } catch {
+            DebugInfoStore.recordSyncFailure(context: "Money Manager batch export",
+                                             message: error.localizedDescription)
+        }
     }
 
     // MARK: - Empty state
