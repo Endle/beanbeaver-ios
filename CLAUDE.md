@@ -9,10 +9,15 @@
   (or target a specific arm64 simulator). Device builds are arm64 and unaffected.
 
 - The **"Sync" page (`LedgerSettingsView`, reached from the home screen's "Sync:"
-  button) is the single, centralized place to manage every downstream data output** —
-  where scanned data goes. That's the beancount ledger destinations (GitHub PR, Files
-  inbox) and the Money Manager Excel export today, plus any ledger or export format we
-  add later. **Put new export/destination configuration there, not in the general
-  `SettingsView`.** General Settings is for app/device preferences (Photos copy,
-  storage, debug) — never output targets. The result-screen and batch "Sync Settings…"
-  menu actions therefore open this page.
+  button) is the single place to choose a downstream *exporter* and configure it** —
+  where scanned data goes: the beancount ledger destinations (GitHub PR, Files inbox)
+  and the Money Manager Excel export today, plus any ledger/format added later. It uses
+  a **"select one exporter" picker with only the chosen exporter's detail below**, so
+  the page stays short as targets grow — add a new exporter as another `SyncExporter`
+  case (and a `switch` arm), not another always-stacked section. Per-exporter
+  configuration goes here, and the result-screen/batch "Sync Settings…" actions open
+  this page.
+- General `SettingsView` holds app/device preferences and **cross-cutting output
+  preferences that span services** — e.g. the "Save details file" `.json` sidecar
+  toggle, which applies to every file-based backend (Files/Dropbox/GitHub). Keep those
+  in Settings; only a single exporter's own target config belongs on the Sync page.
