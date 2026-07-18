@@ -16,6 +16,9 @@ struct LedgerSettingsView: View {
     @State private var repoState: RepoState = .idle
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
+    /// Account the Money Manager export files its rows under. Key matches
+    /// `MoneyManagerExport.accountKey`; default `MoneyManagerExport.defaultAccount`.
+    @AppStorage("moneyManagerAccount") private var moneyManagerAccount = "Cash"
 
     private enum RepoState {
         case idle, loading
@@ -23,13 +26,43 @@ struct LedgerSettingsView: View {
         case failed(String)
     }
 
+    /// Label for an exporter in the picker — its name, plus a lock when it's a
+    /// premium exporter that isn't unlocked yet (shown rather than hidden, so a
+    /// GitHub-only user still sees Money Manager exists without any friction).
+    private func exporterLabel(_ option: SyncExporter) -> String {
+        var label = option.label
+        if option.requiresPremium && !Entitlements.isPremium { label += " 🔒" }
+        return label
+    }
+
     var body: some View {
         List {
-            // Ledger inbox file (Files/iCloud/Dropbox/…) is disabled for now —
-            // it will be back in a future version. Re-enable `filesSection`
-            // below (and the .fileImporter/.alert modifiers) to bring it back.
-            // filesSection
-            gitHubSection
+            // Pick one exporter and show only its detail below, so the page stays
+            // short as downstream targets (Money Manager, later Files/Dropbox…) are
+            // added rather than stacking every one's config. A menu picker keeps it
+            // compact as the list grows past what segments could hold.
+            Section {
+                Picker("Send receipts to", selection: $exporter.selectedExporter) {
+                    ForEach(SyncExporter.allCases) { option in
+                        Text(exporterLabel(option)).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            // Ledger inbox file (Files/iCloud/Dropbox/…) is disabled for now — it
+            // will be back in a future version. Re-enable `filesSection` (and the
+            // .fileImporter/.alert modifiers) to bring it back as another case.
+            switch exporter.selectedExporter {
+            case .github:
+                gitHubSection
+            case .moneyManager:
+                if Entitlements.isPremium {
+                    moneyManagerSection
+                } else {
+                    moneyManagerLockedSection
+                }
+            }
         }
         .navigationTitle("Ledger Sync")
         .navigationBarTitleDisplayMode(.inline)
@@ -104,6 +137,36 @@ struct LedgerSettingsView: View {
             } else {
                 Text("Each export opens a pull request that appends the transaction to the ledger file on the repo's default branch. Connect your GitHub account: authorize in the browser, then install BeanBeaver on the one repo you pick — it can't touch your other repos. The token is stored in the device Keychain.")
             }
+        }
+    }
+
+    /// Money Manager (Realbyte) `.xlsx` export — a downstream output managed here
+    /// on the Sync page next to the ledger destinations. The export itself runs on
+    /// demand from a receipt's (or the batch's) share menu; this only configures
+    /// the account its rows are filed under.
+    private var moneyManagerSection: some View {
+        Section {
+            TextField("Account name", text: $moneyManagerAccount)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+        } header: {
+            Label("Money Manager", systemImage: "tablecells")
+        } footer: {
+            Text("Export a scanned receipt — or a whole photo batch — to a Money Manager Excel file from its share menu, then import it in Money Manager via More → Backup → Import excel file. Rows are filed under this account, so use the exact account name from that app. Categories are best-effort; you may need to match them after importing.")
+        }
+    }
+
+    /// Non-premium view of the Money Manager exporter — shown in place of the
+    /// account field so a locked user still sees what it is. No purchase flow yet
+    /// (premium is open through the TestFlight phase), so this is informational.
+    private var moneyManagerLockedSection: some View {
+        Section {
+            Label("Premium feature", systemImage: "lock.fill")
+                .foregroundStyle(.secondary)
+        } header: {
+            Label("Money Manager", systemImage: "tablecells")
+        } footer: {
+            Text("Exporting scanned receipts to a Money Manager Excel file is a premium feature.")
         }
     }
 
@@ -382,9 +445,30 @@ struct ManualRepoEntryView: View {
     }
 }
 
+/// A file to hand to the system share sheet, wrapped so `.sheet(item:)` has a
+/// stable identity to key on.
+struct ShareFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// Thin SwiftUI wrapper over `UIActivityViewController` for sharing a file — the
+/// share sheet's "Save to Files" / AirDrop / "Open in…" is how the Money Manager
+/// `.xlsx` reaches that app's importer. Presented from a parent's `.sheet(item:)`
+/// rather than from inside a `Menu`, where a `ShareLink` would eagerly rebuild
+/// its payload on every render.
+struct ActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
 /// The set of export actions offered for a parsed result: one button per
-/// configured destination, a Share fallback, and a shortcut to set up sync.
-/// Shared by the result card and the toolbar menu so they never drift.
+/// configured destination, a Money Manager `.xlsx` export, a Share fallback, and
+/// a shortcut to set up sync. Shared by the result card and the toolbar menu so
+/// they never drift.
 struct LedgerExportButtons: View {
     let result: ReceiptResult
     /// The captured JPEG on disk, if any — read (off the render pass, at tap
@@ -396,6 +480,9 @@ struct LedgerExportButtons: View {
     @Bindable var exporter: LedgerExporter
     var onConfigure: () -> Void
     var onViewJSON: () -> Void = {}
+    /// Build the Money Manager `.xlsx` and present its share sheet. Handled by the
+    /// parent (not here) so the sheet isn't anchored to this transient `Menu`.
+    var onExportMoneyManager: () -> Void = {}
 
     var body: some View {
         ForEach(exporter.configuredKinds) { kind in
@@ -406,6 +493,17 @@ struct LedgerExportButtons: View {
                 Label(kind.title, systemImage: kind.systemImage)
             }
             .disabled(exporter.runningKind != nil)
+        }
+
+        // Premium: hidden entirely for free users (no lock, no paywall). One
+        // gate — `Entitlements.isPremium` — so the eventual purchase check lands
+        // in a single place.
+        if Entitlements.isPremium {
+            Button {
+                onExportMoneyManager()
+            } label: {
+                Label("Export to Money Manager", systemImage: "tablecells")
+            }
         }
 
         ShareLink(item: result.beancount) {

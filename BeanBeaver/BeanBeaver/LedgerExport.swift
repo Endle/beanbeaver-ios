@@ -107,6 +107,8 @@ struct SyncButtonLabel: View {
             } else {
                 Label(idleLabel, systemImage: "arrow.triangle.2.circlepath")
                     .font(.headline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
             }
         }
         .frame(maxWidth: .infinity)
@@ -293,6 +295,46 @@ enum LedgerDestinationKind: String, CaseIterable, Identifiable {
     }
 }
 
+/// A downstream receiver the Sync page can target — the "where do receipts go"
+/// choice the home screen's "Sync:" indicator reflects and the primary Sync
+/// button acts on. Broader than `LedgerDestinationKind`: Money Manager is a
+/// share-sheet Excel export, not an async ledger append, so its `ledgerKind` is
+/// nil. Add a new receiver as a case here and the Sync page renders it, the
+/// picker lists it, and the indicators pick it up — no other wiring per site.
+enum SyncExporter: String, CaseIterable, Identifiable {
+    case github
+    case moneyManager
+
+    var id: String { rawValue }
+    static let storageKey = "syncSelectedExporter"
+
+    var label: String {
+        switch self {
+        case .github: return "GitHub"
+        case .moneyManager: return "Money Manager"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .github: return LedgerDestinationKind.githubPR.systemImage
+        case .moneyManager: return "tablecells"
+        }
+    }
+
+    /// The async ledger destination this maps to, or nil for a share-sheet export
+    /// (Money Manager) — which is what tells the primary action whether "sync"
+    /// means an append or presenting a file to share.
+    var ledgerKind: LedgerDestinationKind? {
+        switch self {
+        case .github: return .githubPR
+        case .moneyManager: return nil
+        }
+    }
+
+    var requiresPremium: Bool { self == .moneyManager }
+}
+
 /// What happened on a successful export — used to build the confirmation.
 /// `count` is how many transactions went in, so a batch can say so.
 enum LedgerExportOutcome {
@@ -341,6 +383,15 @@ final class LedgerExporter {
     // (e.g. `$exporter.github.owner`); the instances are never reassigned.
     var filesInbox = FilesLedgerInbox()
     var github = GitHubLedger()
+
+    /// The receiver the Sync page has selected — the target of the primary Sync
+    /// button and what the home "Sync:" indicator shows. Persisted so it survives
+    /// relaunch; observable so the indicator updates the moment it changes.
+    var selectedExporter: SyncExporter = SyncExporter(
+        rawValue: UserDefaults.standard.string(forKey: SyncExporter.storageKey) ?? ""
+    ) ?? .github {
+        didSet { UserDefaults.standard.set(selectedExporter.rawValue, forKey: SyncExporter.storageKey) }
+    }
 
     /// The backend currently running an export (for a per-button spinner), or nil.
     private(set) var runningKind: LedgerDestinationKind?
@@ -401,19 +452,26 @@ final class LedgerExporter {
         LedgerDestinationKind.allCases.filter { destination(for: $0).isConfigured }
     }
 
-    /// Short label for a "Sync:" button — "None" or the configured
-    /// destinations, e.g. "Files" or "Files+GitHub". Shared by the home
-    /// screen and the result screen so they never drift.
-    var syncIndicator: String {
-        let kinds = configuredKinds
-        guard !kinds.isEmpty else { return "None" }
-        return kinds.map(\.shortTitle).joined(separator: "+")
+    /// Whether the selected exporter can receive right now — a configured ledger
+    /// destination, or premium unlocked for the Money Manager share export.
+    var selectedExporterReady: Bool {
+        if let kind = selectedExporter.ledgerKind { return destination(for: kind).isConfigured }
+        return Entitlements.isPremium
     }
 
-    /// Green once a destination is configured (matches the platform's
-    /// "connected" convention), grey while sync is unset.
+    /// Label for a "Sync:" button — the selected exporter's name, with a lock
+    /// when it's premium and not yet unlocked. Shared by the home screen and the
+    /// result screen so they never drift.
+    var syncIndicator: String {
+        var label = selectedExporter.label
+        if selectedExporter.requiresPremium && !Entitlements.isPremium { label += " 🔒" }
+        return label
+    }
+
+    /// Green once the selected exporter is ready (matches the platform's
+    /// "connected" convention), grey while it still needs setup/unlock.
     var syncTint: Color {
-        configuredKinds.isEmpty ? .secondary : .green
+        selectedExporterReady ? .green : .secondary
     }
 
     /// Send `entries` to `kind`, publishing a confirmation (or a failure) for the

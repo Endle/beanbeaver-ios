@@ -27,6 +27,9 @@ struct ContentView: View {
     /// launch so what `DebugInfoStore` captured can be screenshotted headlessly.
     @State private var debugShowDebugInfoList = false
     @State private var showJSONPreview = false
+    /// The Money Manager `.xlsx` awaiting the share sheet — one presentation point
+    /// for both the toolbar menu and the result card's menu.
+    @State private var moneyManagerShare: ShareFile?
     @Environment(\.openURL) private var openURL
 
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
@@ -66,6 +69,19 @@ struct ContentView: View {
         return kept
     }
 
+    /// Build the Money Manager `.xlsx` for `results` and present its share sheet.
+    /// A failure here is a rare temp-file write error and non-fatal — captured for
+    /// support rather than surfaced, matching the ledger exporter's error handling.
+    private func presentMoneyManager(for results: [ReceiptResult]) {
+        guard Entitlements.isPremium else { return }
+        do {
+            moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: results))
+        } catch {
+            DebugInfoStore.recordSyncFailure(context: "Money Manager export",
+                                             message: error.localizedDescription)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
@@ -82,7 +98,8 @@ struct ContentView: View {
                             ReceiptResultView(result: result, wallMs: pipeline.lastWallMs,
                                               capturedImageURL: pipeline.capturedImageURL,
                                               exporter: exporter,
-                                              onConfigure: { showSettings = true })
+                                              onConfigure: { showLedgerSettings = true },
+                                              onExportMoneyManager: { presentMoneyManager(for: [result]) })
                         }
                     }
                     .padding()
@@ -131,8 +148,9 @@ struct ContentView: View {
                                                         imageURL: pipeline.capturedImageURL,
                                                         wallMs: pipeline.lastWallMs,
                                                         exporter: exporter,
-                                                        onConfigure: { showSettings = true },
-                                                        onViewJSON: { showJSONPreview = true })
+                                                        onConfigure: { showLedgerSettings = true },
+                                                        onViewJSON: { showJSONPreview = true },
+                                                        onExportMoneyManager: { presentMoneyManager(for: [result]) })
                                 }
                             }
                         } label: {
@@ -166,6 +184,9 @@ struct ContentView: View {
                     ReceiptJSONView(result: result, wallMs: pipeline.lastWallMs)
                 }
             }
+            .sheet(item: $moneyManagerShare) { share in
+                ActivityView(items: [share.url])
+            }
             .sheet(isPresented: $showSettings) {
                 SettingsView(saveScansToPhotos: $saveScansToPhotos,
                              keptCaptureFilenames: keptCaptureFilenames) {
@@ -187,6 +208,19 @@ struct ContentView: View {
                 // headlessly for screenshots/verification.
                 if ProcessInfo.processInfo.arguments.contains("-autoRunSample") {
                     await pipeline.scanBundledSample(named: sampleName)
+                }
+                // `-dumpMoneyManager` (paired with `-autoRunSample`): after the
+                // sample scan, write its Money Manager `.xlsx` to Documents so a
+                // headless `simctl` run can pull and validate the real export end
+                // to end — the share sheet can't be driven from a script.
+                if ProcessInfo.processInfo.arguments.contains("-dumpMoneyManager"),
+                   case .done(let result) = pipeline.status,
+                   let src = try? MoneyManagerExport.makeFile(for: [result]) {
+                    let dest = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                        .appendingPathComponent("moneymanager-dump.xlsx")
+                    try? FileManager.default.removeItem(at: dest)
+                    try? FileManager.default.copyItem(at: src, to: dest)
+                    NSLog("[MoneyManager] dumped export to \(dest.path)")
                 }
                 if ProcessInfo.processInfo.arguments.contains("-showLedgerSettings") {
                     showLedgerSettings = true
@@ -308,6 +342,8 @@ struct ContentView: View {
                 } label: {
                     Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
                         .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
@@ -458,6 +494,9 @@ struct SettingsView: View {
     /// "Store detailed debug info" (Settings › Debug). Off by default — see
     /// `DebugInfoStore` for what turning it on actually keeps around.
     @AppStorage(DebugInfoStore.enabledKey) private var storeDetailedDebugInfo = false
+    /// The "Enable premium features" switch — the stub premium control while
+    /// BeanBeaver is TestFlight-only. Defaults on; see `Entitlements.isPremium`.
+    @AppStorage(Entitlements.premiumEnabledKey) private var premiumEnabled = true
     /// Captures "Clear Old Receipts" must spare: the photo behind the result
     /// screen currently on top, so it can't vanish out from under the user while
     /// they're still looking at it, and every photo the pending import batch
@@ -515,6 +554,7 @@ struct SettingsView: View {
 
                 Section {
                     Toggle("Store detailed debug info", isOn: $storeDetailedDebugInfo)
+                    Toggle("Enable premium features", isOn: $premiumEnabled)
 #if DEBUG
                     NavigationLink("Dump All Data") {
                         DataDumpView()
@@ -793,6 +833,7 @@ struct ReceiptResultView: View {
     var capturedImageURL: URL?
     var exporter: LedgerExporter
     var onConfigure: () -> Void = {}
+    var onExportMoneyManager: () -> Void = {}
     @State private var showJSONPreview = false
 
     var body: some View {
@@ -823,7 +864,8 @@ struct ReceiptResultView: View {
                                         wallMs: wallMs,
                                         exporter: exporter,
                                         onConfigure: onConfigure,
-                                        onViewJSON: { showJSONPreview = true })
+                                        onViewJSON: { showJSONPreview = true },
+                                        onExportMoneyManager: onExportMoneyManager)
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
                 }
@@ -835,15 +877,19 @@ struct ReceiptResultView: View {
         }
     }
 
-    /// Fires the first configured destination directly — no menu in the way.
-    /// Falls back to opening Sync Settings when nothing is configured yet.
+    /// Sends the receipt to the selected exporter: an append to its ledger
+    /// destination, or — for Money Manager — the share-sheet Excel export. Falls
+    /// back to opening the Sync page when the exporter isn't ready (destination
+    /// unconfigured, or premium locked).
     private func primarySync() async {
-        guard let kind = exporter.configuredKinds.first else {
-            onConfigure()
-            return
+        if let kind = exporter.selectedExporter.ledgerKind {
+            guard exporter.destination(for: kind).isConfigured else { onConfigure(); return }
+            let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL, wallMs: wallMs)
+            await exporter.export([entry], to: kind)
+        } else {
+            guard Entitlements.isPremium else { onConfigure(); return }
+            onExportMoneyManager()
         }
-        let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL, wallMs: wallMs)
-        await exporter.export([entry], to: kind)
     }
 }
 

@@ -25,6 +25,8 @@ struct BatchImportView: View {
     /// How many of the last selection were already in the batch — surfaced once,
     /// as a note under the header, rather than as an alert per photo.
     @State private var duplicatesSkipped = 0
+    /// The Money Manager `.xlsx` for the whole batch, awaiting the share sheet.
+    @State private var moneyManagerShare: ShareFile?
 
     var body: some View {
         Group {
@@ -41,6 +43,15 @@ struct BatchImportView: View {
             if !batch.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        if Entitlements.isPremium {
+                            Button {
+                                presentMoneyManager()
+                            } label: {
+                                Label("Export to Money Manager", systemImage: "tablecells")
+                            }
+                            .disabled(batch.parsedResults.isEmpty)
+                        }
+
                         Button(role: .destructive) {
                             confirmDiscard = true
                         } label: {
@@ -78,6 +89,23 @@ struct BatchImportView: View {
         // These are receipts the user already asked to have parsed, so resuming
         // needs no button: anything queued or interrupted just picks up here.
         .task { batch.startParsing() }
+        .sheet(item: $moneyManagerShare) { share in
+            ActivityView(items: [share.url])
+        }
+    }
+
+    /// Export every parsed receipt in the batch to one Money Manager `.xlsx` and
+    /// present its share sheet. Non-destructive — unlike `sync()`, it leaves the
+    /// batch in place. A temp-write failure is rare and non-fatal; it's captured
+    /// for support rather than surfaced.
+    private func presentMoneyManager() {
+        guard Entitlements.isPremium else { return }
+        do {
+            moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: batch.parsedResults))
+        } catch {
+            DebugInfoStore.recordSyncFailure(context: "Money Manager batch export",
+                                             message: error.localizedDescription)
+        }
     }
 
     // MARK: - Empty state
@@ -220,27 +248,32 @@ struct BatchImportView: View {
     }
 
     private var syncLabel: String {
-        guard exporter.configuredKinds.isEmpty == false else { return "Set Up Sync…" }
+        guard exporter.selectedExporterReady else { return "Set Up Sync…" }
         let count = batch.parsedCount
-        return count == 1 ? "Sync 1 Receipt" : "Sync \(count) Receipts"
+        // Money Manager is a share export, not a ledger append — say "Export".
+        let verb = exporter.selectedExporter.ledgerKind == nil ? "Export" : "Sync"
+        return count == 1 ? "\(verb) 1 Receipt" : "\(verb) \(count) Receipts"
     }
 
-    /// Sends every parsed receipt to the first configured destination — one pull
-    /// request, or one append, for the whole batch. Only drains on success, so a
-    /// failed sync leaves the batch exactly as it was to retry.
+    /// Sends every parsed receipt to the selected exporter — one pull request or
+    /// append for a ledger destination, or the Money Manager share export for the
+    /// whole batch. Ledger syncs only drain on success (a failure leaves the batch
+    /// to retry); the Money Manager export is non-destructive and never drains.
     ///
     /// Draining is deferred to `drainOnConfirmation` rather than done here: the
     /// confirmation is about to appear, and emptying the list out from under it
     /// reads as the receipts having vanished rather than having been filed.
     private func sync() async {
-        guard let kind = exporter.configuredKinds.first else {
-            onConfigure()
-            return
-        }
-        let entries = batch.syncableEntries
-        guard !entries.isEmpty else { return }
-        if await exporter.export(entries, to: kind) {
-            awaitingConfirmation = true
+        if let kind = exporter.selectedExporter.ledgerKind {
+            guard exporter.destination(for: kind).isConfigured else { onConfigure(); return }
+            let entries = batch.syncableEntries
+            guard !entries.isEmpty else { return }
+            if await exporter.export(entries, to: kind) {
+                awaitingConfirmation = true
+            }
+        } else {
+            guard Entitlements.isPremium else { onConfigure(); return }
+            presentMoneyManager()
         }
     }
 
