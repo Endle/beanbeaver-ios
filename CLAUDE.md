@@ -21,3 +21,5 @@
   preferences that span services** — e.g. the "Save details file" `.json` sidecar
   toggle, which applies to every file-based backend (Files/Dropbox/GitHub). Keep those
   in Settings; only a single exporter's own target config belongs on the Sync page.
+
+- Avoid using macro #if DEBUG - think twice that if it's necessary

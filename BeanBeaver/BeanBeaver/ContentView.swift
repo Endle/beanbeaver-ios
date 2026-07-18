@@ -494,12 +494,9 @@ struct SettingsView: View {
     /// "Store detailed debug info" (Settings › Debug). Off by default — see
     /// `DebugInfoStore` for what turning it on actually keeps around.
     @AppStorage(DebugInfoStore.enabledKey) private var storeDetailedDebugInfo = false
-#if DEBUG
-    /// DEBUG-only override for `Entitlements.isPremium` — the "Enable premium
-    /// features" toggle in Settings › Debug, so the gated UI (and its locked
-    /// state) can be exercised locally without a TestFlight/sandbox build.
-    @AppStorage(Entitlements.debugPremiumKey) private var debugPremiumEnabled = false
-#endif
+    /// The "Enable premium features" switch — the stub premium control while
+    /// BeanBeaver is TestFlight-only. Defaults on; see `Entitlements.isPremium`.
+    @AppStorage(Entitlements.premiumEnabledKey) private var premiumEnabled = true
     /// Captures "Clear Old Receipts" must spare: the photo behind the result
     /// screen currently on top, so it can't vanish out from under the user while
     /// they're still looking at it, and every photo the pending import batch
@@ -557,8 +554,8 @@ struct SettingsView: View {
 
                 Section {
                     Toggle("Store detailed debug info", isOn: $storeDetailedDebugInfo)
+                    Toggle("Enable premium features", isOn: $premiumEnabled)
 #if DEBUG
-                    Toggle("Enable premium features", isOn: $debugPremiumEnabled)
                     NavigationLink("Dump All Data") {
                         DataDumpView()
                     }
