@@ -127,10 +127,11 @@ extension ReceiptResult: @retroactive Codable {
                   subtotal: try c.decodeIfPresent(String.self, forKey: .subtotal),
                   items: try c.decode([ReceiptItem].self, forKey: .items),
                   warnings: try c.decode([String].self, forKey: .warnings),
-                  // v0.3.3 grew ReceiptResult with these FFI fields. No batch UI
-                  // reads them yet, and the persisted batch JSON predates them, so
-                  // default here rather than widen the on-disk schema (CodingKeys /
-                  // encode stay unchanged, keeping old batch files loadable).
+                  // v0.3.3 (and v0.4.0's `detections`) grew ReceiptResult with
+                  // these FFI fields. No batch UI reads them yet, and the persisted
+                  // batch JSON predates them, so default here rather than widen the
+                  // on-disk schema (CodingKeys / encode stay unchanged, keeping old
+                  // batch files loadable).
                   warningAfterItemIndices: [],
                   rawText: "",
                   imageFilename: "receipt.jpg",
@@ -140,7 +141,8 @@ extension ReceiptResult: @retroactive Codable {
                   documentRelpath: try c.decodeIfPresent(String.self, forKey: .documentRelpath),
                   timings: try c.decode(ScanTimings.self, forKey: .timings),
                   confidence: FieldConfidences(
-                      merchant: 0, date: 0, total: 0, itemsCategorized: 0, needsReview: false))
+                      merchant: 0, date: 0, total: 0, itemsCategorized: 0, needsReview: false),
+                  detections: [])
     }
 
     public func encode(to encoder: Encoder) throws {

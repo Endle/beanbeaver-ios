@@ -937,7 +937,8 @@ extension ReceiptResult {
         documentRelpath: nil,
         timings: .preview,
         confidence: FieldConfidences(
-            merchant: 1.0, date: 0.98, total: 0.99, itemsCategorized: 0.83, needsReview: false)
+            merchant: 1.0, date: 0.98, total: 0.99, itemsCategorized: 0.83, needsReview: false),
+        detections: []
     )
 
     /// A sparse result: no line items, inferred date, parser warnings.
@@ -965,7 +966,8 @@ extension ReceiptResult {
         documentRelpath: nil,
         timings: .preview,
         confidence: FieldConfidences(
-            merchant: 0.2, date: 0.1, total: 0.9, itemsCategorized: 0.0, needsReview: true)
+            merchant: 0.2, date: 0.1, total: 0.9, itemsCategorized: 0.0, needsReview: true),
+        detections: []
     )
 
     /// A low-confidence merchant: OCR read "COSCO" and the matcher offers
@@ -999,7 +1001,8 @@ extension ReceiptResult {
         documentRelpath: nil,
         timings: .preview,
         confidence: FieldConfidences(
-            merchant: 0.83, date: 0.95, total: 0.9, itemsCategorized: 1.0, needsReview: true)
+            merchant: 0.83, date: 0.95, total: 0.9, itemsCategorized: 1.0, needsReview: true),
+        detections: []
     )
 }
 
