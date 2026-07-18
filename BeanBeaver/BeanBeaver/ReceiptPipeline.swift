@@ -214,6 +214,15 @@ enum BatchRunner {
         let category: String?
     }
 
+    /// One raw OCR detection box, mirrored from the Rust `OcrDetection` so the
+    /// headless batch output carries the on-device OCR geometry — enough to diff
+    /// live boxes against the frozen `.ocr.json` snapshots.
+    struct Detection: Codable {
+        let pointsXy: [Double]
+        let text: String
+        let confidence: Double
+    }
+
     /// Per-stage on-device timings (ms) for one scan, mirrored from the Rust
     /// `ScanTimings`, so the headless batch output carries the stage breakdown
     /// (not just wall time) for latency profiling.
@@ -239,6 +248,15 @@ enum BatchRunner {
         let wallMs: Double
         let timings: Timings?     // nil only when the scan itself failed
         let error: String?
+        // Debug / E2E extras (nil on a failed scan): the full merchant
+        // resolution plus the raw OCR text and detection boxes, so live output
+        // can be diffed against the frozen `.ocr.json` snapshots. `var` + `nil`
+        // default keeps the `.failure` factory below valid.
+        var merchantRaw: String? = nil
+        var merchantCanonical: String? = nil
+        var merchantStatus: String? = nil
+        var rawText: String? = nil
+        var detections: [Detection]? = nil
     }
 
     struct Output: Codable {
@@ -310,7 +328,14 @@ enum BatchRunner {
                         prepMs: r.timings.prepMs, detectMs: r.timings.detectMs,
                         classifyMs: r.timings.classifyMs, recognizeMs: r.timings.recognizeMs,
                         parseMs: r.timings.parseMs, totalMs: r.timings.totalMs),
-                    error: nil))
+                    error: nil,
+                    merchantRaw: r.merchantMatch.raw,
+                    merchantCanonical: r.merchantMatch.canonical,
+                    merchantStatus: "\(r.merchantMatch.status)",
+                    rawText: r.rawText,
+                    detections: r.detections.map {
+                        Detection(pointsXy: $0.pointsXy, text: $0.text, confidence: $0.confidence)
+                    }))
             } catch {
                 results.append(.failure(name, String(describing: error)))
             }
