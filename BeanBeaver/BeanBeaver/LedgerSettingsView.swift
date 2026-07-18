@@ -16,6 +16,9 @@ struct LedgerSettingsView: View {
     @State private var repoState: RepoState = .idle
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
+    /// Account the Money Manager export files its rows under. Key matches
+    /// `MoneyManagerExport.accountKey`; default `MoneyManagerExport.defaultAccount`.
+    @AppStorage("moneyManagerAccount") private var moneyManagerAccount = "Cash"
 
     private enum RepoState {
         case idle, loading
@@ -30,6 +33,11 @@ struct LedgerSettingsView: View {
             // below (and the .fileImporter/.alert modifiers) to bring it back.
             // filesSection
             gitHubSection
+            // Premium: another downstream output, managed here on the Sync page
+            // alongside the ledger destinations. Hidden entirely otherwise.
+            if Entitlements.isPremium {
+                moneyManagerSection
+            }
         }
         .navigationTitle("Ledger Sync")
         .navigationBarTitleDisplayMode(.inline)
@@ -104,6 +112,22 @@ struct LedgerSettingsView: View {
             } else {
                 Text("Each export opens a pull request that appends the transaction to the ledger file on the repo's default branch. Connect your GitHub account: authorize in the browser, then install BeanBeaver on the one repo you pick — it can't touch your other repos. The token is stored in the device Keychain.")
             }
+        }
+    }
+
+    /// Money Manager (Realbyte) `.xlsx` export — a downstream output managed here
+    /// on the Sync page next to the ledger destinations. The export itself runs on
+    /// demand from a receipt's (or the batch's) share menu; this only configures
+    /// the account its rows are filed under.
+    private var moneyManagerSection: some View {
+        Section {
+            TextField("Account name", text: $moneyManagerAccount)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+        } header: {
+            Label("Money Manager", systemImage: "tablecells")
+        } footer: {
+            Text("Export a scanned receipt — or a whole photo batch — to a Money Manager Excel file from its share menu, then import it in Money Manager via More → Backup → Import excel file. Rows are filed under this account, so use the exact account name from that app. Categories are best-effort; you may need to match them after importing.")
         }
     }
 

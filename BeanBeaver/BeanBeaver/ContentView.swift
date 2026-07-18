@@ -98,7 +98,7 @@ struct ContentView: View {
                             ReceiptResultView(result: result, wallMs: pipeline.lastWallMs,
                                               capturedImageURL: pipeline.capturedImageURL,
                                               exporter: exporter,
-                                              onConfigure: { showSettings = true },
+                                              onConfigure: { showLedgerSettings = true },
                                               onExportMoneyManager: { presentMoneyManager(for: [result]) })
                         }
                     }
@@ -148,7 +148,7 @@ struct ContentView: View {
                                                         imageURL: pipeline.capturedImageURL,
                                                         wallMs: pipeline.lastWallMs,
                                                         exporter: exporter,
-                                                        onConfigure: { showSettings = true },
+                                                        onConfigure: { showLedgerSettings = true },
                                                         onViewJSON: { showJSONPreview = true },
                                                         onExportMoneyManager: { presentMoneyManager(for: [result]) })
                                 }
@@ -489,9 +489,6 @@ struct SettingsView: View {
     /// Shares its key with `LedgerFileOptions.includeDetailsJSON`, which the
     /// export path reads. Default on.
     @AppStorage("includeDetailsJSON") private var includeDetailsJSON = true
-    /// Account name stamped into the `Account` column of a Money Manager export.
-    /// Key matches `MoneyManagerExport.accountKey`; default `.defaultAccount`.
-    @AppStorage("moneyManagerAccount") private var moneyManagerAccount = "Cash"
     /// "Store detailed debug info" (Settings › Debug). Off by default — see
     /// `DebugInfoStore` for what turning it on actually keeps around.
     @AppStorage(DebugInfoStore.enabledKey) private var storeDetailedDebugInfo = false
@@ -527,20 +524,6 @@ struct SettingsView: View {
                     Toggle("Save details file", isOn: $includeDetailsJSON)
                 } footer: {
                     Text("Store a .json alongside each synced receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
-                }
-
-                // Premium: only shown when the Money Manager export is available,
-                // so free users never see a setting for a feature they can't reach.
-                if Entitlements.isPremium {
-                    Section {
-                        TextField("Account name", text: $moneyManagerAccount)
-                            .textInputAutocapitalization(.words)
-                            .autocorrectionDisabled()
-                    } header: {
-                        Text("Money Manager Export")
-                    } footer: {
-                        Text("Receipts you export for the Money Manager app land in this account — use the exact account name from that app. Item categories are exported best-effort; you may need to match them in Money Manager after importing.")
-                    }
                 }
 
                 storageSection
