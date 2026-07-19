@@ -20,7 +20,7 @@ struct DataDumpView: View {
             } header: {
                 Text("UserDefaults (\(dump.userDefaults.count))")
             } footer: {
-                Text("App settings: sync toggles, GitHub repo config. No receipt data.")
+                Text("App settings: export toggles, GitHub repo config. No receipt data.")
             }
 
             Section {

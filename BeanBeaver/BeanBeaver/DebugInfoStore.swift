@@ -174,14 +174,14 @@ enum DebugInfoStore {
                     receipt: nil, error: String(describing: error)))
     }
 
-    /// Record a ledger sync/export failure — `message` is already the
+    /// Record a ledger export failure — `message` is already the
     /// user-facing string (same `(error as? LocalizedError)?.errorDescription
     /// ?? error.localizedDescription` the call sites use), so this carries
     /// whatever request context that message was built with. No-op unless the
     /// setting is on.
-    static func recordSyncFailure(context: String, message: String) {
+    static func recordExportFailure(context: String, message: String) {
         guard isEnabled else { return }
-        write(Entry(generatedAt: Date(), outcome: "sync_failed", environment: .current,
+        write(Entry(generatedAt: Date(), outcome: "export_failed", environment: .current,
                     receipt: nil, error: "\(context): \(message)"))
     }
 

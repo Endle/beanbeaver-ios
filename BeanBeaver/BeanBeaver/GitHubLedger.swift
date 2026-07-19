@@ -56,7 +56,7 @@ final class GitHubLedger: LedgerDestination {
     func append(_ entries: [LedgerEntry],
                 progress: @escaping LedgerProgressReporter) async throws -> LedgerExportOutcome {
         guard isConfigured else {
-            throw LedgerExportError("GitHub isn't fully set up. Connect and pick a repo in Settings › Sync.")
+            throw LedgerExportError("GitHub isn't fully set up. Connect and pick a repo in Settings › Export.")
         }
         let filings = try entries.map(Filing.init)
         let cfg = Config(owner: owner.trimmed, repo: repo.trimmed, token: token.trimmed)

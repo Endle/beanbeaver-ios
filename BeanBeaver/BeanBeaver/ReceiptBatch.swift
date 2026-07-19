@@ -12,7 +12,7 @@ import UIKit
 // synthesis can't reach them from here (it only works in the declaring file).
 // These conformances are written out by hand so a parsed batch can be stored
 // and come back whole — including `beancount`, `beanbeaverId` and
-// `documentRelpath`, which `ReceiptExportJSON` drops and which a later sync
+// `documentRelpath`, which `ReceiptExportJSON` drops and which a later export
 // still needs.
 //
 // `@retroactive` because these types belong to BBReceiptKit: if the generated
@@ -167,7 +167,7 @@ extension ReceiptResult {
     /// Whether this parse is worth a second look before it lands in a ledger:
     /// the parser flagged something, the merchant is only a guess, or an item
     /// came back with no classification. Drives the row's badge — never blocks
-    /// a sync, since the user may well be fine with it.
+    /// an export, since the user may well be fine with it.
     var needsAttention: Bool {
         if !warnings.isEmpty { return true }
         if case .suggested = merchantMatch.status { return true }
@@ -228,7 +228,7 @@ struct ReceiptDraft: Identifiable, Codable {
 // MARK: - Batch
 
 /// The pending photo-library import: a queue of receipts to parse, review, and
-/// sync in one go. Survives relaunch (see `ReceiptBatch.fileURL`), so the
+/// export in one go. Survives relaunch (see `ReceiptBatch.fileURL`), so the
 /// interesting states are the ones that outlive a process.
 ///
 /// Separate from `ReceiptPipeline`, which drives the single camera scan — they
@@ -244,7 +244,7 @@ final class ReceiptBatch {
     /// When the oldest receipt still here was added; nil when empty.
     ///
     /// Derived rather than stored, because a stored stamp outlives its own
-    /// batch: syncing drains what parsed but leaves failures behind, so a stamp
+    /// batch: exporting drains what parsed but leaves failures behind, so a stamp
     /// pinned to the original import would go on dating a pile that is by then
     /// mostly new photos. Taking it from the drafts keeps it true by
     /// construction.
@@ -292,14 +292,14 @@ final class ReceiptBatch {
         drafts.filter { if case .failed = $0.state { return true } else { return false } }.count
     }
 
-    /// Parsed receipts the user probably wants to look at before syncing.
+    /// Parsed receipts the user probably wants to look at before exporting.
     var needsAttentionCount: Int {
         drafts.filter { $0.state.result?.needsAttention == true }.count
     }
 
     /// Every parsed receipt as a ledger entry, oldest first. The photo is read
     /// back off disk here so its `document:` link resolves on the far side.
-    var syncableEntries: [LedgerEntry] {
+    var exportableEntries: [LedgerEntry] {
         drafts.compactMap { draft in
             guard let result = draft.state.result else { return nil }
             return LedgerEntry.make(from: result,
@@ -309,7 +309,7 @@ final class ReceiptBatch {
     }
 
     /// Every parsed receipt's result, oldest first — the raw parses a Money
-    /// Manager export turns into spreadsheet rows. Unlike ``syncableEntries`` this
+    /// Manager export turns into spreadsheet rows. Unlike ``exportableEntries`` this
     /// needs no ledger entry or photo, and exporting it doesn't drain the batch.
     var parsedResults: [ReceiptResult] {
         drafts.compactMap { $0.state.result }
@@ -362,7 +362,7 @@ final class ReceiptBatch {
         save()
     }
 
-    /// Throw the whole batch away — the only bulk exit other than syncing, and
+    /// Throw the whole batch away — the only bulk exit other than exporting, and
     /// the one that makes a batch of receipts that will never parse endable.
     /// Cancels any scan in flight: no point finishing one for a draft that's
     /// going anyway.
@@ -373,10 +373,10 @@ final class ReceiptBatch {
         save()
     }
 
-    /// Drop everything that parsed — what a successful sync drains.
+    /// Drop everything that parsed — what a successful export drains.
     ///
     /// Photos deliberately stay for `Clear Old Receipts`: they're in the ledger
-    /// now, and what to keep after a sync is the cleanup workflow that hasn't
+    /// now, and what to keep after an export is the cleanup workflow that hasn't
     /// been designed yet. Leaving the batch is what makes them collectable.
     func removeParsed() {
         drafts.removeAll { $0.state.result != nil }
@@ -481,7 +481,7 @@ final class ReceiptBatch {
         let fm = FileManager.default
         drafts = stored.drafts.compactMap { draft in
             // The photo is the source of truth, so a draft without one is
-            // unusable — and syncing it anyway would write a `document:` link
+            // unusable — and exporting it anyway would write a `document:` link
             // to a file that never gets uploaded. Only reachable if the support
             // directory was cleared out from under us (a restore, say), in
             // which case the originals are still in the user's photo library.

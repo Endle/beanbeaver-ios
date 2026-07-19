@@ -53,8 +53,8 @@ struct ContentView: View {
         return nil
     }
 
-    /// Pending-count suffix for the import button, mirroring the Sync button's
-    /// "Sync:…" indicator so a batch left half-done is visible from home
+    /// Pending-count suffix for the import button, mirroring the Export button's
+    /// "Export:…" indicator so a batch left half-done is visible from home
     /// without inventing a second idiom for it.
     private var batchBadge: String {
         batch.isEmpty ? "" : " (\(batch.drafts.count))"
@@ -62,7 +62,7 @@ struct ContentView: View {
 
     /// Every capture "Clear Old Receipts" must spare: the photo behind the
     /// result currently on screen, plus every photo the pending batch still
-    /// needs to parse, review, or sync.
+    /// needs to parse, review, or export.
     private var keptCaptureFilenames: Set<String> {
         var kept = batch.liveCaptureFilenames
         if let name = pipeline.capturedImageURL?.lastPathComponent { kept.insert(name) }
@@ -77,8 +77,8 @@ struct ContentView: View {
         do {
             moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: results))
         } catch {
-            DebugInfoStore.recordSyncFailure(context: "Money Manager export",
-                                             message: error.localizedDescription)
+            DebugInfoStore.recordExportFailure(context: "Money Manager export",
+                                               message: error.localizedDescription)
         }
     }
 
@@ -267,7 +267,7 @@ struct ContentView: View {
                 if let count = BatchRunner.argValue("-seedPhotoBatch").flatMap(Int.init) {
                     await batch.seedFromBundledSample(count: count)
                 }
-                if ProcessInfo.processInfo.arguments.contains("-fakeSyncProgress") {
+                if ProcessInfo.processInfo.arguments.contains("-fakeExportProgress") {
                     Task { await exporter.simulateProgress() }
                 }
                 if ProcessInfo.processInfo.arguments.contains("-discardBatch") {
@@ -282,9 +282,9 @@ struct ContentView: View {
             .task { LaunchTiming.recordFirstFrame() }
         }
         // Outside the NavigationStack on purpose. Attached to the stack's content
-        // it anchors to the home screen, so a sync started from the pushed batch
+        // it anchors to the home screen, so an export started from the pushed batch
         // page tried to present from a covered view and the confirmation arrived
-        // seconds late — long after the page had reacted to the sync finishing.
+        // seconds late — long after the page had reacted to the export finishing.
         .alert(exporter.result?.title ?? "", isPresented: Binding(
             get: { exporter.result != nil },
             set: { if !$0 { exporter.result = nil } }
@@ -346,7 +346,7 @@ struct ContentView: View {
                 Button {
                     showLedgerSettings = true
                 } label: {
-                    Label("Sync:\(exporter.syncIndicator)", systemImage: "arrow.triangle.2.circlepath")
+                    Label("Export:\(exporter.exportIndicator)", systemImage: "arrow.triangle.2.circlepath")
                         .font(.headline)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
@@ -354,7 +354,7 @@ struct ContentView: View {
                         .padding(.vertical, 6)
                 }
                 .buttonStyle(.bordered)
-                .tint(exporter.syncTint)
+                .tint(exporter.exportTint)
                 .controlSize(.large)
 
                 Button {
@@ -367,7 +367,7 @@ struct ContentView: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "lock.shield")
-                Text("Receipts are scanned and parsed on your device. Nothing leaves it unless you sync — and then only to your own ledger.")
+                Text("Receipts are scanned and parsed on your device. Nothing leaves it unless you export — and then only to your own ledger.")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -502,7 +502,7 @@ struct OriginReceiptView: View {
 
 struct SettingsView: View {
     @Binding var saveScansToPhotos: Bool
-    /// Whether a `.json` details sidecar is written next to each synced receipt.
+    /// Whether a `.json` details sidecar is written next to each exported receipt.
     /// Shares its key with `LedgerFileOptions.includeDetailsJSON`, which the
     /// export path reads. Default on.
     @AppStorage("includeDetailsJSON") private var includeDetailsJSON = true
@@ -537,7 +537,7 @@ struct SettingsView: View {
                 Section {
                     Toggle("Save details file", isOn: $includeDetailsJSON)
                 } footer: {
-                    Text("Store a .json alongside each synced receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
+                    Text("Store a .json alongside each exported receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
                 }
 
                 storageSection
@@ -583,7 +583,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Debug")
                 } footer: {
-                    Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger syncs, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.")
+                    Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.")
                 }
                 .id("debug")
             }
@@ -664,8 +664,8 @@ struct SettingsView: View {
 
 /// The parsed receipt itself — merchant, totals, items, warnings, and the
 /// generated beancount. Shared by the single-scan result screen and the batch
-/// detail, which differ only in the actions sitting under it: a batch syncs as
-/// a whole, so its rows have no sync button of their own.
+/// detail, which differ only in the actions sitting under it: a batch exports as
+/// a whole, so its rows have no export button of their own.
 struct ReceiptCard: View {
     let result: ReceiptResult
     var wallMs: Double?
@@ -883,22 +883,22 @@ struct ReceiptResultView: View {
 
             VStack(spacing: 8) {
                 Button {
-                    Task { await primarySync() }
+                    Task { await primaryExport() }
                 } label: {
-                    SyncButtonLabel(idleLabel: "Sync:\(exporter.syncIndicator)", exporter: exporter)
+                    ExportButtonLabel(idleLabel: "Export:\(exporter.exportIndicator)", exporter: exporter)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(exporter.syncTint)
+                .tint(exporter.exportTint)
                 .controlSize(.large)
-                // See the batch page's sync button: staying enabled keeps the
+                // See the batch page's export button: staying enabled keeps the
                 // fill and the white spinner legible while it runs.
                 .allowsHitTesting(exporter.runningKind == nil)
 
                 // Secondary escape hatch: other configured destinations, Share/Copy,
-                // and Sync Settings — the primary button above fires the first
+                // and Export Settings — the primary button above fires the first
                 // configured destination directly, no picker in the way. Always
                 // shown, even with nothing configured yet, so Share/Copy and
-                // Set Up Sync… stay reachable.
+                // Set Up Export… stay reachable.
                 Menu {
                     LedgerExportButtons(result: result,
                                         imageURL: capturedImageURL,
@@ -918,12 +918,12 @@ struct ReceiptResultView: View {
         }
     }
 
-    /// Sends the receipt to the selected exporter: an append to its ledger
+    /// Sends the receipt to the selected target: an append to its ledger
     /// destination, or — for Money Manager — the share-sheet Excel export. Falls
-    /// back to opening the Sync page when the exporter isn't ready (destination
+    /// back to opening the Export page when the target isn't ready (destination
     /// unconfigured, or premium locked).
-    private func primarySync() async {
-        if let kind = exporter.selectedExporter.ledgerKind {
+    private func primaryExport() async {
+        if let kind = exporter.selectedTarget.ledgerKind {
             guard exporter.destination(for: kind).isConfigured else { onConfigure(); return }
             let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL, wallMs: wallMs)
             await exporter.export([entry], to: kind)

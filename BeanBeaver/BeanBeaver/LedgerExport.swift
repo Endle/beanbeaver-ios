@@ -84,14 +84,14 @@ struct ReceiptExportJSON: Encodable {
     }
 }
 
-/// A sync button's contents: normally its label, and while an export runs, what
-/// that export is actually doing. Shared by the single-scan result screen and
-/// the batch page so the two can't drift.
+/// An export button's contents: normally its label, and while an export runs,
+/// what that export is actually doing. Shared by the single-scan result screen
+/// and the batch page so the two can't drift.
 ///
 /// The live message matters more than it looks — a batch is tens of seconds of
 /// sequential network calls, and a spinner alone doesn't distinguish "working"
 /// from "wedged".
-struct SyncButtonLabel: View {
+struct ExportButtonLabel: View {
     let idleLabel: String
     var exporter: LedgerExporter
 
@@ -99,7 +99,7 @@ struct SyncButtonLabel: View {
         HStack(spacing: 8) {
             if exporter.runningKind != nil {
                 ProgressView().tint(.white)
-                Text(exporter.runningMessage ?? "Syncing…")
+                Text(exporter.runningMessage ?? "Exporting…")
                     .font(.subheadline)
                     .lineLimit(1)
                     .contentTransition(.opacity)
@@ -116,7 +116,7 @@ struct SyncButtonLabel: View {
     }
 }
 
-/// Read-only preview of the `.json` sidecar a sync would attach — lets the
+/// Read-only preview of the `.json` sidecar an export would attach — lets the
 /// user check the raw parse (and share/copy it) without actually exporting,
 /// even when `LedgerFileOptions.includeDetailsJSON` is off.
 struct ReceiptJSONView: View {
@@ -269,7 +269,7 @@ enum LedgerDestinationKind: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Compact label for the home screen's "Sync:" indicator.
+    /// Compact label for the home screen's "Export:" indicator.
     var shortTitle: String {
         switch self {
         case .filesInbox: return "Files"
@@ -295,13 +295,13 @@ enum LedgerDestinationKind: String, CaseIterable, Identifiable {
     }
 }
 
-/// A downstream receiver the Sync page can target — the "where do receipts go"
-/// choice the home screen's "Sync:" indicator reflects and the primary Sync
+/// A downstream receiver the Export page can target — the "where do receipts go"
+/// choice the home screen's "Export:" indicator reflects and the primary Export
 /// button acts on. Broader than `LedgerDestinationKind`: Money Manager is a
 /// share-sheet Excel export, not an async ledger append, so its `ledgerKind` is
-/// nil. Add a new receiver as a case here and the Sync page renders it, the
+/// nil. Add a new receiver as a case here and the Export page renders it, the
 /// picker lists it, and the indicators pick it up — no other wiring per site.
-enum SyncExporter: String, CaseIterable, Identifiable {
+enum ExportTarget: String, CaseIterable, Identifiable {
     case github
     case moneyManager
 
@@ -323,7 +323,7 @@ enum SyncExporter: String, CaseIterable, Identifiable {
     }
 
     /// The async ledger destination this maps to, or nil for a share-sheet export
-    /// (Money Manager) — which is what tells the primary action whether "sync"
+    /// (Money Manager) — which is what tells the primary action whether "export"
     /// means an append or presenting a file to share.
     var ledgerKind: LedgerDestinationKind? {
         switch self {
@@ -384,13 +384,13 @@ final class LedgerExporter {
     var filesInbox = FilesLedgerInbox()
     var github = GitHubLedger()
 
-    /// The receiver the Sync page has selected — the target of the primary Sync
-    /// button and what the home "Sync:" indicator shows. Persisted so it survives
-    /// relaunch; observable so the indicator updates the moment it changes.
-    var selectedExporter: SyncExporter = SyncExporter(
-        rawValue: UserDefaults.standard.string(forKey: SyncExporter.storageKey) ?? ""
+    /// The receiver the Export page has selected — the target of the primary
+    /// Export button and what the home "Export:" indicator shows. Persisted so it
+    /// survives relaunch; observable so the indicator updates the moment it changes.
+    var selectedTarget: ExportTarget = ExportTarget(
+        rawValue: UserDefaults.standard.string(forKey: ExportTarget.storageKey) ?? ""
     ) ?? .github {
-        didSet { UserDefaults.standard.set(selectedExporter.rawValue, forKey: SyncExporter.storageKey) }
+        didSet { UserDefaults.standard.set(selectedTarget.rawValue, forKey: ExportTarget.storageKey) }
     }
 
     /// The backend currently running an export (for a per-button spinner), or nil.
@@ -412,8 +412,8 @@ final class LedgerExporter {
     }
 
 #if DEBUG
-    /// Walk the sync button through a realistic run without a configured
-    /// backend, so the running state can be seen headlessly (`-fakeSyncProgress`).
+    /// Walk the export button through a realistic run without a configured
+    /// backend, so the running state can be seen headlessly (`-fakeExportProgress`).
     /// Lives here because `runningKind`/`runningMessage` are `private(set)`.
     func simulateProgress() async {
         runningKind = .githubPR
@@ -431,7 +431,7 @@ final class LedgerExporter {
             try? await Task.sleep(for: .seconds(2))
         }
         // Ends by publishing a result, so the confirmation's presentation can be
-        // checked from wherever the sync was started — the alert used to anchor
+        // checked from wherever the export was started — the alert used to anchor
         // to the home screen and arrive late when it was the batch page.
         result = Result(title: "Pull request opened",
                         message: "https://github.com/Endle/my_beancount_record/pull/6",
@@ -452,26 +452,26 @@ final class LedgerExporter {
         LedgerDestinationKind.allCases.filter { destination(for: $0).isConfigured }
     }
 
-    /// Whether the selected exporter can receive right now — a configured ledger
+    /// Whether the selected target can receive right now — a configured ledger
     /// destination, or premium unlocked for the Money Manager share export.
-    var selectedExporterReady: Bool {
-        if let kind = selectedExporter.ledgerKind { return destination(for: kind).isConfigured }
+    var selectedTargetReady: Bool {
+        if let kind = selectedTarget.ledgerKind { return destination(for: kind).isConfigured }
         return Entitlements.isPremium
     }
 
-    /// Label for a "Sync:" button — the selected exporter's name, with a lock
+    /// Label for an "Export:" button — the selected target's name, with a lock
     /// when it's premium and not yet unlocked. Shared by the home screen and the
     /// result screen so they never drift.
-    var syncIndicator: String {
-        var label = selectedExporter.label
-        if selectedExporter.requiresPremium && !Entitlements.isPremium { label += " 🔒" }
+    var exportIndicator: String {
+        var label = selectedTarget.label
+        if selectedTarget.requiresPremium && !Entitlements.isPremium { label += " 🔒" }
         return label
     }
 
-    /// Green once the selected exporter is ready (matches the platform's
+    /// Green once the selected target is ready (matches the platform's
     /// "connected" convention), grey while it still needs setup/unlock.
-    var syncTint: Color {
-        selectedExporterReady ? .green : .secondary
+    var exportTint: Color {
+        selectedTargetReady ? .green : .secondary
     }
 
     /// Send `entries` to `kind`, publishing a confirmation (or a failure) for the
@@ -496,7 +496,7 @@ final class LedgerExporter {
             return true
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            DebugInfoStore.recordSyncFailure(context: "export to \(kind.shortTitle)", message: message)
+            DebugInfoStore.recordExportFailure(context: "export to \(kind.shortTitle)", message: message)
             result = Result(title: "Export failed", message: message,
                             openURL: nil, isError: true)
             return false
