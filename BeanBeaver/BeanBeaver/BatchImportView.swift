@@ -41,16 +41,17 @@ struct BatchImportView: View {
         .tint(.bbAccent)
         .toolbar {
             if !batch.isEmpty {
+                // One overflow menu instead of a separate + and ⋯: adding more
+                // photos and discarding the batch are the only batch-level
+                // actions here. Money Manager export lives on the bottom Sync
+                // button (via the selected exporter), not up here.
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        if Entitlements.isPremium {
-                            Button {
-                                presentMoneyManager()
-                            } label: {
-                                Label("Export to Money Manager", systemImage: "tablecells")
-                            }
-                            .disabled(batch.parsedResults.isEmpty)
+                        addPhotosPicker {
+                            Label("Add Photos", systemImage: "photo.badge.plus")
                         }
+
+                        Divider()
 
                         Button(role: .destructive) {
                             confirmDiscard = true
@@ -59,11 +60,6 @@ struct BatchImportView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    addPhotosPicker {
-                        Image(systemName: "plus")
                     }
                 }
             }
