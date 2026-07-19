@@ -14,6 +14,14 @@ struct LedgerSettingsView: View {
     @State private var connection = GitHubConnection()
     @State private var codeCopied = false
     @State private var repoState: RepoState = .idle
+    /// Live write-access check for the selected repo (picker or hand-typed),
+    /// shown as the green "Ready" / amber / red status under the Repository row.
+    @State private var access: AccessCheck = .idle
+    /// The signed-in account's login, for the "Connected as @…" line.
+    @State private var accountLogin: String?
+    /// Set when we hand off to GitHub's install page from Advanced, so returning
+    /// reloads the repo list — and only then, not on every incidental foreground.
+    @State private var didOpenInstall = false
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -24,6 +32,13 @@ struct LedgerSettingsView: View {
     private enum RepoState {
         case idle, loading
         case loaded([GitHubApp.Repo])
+        case failed(String)
+    }
+
+    private enum AccessCheck: Equatable {
+        case idle, checking
+        case ok(branch: String)
+        case noWrite
         case failed(String)
     }
 
@@ -72,20 +87,33 @@ struct LedgerSettingsView: View {
                 Button("Done") { dismiss() }
             }
         }
-        // Keyed on the token so the list loads once connected, and clears on
-        // disconnect — without it the rows would sit stale behind a signed-out
-        // account.
+        // Keyed on the token: load the account + repos once connected, and clear
+        // them on disconnect so nothing sits stale behind a signed-out account.
         .task(id: exporter.github.token) {
-            guard isGitHubConnected else { repoState = .idle; return }
+            guard isGitHubConnected else {
+                repoState = .idle; accountLogin = nil; return
+            }
+            accountLogin = try? await GitHubApp.fetchLogin(token: exporter.github.token)
             await loadRepos()
         }
-        // Coming back from the browser after installing — re-check the app's
-        // installation automatically so the user doesn't have to tap "I've
-        // Installed It". Gated to the install step, so returning from the earlier
-        // authorize step (still polling for the token) never triggers it.
+        // Auto-verify whatever repo is selected (picker or typed by hand) so the
+        // user gets an affirmative "Ready — PRs target <branch>" instead of
+        // discovering a bad choice as a 404 at export time. Re-runs on every
+        // connection/repo change; `verifyAccess` debounces manual typing.
+        .task(id: accessKey) {
+            await verifyAccess()
+        }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active, case .needsInstall = connection.phase {
+            guard newPhase == .active else { return }
+            if case .needsInstall = connection.phase {
+                // Returned from installing during the connect flow — finish
+                // automatically, no "I've Installed It" tap needed.
                 connection.recheckInstallation()
+            } else if didOpenInstall, isGitHubConnected {
+                // Returned from "Install on Another Repository…" — pull the updated
+                // list so the new repo is selectable without a manual Refresh.
+                didOpenInstall = false
+                Task { await loadRepos() }
             }
         }
         // .fileImporter(isPresented: $showFileImporter,
@@ -126,14 +154,15 @@ struct LedgerSettingsView: View {
 
     // MARK: - GitHub
 
-    /// The whole GitHub destination as one flat card: connection, repository,
-    /// then the occasional actions.
+    /// The whole GitHub destination: the authorized account (axis 1), the repo it
+    /// writes to with its verified status (axis 2), then the escape hatches folded
+    /// into Advanced.
     private var gitHubSection: some View {
         Section {
             if isGitHubConnected {
-                gitHubConnectedRows   // 1
-                repositoryRow         // 2
-                repoActionRows        // 3+
+                accountRow          // who: the authorized account
+                repositoryRow       // where: the repo + its auto-verified status
+                advancedSection     // escape hatches: install elsewhere, type by hand
             } else {
                 gitHubConnectFlow
             }
@@ -194,70 +223,147 @@ struct LedgerSettingsView: View {
     /// The repo, or a generic fallback for the install prompt.
     private var repoLabel: String { chosenRepo ?? "your ledger repo" }
 
-    /// Account status + disconnect, shown once a token is stored.
+    /// Re-verify whenever the connection or the chosen repo changes.
+    private var accessKey: String { "\(isGitHubConnected)|\(chosenRepo ?? "")" }
+
+    /// Axis 1 — the authorized account: who BeanBeaver acts as, plus disconnect.
+    /// Kept distinct from the repository below (axis 2), which is a separate grant.
     @ViewBuilder
-    private var gitHubConnectedRows: some View {
+    private var accountRow: some View {
         HStack {
-            Label("GitHub connected", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            Label {
+                Text(accountLogin.map { "Connected as @\($0)" } ?? "GitHub connected")
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            }
             Spacer()
             Button("Disconnect", role: .destructive) {
                 connection.cancel()
                 exporter.github.token = ""
+                accountLogin = nil
+                access = .idle
             }
         }
     }
 
-    /// Which repo to write to: one row that opens a menu of the repos BeanBeaver
-    /// is installed on. The installation *is* the per-repo write grant, so every
-    /// option is known-writable and choosing one needs no follow-up check. The
-    /// path each receipt lands at within the repo is fixed
-    /// (`GitHubLedger.rootDir`), so it isn't asked for.
+    /// Axis 2 — which repo to write to: a menu of the repos BeanBeaver is
+    /// installed on, a refresh at the trailing edge, and the auto-verified status
+    /// beneath. Installation *is* the write grant, so listed repos are known
+    /// writable; the status still runs, both to show the PR target branch and to
+    /// catch a repo that isn't actually reachable before export time.
     @ViewBuilder
     private var repositoryRow: some View {
-        switch repoState {
-        case .idle, .loading:
-            LabeledContent("Repository") {
-                HStack(spacing: 6) { ProgressView(); Text("Loading…").foregroundStyle(.secondary) }
-            }
-        case .failed(let message):
-            LabeledContent("Repository", value: chosenRepo ?? "Unavailable")
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red).font(.footnote)
-            Button("Try Again") { Task { await loadRepos() } }
-        case .loaded(let repos):
-            if repos.isEmpty {
-                LabeledContent("Repository", value: "None installed")
-            } else {
-                Picker("Repository", selection: repoSelection) {
-                    Text("Choose…").tag(GitHubApp.Repo?.none)
-                    ForEach(repoOptions(repos)) { repo in
-                        Text(repo.fullName).tag(GitHubApp.Repo?.some(repo))
-                    }
+        HStack(spacing: 12) {
+            Text("Repository")
+            Spacer(minLength: 8)
+            switch repoState {
+            case .idle, .loading:
+                Text("Loading…").foregroundStyle(.secondary)
+            case .failed:
+                Text(repoSelection.wrappedValue?.fullName ?? "Unavailable")
+                    .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            case .loaded(let repos):
+                if repos.isEmpty && repoSelection.wrappedValue == nil {
+                    Text("None installed").foregroundStyle(.secondary)
+                } else {
+                    repoMenu(repos)
                 }
             }
+            refreshControl
+        }
+        // The installation list itself failed to load — say why, right under the
+        // row. The refresh control doubles as the retry.
+        if case .failed(let message) = repoState {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red).font(.footnote)
+        }
+        accessStatus
+    }
+
+    /// The repo dropdown as a `Menu` (not a full-row `Picker`) so a trailing
+    /// refresh button can share the row — `.borderless` keeps the two tappable
+    /// independently inside the List row.
+    private func repoMenu(_ repos: [GitHubApp.Repo]) -> some View {
+        Menu {
+            Picker("Repository", selection: repoSelection) {
+                Text("Choose…").tag(GitHubApp.Repo?.none)
+                ForEach(repoOptions(repos)) { repo in
+                    Text(repo.fullName).tag(GitHubApp.Repo?.some(repo))
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(repoSelection.wrappedValue?.fullName ?? "Choose…")
+                    .lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(repoSelection.wrappedValue == nil ? Color.accentColor : .secondary)
+                Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.borderless)
+    }
+
+    /// A spinner while the list loads, otherwise the refresh/retry button.
+    @ViewBuilder
+    private var refreshControl: some View {
+        switch repoState {
+        case .idle, .loading:
+            ProgressView()
+        case .loaded, .failed:
+            Button {
+                Task { await loadRepos() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Refresh repository list")
         }
     }
 
-    /// The occasional actions — rare next to picking a repo, so they sit below it.
+    /// The affirmative status under the Repository row: green once the selected
+    /// repo is confirmed writable (with its PR target branch), amber/red when it
+    /// isn't. Empty until a repo is chosen.
     @ViewBuilder
-    private var repoActionRows: some View {
-        if let installURL = GitHubApp.installURL {
-            Button {
-                openURL(installURL)
-            } label: {
-                Label("Install on Another Repository…", systemImage: "square.and.arrow.down")
+    private var accessStatus: some View {
+        switch access {
+        case .idle:
+            EmptyView()
+        case .checking:
+            HStack(spacing: 6) { ProgressView(); Text("Checking access…").foregroundStyle(.secondary) }
+                .font(.footnote)
+        case .ok(let branch):
+            Label("Ready — pull requests will target \(branch).", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green).font(.footnote)
+        case .noWrite:
+            Label("Reachable, but no write access — install BeanBeaver on this repo with Contents + Pull requests write.",
+                  systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange).font(.footnote)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red).font(.footnote)
+        }
+    }
+
+    /// The escape hatches, tucked away since they're rare next to picking a repo:
+    /// grant a new repo on GitHub, or type an `owner/repo` the list can't show.
+    /// Both feed the same selection, so the Repository status above verifies them
+    /// — no separate Verify button.
+    @ViewBuilder
+    private var advancedSection: some View {
+        DisclosureGroup("Advanced") {
+            if let installURL = GitHubApp.installURL {
+                Button {
+                    didOpenInstall = true
+                    openURL(installURL)
+                } label: {
+                    Label("Install on Another Repository…", systemImage: "square.and.arrow.down")
+                }
             }
-        }
-        Button {
-            Task { await loadRepos() }
-        } label: {
-            Label("Refresh", systemImage: "arrow.clockwise")
-        }
-        NavigationLink {
-            ManualRepoEntryView(github: exporter.github)
-        } label: {
-            Label("Enter Manually…", systemImage: "keyboard")
+            TextField("Owner (you or an org)", text: $exporter.github.owner)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            TextField("Repository", text: $exporter.github.repo)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            Text("Type a repository by hand if it isn't in the list above.")
+                .font(.footnote).foregroundStyle(.secondary)
         }
     }
 
@@ -300,6 +406,29 @@ struct LedgerSettingsView: View {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             DebugInfoStore.recordExportFailure(context: "load GitHub repos", message: message)
             repoState = .failed(message)
+        }
+    }
+
+    /// Confirm the connected token can reach the selected repo and describe the
+    /// access — the source of the green "Ready" line. Debounced: manual typing
+    /// re-keys `accessKey` on every keystroke, and the sleep is cancelled when the
+    /// id changes, so only a repo left alone for a beat actually hits the network.
+    @MainActor
+    private func verifyAccess() async {
+        let owner = exporter.github.owner.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repo = exporter.github.repo.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isGitHubConnected, !owner.isEmpty, !repo.isEmpty else { access = .idle; return }
+        access = .checking
+        try? await Task.sleep(for: .milliseconds(400))
+        if Task.isCancelled { return }
+        do {
+            let result = try await GitHubApp.checkRepoAccess(
+                owner: owner, repo: repo, token: exporter.github.token)
+            access = result.canPush ? .ok(branch: result.defaultBranch) : .noWrite
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            DebugInfoStore.recordExportFailure(context: "verify repo access", message: message)
+            access = .failed(message)
         }
     }
 
@@ -373,91 +502,6 @@ struct LedgerSettingsView: View {
             guard exporter.github.owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   let login = try? await GitHubApp.fetchLogin(token: token) else { return }
             exporter.github.owner = login
-        }
-    }
-}
-
-/// Escape hatch: type `owner/repo` by hand. Needed when the list on the export
-/// screen can't show the repo — most likely a stale installation list. Nothing
-/// typed here proves the token can write to it, so unlike picking from that list
-/// this path keeps an access check.
-struct ManualRepoEntryView: View {
-    @Bindable var github: GitHubLedger
-    @State private var repoCheck: RepoCheck = .idle
-
-    private enum RepoCheck: Equatable {
-        case idle, checking
-        case ok(branch: String)
-        case failed(String)
-    }
-
-    var body: some View {
-        List {
-            Section {
-                TextField("Owner (you or an org)", text: $github.owner)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .onChange(of: github.owner) { repoCheck = .idle }
-                TextField("Repository", text: $github.repo)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .onChange(of: github.repo) { repoCheck = .idle }
-
-                Button {
-                    verifyRepoAccess()
-                } label: {
-                    HStack {
-                        Label("Verify Access", systemImage: "checkmark.shield")
-                        if repoCheck == .checking { Spacer(); ProgressView() }
-                    }
-                }
-                .disabled(verifyDisabled)
-                repoCheckStatus
-            } footer: {
-                Text("Type the owner and repository exactly as they appear on GitHub.")
-            }
-        }
-        .navigationTitle("Enter Manually")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    @ViewBuilder
-    private var repoCheckStatus: some View {
-        switch repoCheck {
-        case .ok(let branch):
-            Label("Ready — pull requests will target \(branch).", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green).font(.footnote)
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red).font(.footnote)
-        case .idle, .checking:
-            EmptyView()
-        }
-    }
-
-    private var verifyDisabled: Bool {
-        if repoCheck == .checking { return true }
-        return github.owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || github.repo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    /// Confirm the connected token can actually reach the entered repo, and show
-    /// the outcome (green ready / red reason).
-    private func verifyRepoAccess() {
-        let owner = github.owner.trimmingCharacters(in: .whitespacesAndNewlines)
-        let repo = github.repo.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !owner.isEmpty, !repo.isEmpty else { return }
-        repoCheck = .checking
-        Task { @MainActor in
-            do {
-                let access = try await GitHubApp.checkRepoAccess(
-                    owner: owner, repo: repo, token: github.token)
-                repoCheck = access.canPush
-                    ? .ok(branch: access.defaultBranch)
-                    : .failed("Reachable, but no write access. Install BeanBeaver on this repo with Contents + Pull requests write.")
-            } catch {
-                let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                DebugInfoStore.recordExportFailure(context: "verify repo access", message: message)
-                repoCheck = .failed(message)
-            }
         }
     }
 }
