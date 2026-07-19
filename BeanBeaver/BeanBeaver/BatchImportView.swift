@@ -41,16 +41,17 @@ struct BatchImportView: View {
         .tint(.bbAccent)
         .toolbar {
             if !batch.isEmpty {
+                // One overflow menu instead of a separate + and ⋯: adding more
+                // photos and discarding the batch are the only batch-level
+                // actions here. Money Manager export lives on the bottom Sync
+                // button (via the selected exporter), not up here.
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        if Entitlements.isPremium {
-                            Button {
-                                presentMoneyManager()
-                            } label: {
-                                Label("Export to Money Manager", systemImage: "tablecells")
-                            }
-                            .disabled(batch.parsedResults.isEmpty)
+                        addPhotosPicker {
+                            Label("Add Photos", systemImage: "photo.badge.plus")
                         }
+
+                        Divider()
 
                         Button(role: .destructive) {
                             confirmDiscard = true
@@ -61,19 +62,18 @@ struct BatchImportView: View {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    addPhotosPicker {
-                        Image(systemName: "plus")
-                    }
-                }
             }
         }
-        .confirmationDialog("Discard this batch?", isPresented: $confirmDiscard,
-                            titleVisibility: .visible) {
+        // A centered alert, not a confirmationDialog: the latter renders as a
+        // source-anchored popover on iPad/Mac, and since it's triggered from the
+        // (already-dismissed) overflow menu rather than a live button, that
+        // popover has no anchor and points at nothing. An alert has no anchor.
+        .alert("Discard this batch?", isPresented: $confirmDiscard) {
             Button("Discard \(batch.drafts.count) Receipt\(batch.drafts.count == 1 ? "" : "s")",
                    role: .destructive) {
                 batch.discardAll()
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("Removes every receipt waiting here, and its photo, from this device. "
                  + "Anything already synced to your ledger is untouched, and the originals "
