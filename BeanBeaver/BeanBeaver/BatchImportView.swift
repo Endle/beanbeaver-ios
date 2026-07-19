@@ -3,7 +3,7 @@ import PhotosUI
 import BBReceiptKit
 
 /// The photo-library import workspace: add a pile of receipts, watch them parse,
-/// look over what came back, then sync the lot in one go.
+/// look over what came back, then export the lot in one go.
 ///
 /// Deliberately not the camera flow — "Scan a Receipt" stays a single fast path
 /// for one receipt at the checkout counter. This is the sit-down-and-process-a-
@@ -17,9 +17,9 @@ struct BatchImportView: View {
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var isLoadingPicked = false
     @State private var confirmDiscard = false
-    /// A sync landed and its confirmation is up; the batch drains when that's
+    /// An export landed and its confirmation is up; the batch drains when that's
     /// dismissed. Lost if the app dies with the alert open, which leaves the
-    /// receipts in the batch — a re-sync then reports them already filed, which
+    /// receipts in the batch — a re-export then reports them already filed, which
     /// is recoverable with Discard Batch.
     @State private var awaitingConfirmation = false
     /// How many of the last selection were already in the batch — surfaced once,
@@ -43,8 +43,8 @@ struct BatchImportView: View {
             if !batch.isEmpty {
                 // One overflow menu instead of a separate + and ⋯: adding more
                 // photos and discarding the batch are the only batch-level
-                // actions here. Money Manager export lives on the bottom Sync
-                // button (via the selected exporter), not up here.
+                // actions here. Money Manager export lives on the bottom Export
+                // button (via the selected target), not up here.
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         addPhotosPicker {
@@ -76,7 +76,7 @@ struct BatchImportView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Removes every receipt waiting here, and its photo, from this device. "
-                 + "Anything already synced to your ledger is untouched, and the originals "
+                 + "Anything already exported to your ledger is untouched, and the originals "
                  + "stay in your photo library.")
         }
         .onChange(of: pickerItems) { _, items in
@@ -95,7 +95,7 @@ struct BatchImportView: View {
     }
 
     /// Export every parsed receipt in the batch to one Money Manager `.xlsx` and
-    /// present its share sheet. Non-destructive — unlike `sync()`, it leaves the
+    /// present its share sheet. Non-destructive — unlike `export()`, it leaves the
     /// batch in place. A temp-write failure is rare and non-fatal; it's captured
     /// for support rather than surfaced.
     private func presentMoneyManager() {
@@ -103,7 +103,7 @@ struct BatchImportView: View {
         do {
             moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: batch.parsedResults))
         } catch {
-            DebugInfoStore.recordSyncFailure(context: "Money Manager batch export",
+            DebugInfoStore.recordExportFailure(context: "Money Manager batch export",
                                              message: error.localizedDescription)
         }
     }
@@ -155,7 +155,7 @@ struct BatchImportView: View {
             }
             .listStyle(.insetGrouped)
 
-            syncFooter
+            exportFooter
         }
         .background(Color(.systemGroupedBackground))
     }
@@ -207,9 +207,9 @@ struct BatchImportView: View {
         }
     }
 
-    // MARK: - Sync
+    // MARK: - Export
 
-    private var syncFooter: some View {
+    private var exportFooter: some View {
         VStack(spacing: 8) {
             if batch.isParsing {
                 Button(role: .cancel) {
@@ -226,15 +226,15 @@ struct BatchImportView: View {
             }
 
             Button {
-                Task { await sync() }
+                Task { await export() }
             } label: {
-                SyncButtonLabel(idleLabel: syncLabel, exporter: exporter)
+                ExportButtonLabel(idleLabel: exportLabel, exporter: exporter)
             }
             .buttonStyle(.borderedProminent)
-            .tint(exporter.syncTint)
+            .tint(exporter.exportTint)
             .controlSize(.large)
             .disabled(batch.parsedCount == 0)
-            // Deliberately not `.disabled` while syncing: a disabled prominent
+            // Deliberately not `.disabled` while exporting: a disabled prominent
             // button renders washed out with its spinner greyed into the fill —
             // the exact "nothing is happening" look this is meant to fix. Block
             // the tap instead; `export` already refuses a second concurrent run.
@@ -247,26 +247,24 @@ struct BatchImportView: View {
         .background(.bar)
     }
 
-    private var syncLabel: String {
-        guard exporter.selectedExporterReady else { return "Set Up Sync…" }
+    private var exportLabel: String {
+        guard exporter.selectedTargetReady else { return "Set Up Export…" }
         let count = batch.parsedCount
-        // Money Manager is a share export, not a ledger append — say "Export".
-        let verb = exporter.selectedExporter.ledgerKind == nil ? "Export" : "Sync"
-        return count == 1 ? "\(verb) 1 Receipt" : "\(verb) \(count) Receipts"
+        return count == 1 ? "Export 1 Receipt" : "Export \(count) Receipts"
     }
 
-    /// Sends every parsed receipt to the selected exporter — one pull request or
+    /// Sends every parsed receipt to the selected target — one pull request or
     /// append for a ledger destination, or the Money Manager share export for the
-    /// whole batch. Ledger syncs only drain on success (a failure leaves the batch
+    /// whole batch. Ledger exports only drain on success (a failure leaves the batch
     /// to retry); the Money Manager export is non-destructive and never drains.
     ///
     /// Draining is deferred to `drainOnConfirmation` rather than done here: the
     /// confirmation is about to appear, and emptying the list out from under it
     /// reads as the receipts having vanished rather than having been filed.
-    private func sync() async {
-        if let kind = exporter.selectedExporter.ledgerKind {
+    private func export() async {
+        if let kind = exporter.selectedTarget.ledgerKind {
             guard exporter.destination(for: kind).isConfigured else { onConfigure(); return }
-            let entries = batch.syncableEntries
+            let entries = batch.exportableEntries
             guard !entries.isEmpty else { return }
             if await exporter.export(entries, to: kind) {
                 awaitingConfirmation = true
@@ -395,7 +393,7 @@ private struct FailedRow: View {
 
 // MARK: - Detail
 
-/// One receipt out of a batch. The card, and nothing that syncs — a batch goes
+/// One receipt out of a batch. The card, and nothing that exports — a batch goes
 /// to the ledger as a unit, so the only per-receipt actions here are looking at
 /// the photo behind the parse and throwing the parse away.
 struct BatchReceiptDetailView: View {

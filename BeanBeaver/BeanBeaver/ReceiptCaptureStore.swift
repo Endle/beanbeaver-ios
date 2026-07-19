@@ -10,7 +10,7 @@ import Foundation
 ///
 /// Application Support rather than `tmp`: the system purges `tmp` whenever the
 /// app isn't running, which for a batch that outlives a launch would strand it
-/// on missing photos — and a receipt synced without its photo still carries
+/// on missing photos — and a receipt exported without its photo still carries
 /// `document:` metadata pointing at a file that was never uploaded, so the
 /// user's ledger gets a silently broken link.
 enum ReceiptCaptureStore {
@@ -18,7 +18,7 @@ enum ReceiptCaptureStore {
 
     /// Created on first use and marked backup-excluded, both of which have to be
     /// done by hand: Application Support doesn't exist by default on iOS, and
-    /// leaving it in a backup would put receipt photos in iCloud. An unsynced
+    /// leaving it in a backup would put receipt photos in iCloud. An unexported
     /// batch is work-in-progress; the user's ledger is the archive.
     static let directory: URL = {
         let fm = FileManager.default
@@ -63,7 +63,7 @@ enum ReceiptCaptureStore {
 
     /// Delete every captured-receipt JPEG except the ones named in `keeping` —
     /// the photo currently on screen, plus every photo a pending batch still
-    /// needs to parse, review, or sync. Returns how many files were removed and
+    /// needs to parse, review, or export. Returns how many files were removed and
     /// how many bytes that freed, for the confirmation message.
     ///
     /// Matched on filename rather than `URL` equality: the two sides are built

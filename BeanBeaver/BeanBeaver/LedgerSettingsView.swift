@@ -8,7 +8,7 @@ import BBReceiptKit
 struct LedgerSettingsView: View {
     @Bindable var exporter: LedgerExporter
     // Ledger inbox file (Files/iCloud/Dropbox/…) is disabled for now — it will
-    // be back in a future version. GitHub PR is the only sync option meanwhile.
+    // be back in a future version. GitHub PR is the only export option meanwhile.
     // @State private var showFileImporter = false
     // @State private var importError: String?
     @State private var connection = GitHubConnection()
@@ -16,6 +16,7 @@ struct LedgerSettingsView: View {
     @State private var repoState: RepoState = .idle
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     /// Account the Money Manager export files its rows under. Key matches
     /// `MoneyManagerExport.accountKey`; default `MoneyManagerExport.defaultAccount`.
     @AppStorage("moneyManagerAccount") private var moneyManagerAccount = "Cash"
@@ -29,7 +30,7 @@ struct LedgerSettingsView: View {
     /// Label for an exporter in the picker — its name, plus a lock when it's a
     /// premium exporter that isn't unlocked yet (shown rather than hidden, so a
     /// GitHub-only user still sees Money Manager exists without any friction).
-    private func exporterLabel(_ option: SyncExporter) -> String {
+    private func exporterLabel(_ option: ExportTarget) -> String {
         var label = option.label
         if option.requiresPremium && !Entitlements.isPremium { label += " 🔒" }
         return label
@@ -42,8 +43,8 @@ struct LedgerSettingsView: View {
             // added rather than stacking every one's config. A menu picker keeps it
             // compact as the list grows past what segments could hold.
             Section {
-                Picker("Send receipts to", selection: $exporter.selectedExporter) {
-                    ForEach(SyncExporter.allCases) { option in
+                Picker("Export receipts to", selection: $exporter.selectedTarget) {
+                    ForEach(ExportTarget.allCases) { option in
                         Text(exporterLabel(option)).tag(option)
                     }
                 }
@@ -53,7 +54,7 @@ struct LedgerSettingsView: View {
             // Ledger inbox file (Files/iCloud/Dropbox/…) is disabled for now — it
             // will be back in a future version. Re-enable `filesSection` (and the
             // .fileImporter/.alert modifiers) to bring it back as another case.
-            switch exporter.selectedExporter {
+            switch exporter.selectedTarget {
             case .github:
                 gitHubSection
             case .moneyManager:
@@ -64,7 +65,7 @@ struct LedgerSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Ledger Sync")
+        .navigationTitle("Export")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -77,6 +78,15 @@ struct LedgerSettingsView: View {
         .task(id: exporter.github.token) {
             guard isGitHubConnected else { repoState = .idle; return }
             await loadRepos()
+        }
+        // Coming back from the browser after installing — re-check the app's
+        // installation automatically so the user doesn't have to tap "I've
+        // Installed It". Gated to the install step, so returning from the earlier
+        // authorize step (still polling for the token) never triggers it.
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active, case .needsInstall = connection.phase {
+                connection.recheckInstallation()
+            }
         }
         // .fileImporter(isPresented: $showFileImporter,
         //               allowedContentTypes: [.plainText, .text, .data]) { result in
@@ -141,7 +151,7 @@ struct LedgerSettingsView: View {
     }
 
     /// Money Manager (Realbyte) `.xlsx` export — a downstream output managed here
-    /// on the Sync page next to the ledger destinations. The export itself runs on
+    /// on the Export page next to the ledger destinations. The export itself runs on
     /// demand from a receipt's (or the batch's) share menu; this only configures
     /// the account its rows are filed under.
     private var moneyManagerSection: some View {
@@ -278,10 +288,17 @@ struct LedgerSettingsView: View {
     private func loadRepos() async {
         repoState = .loading
         do {
-            repoState = .loaded(try await GitHubApp.listInstallationRepos(token: exporter.github.token))
+            let repos = try await GitHubApp.listInstallationRepos(token: exporter.github.token)
+            repoState = .loaded(repos)
+            // Almost everyone installs on exactly one ledger repo — pick it so the
+            // common case needs no menu tap. Only fills an unset choice, so a repo
+            // the user already picked (or typed manually) is left alone.
+            if repos.count == 1, repoSelection.wrappedValue == nil {
+                repoSelection.wrappedValue = repos[0]
+            }
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            DebugInfoStore.recordSyncFailure(context: "load GitHub repos", message: message)
+            DebugInfoStore.recordExportFailure(context: "load GitHub repos", message: message)
             repoState = .failed(message)
         }
     }
@@ -360,7 +377,7 @@ struct LedgerSettingsView: View {
     }
 }
 
-/// Escape hatch: type `owner/repo` by hand. Needed when the list on the sync
+/// Escape hatch: type `owner/repo` by hand. Needed when the list on the export
 /// screen can't show the repo — most likely a stale installation list. Nothing
 /// typed here proves the token can write to it, so unlike picking from that list
 /// this path keeps an access check.
@@ -438,7 +455,7 @@ struct ManualRepoEntryView: View {
                     : .failed("Reachable, but no write access. Install BeanBeaver on this repo with Contents + Pull requests write.")
             } catch {
                 let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                DebugInfoStore.recordSyncFailure(context: "verify repo access", message: message)
+                DebugInfoStore.recordExportFailure(context: "verify repo access", message: message)
                 repoCheck = .failed(message)
             }
         }
@@ -467,7 +484,7 @@ struct ActivityView: UIViewControllerRepresentable {
 
 /// The set of export actions offered for a parsed result: one button per
 /// configured destination, a Money Manager `.xlsx` export, a Share fallback, and
-/// a shortcut to set up sync. Shared by the result card and the toolbar menu so
+/// a shortcut to set up export. Shared by the result card and the toolbar menu so
 /// they never drift.
 struct LedgerExportButtons: View {
     let result: ReceiptResult
@@ -519,7 +536,7 @@ struct LedgerExportButtons: View {
         Button {
             onConfigure()
         } label: {
-            Label(exporter.configuredKinds.isEmpty ? "Set Up Sync…" : "Sync Settings…",
+            Label(exporter.configuredKinds.isEmpty ? "Set Up Export…" : "Export Settings…",
                   systemImage: "gearshape")
         }
     }

@@ -51,7 +51,7 @@ final class FilesLedgerInbox: LedgerDestination {
     func append(_ entries: [LedgerEntry],
                 progress: @escaping LedgerProgressReporter) async throws -> LedgerExportOutcome {
         guard let bookmark else {
-            throw LedgerExportError("No ledger file chosen yet. Pick one in Settings › Sync.")
+            throw LedgerExportError("No ledger file chosen yet. Pick one in Settings › Export.")
         }
         // Local file IO, so this is quick — one message is enough to fill the
         // moment rather than leave a bare spinner.
