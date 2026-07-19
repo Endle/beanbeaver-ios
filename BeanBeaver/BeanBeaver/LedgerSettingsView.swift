@@ -253,15 +253,24 @@ struct LedgerSettingsView: View {
     /// catch a repo that isn't actually reachable before export time.
     @ViewBuilder
     private var repositoryRow: some View {
-        HStack(spacing: 12) {
-            Text("Repository")
-            Spacer(minLength: 8)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Repository")
+                Spacer()
+                refreshControl
+            }
+            // Show the repo the receipts land in. Try to write down the FULL
+            // "owner/repo": give it the whole row width and let it wrap to two or
+            // more lines rather than middle-truncate to "owner/rea…name" — the
+            // repo name is the one thing here the user most needs to read in full
+            // to confirm their choice, so height is cheaper than hiding it.
             switch repoState {
             case .idle, .loading:
                 Text("Loading…").foregroundStyle(.secondary)
             case .failed:
                 Text(repoSelection.wrappedValue?.fullName ?? "Unavailable")
-                    .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             case .loaded(let repos):
                 if repos.isEmpty && repoSelection.wrappedValue == nil {
                     Text("None installed").foregroundStyle(.secondary)
@@ -269,7 +278,6 @@ struct LedgerSettingsView: View {
                     repoMenu(repos)
                 }
             }
-            refreshControl
         }
         // The installation list itself failed to load — say why, right under the
         // row. The refresh control doubles as the retry.
@@ -280,9 +288,10 @@ struct LedgerSettingsView: View {
         accessStatus
     }
 
-    /// The repo dropdown as a `Menu` (not a full-row `Picker`) so a trailing
-    /// refresh button can share the row — `.borderless` keeps the two tappable
-    /// independently inside the List row.
+    /// The repo dropdown as a `Menu` (not a full-row `Picker`) so its label can
+    /// take the full row width and wrap to the complete repo name, and so it stays
+    /// independently tappable from the refresh button in the same List row
+    /// (`.borderless`).
     private func repoMenu(_ repos: [GitHubApp.Repo]) -> some View {
         Menu {
             Picker("Repository", selection: repoSelection) {
@@ -292,12 +301,17 @@ struct LedgerSettingsView: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                // Wrap, never truncate — try our best to write down the full repo
+                // name so the user can confirm the exact "owner/repo" at a glance.
                 Text(repoSelection.wrappedValue?.fullName ?? "Choose…")
-                    .lineLimit(1).truncationMode(.middle)
-                    .foregroundStyle(repoSelection.wrappedValue == nil ? Color.accentColor : .secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(repoSelection.wrappedValue == nil ? Color.accentColor : .primary)
                 Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.borderless)
     }
