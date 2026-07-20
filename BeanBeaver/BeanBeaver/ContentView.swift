@@ -500,6 +500,78 @@ struct OriginReceiptView: View {
     }
 }
 
+/// Per-device ledger output settings that aren't tied to any one exporter:
+/// the operating currency and the tax account applied to every generated
+/// beancount entry. Configured in `SettingsView`, read by the scan pipeline.
+///
+/// Per the Sync-vs-Settings rule in CLAUDE.md, these are *cross-cutting* output
+/// prefs (they shape the beancount every backend emits), so they live in the
+/// general Settings page, not the per-exporter Sync page.
+enum LedgerFormatPrefs {
+    static let currencyKey = "ledgerCurrency"
+    static let taxAccountKey = "ledgerTaxAccount"
+
+    /// Fallbacks used when the locale can't offer a currency and the user
+    /// hasn't picked one — matches the app's historical Canadian defaults.
+    static let defaultCurrency = "CAD"
+    static let defaultTaxAccount = "Expenses:Tax:HST"
+
+    /// The device locale's ISO 4217 currency, if it exposes one.
+    static var localeCurrency: String? { Locale.current.currency?.identifier }
+
+    /// Effective operating currency: the user's stored choice, else the device
+    /// locale's currency, else `defaultCurrency`. Read at scan time so a change
+    /// in Settings takes effect on the next scan.
+    static var currency: String {
+        let stored = UserDefaults.standard.string(forKey: currencyKey)
+        if let stored, !stored.isEmpty { return stored }
+        return localeCurrency ?? defaultCurrency
+    }
+
+    /// Effective tax account: the user's stored choice, else `defaultTaxAccount`.
+    static var taxAccount: String {
+        let stored = UserDefaults.standard.string(forKey: taxAccountKey)
+        if let stored, !stored.isEmpty { return stored }
+        return defaultTaxAccount
+    }
+}
+
+/// A menu picker over `presets` (each a display title + the value it stores)
+/// plus a "Custom…" escape hatch that reveals a free-text field. Binds to a
+/// single stored `String` — the value used downstream — so a preset and a
+/// hand-typed value are the same setting.
+private struct PresetOrCustomPicker: View {
+    let title: String
+    let presets: [(label: String, value: String)]
+    let customPlaceholder: String
+    var uppercaseField = false
+    @Binding var value: String
+
+    private static let customTag = "\u{0}custom"
+    private var isPreset: Bool { presets.contains { $0.value == value } }
+
+    var body: some View {
+        Picker(title, selection: Binding(
+            get: { isPreset ? value : Self.customTag },
+            set: { selected in
+                if selected == Self.customTag {
+                    if isPreset { value = "" } // start the custom field empty
+                } else {
+                    value = selected
+                }
+            }
+        )) {
+            ForEach(presets, id: \.value) { Text($0.label).tag($0.value) }
+            Text("Custom…").tag(Self.customTag)
+        }
+        if !isPreset {
+            TextField(customPlaceholder, text: $value)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(uppercaseField ? .characters : .never)
+        }
+    }
+}
+
 struct SettingsView: View {
     @Binding var saveScansToPhotos: Bool
     /// Whether a `.json` details sidecar is written next to each exported receipt.
@@ -512,6 +584,33 @@ struct SettingsView: View {
     /// The "Enable premium features" switch — the stub premium control while
     /// BeanBeaver is TestFlight-only. Defaults on; see `Entitlements.isPremium`.
     @AppStorage(Entitlements.premiumEnabledKey) private var premiumEnabled = true
+    /// Operating currency for every generated beancount amount. Defaults to the
+    /// device locale's currency (falling back to CAD); the picker + pipeline
+    /// share `LedgerFormatPrefs`, so this and the scan output stay in step.
+    @AppStorage(LedgerFormatPrefs.currencyKey) private var ledgerCurrency =
+        LedgerFormatPrefs.localeCurrency ?? LedgerFormatPrefs.defaultCurrency
+    /// Account the tax posting lands on (HST/GST/PST/VAT/Sales or a custom
+    /// beancount account). Defaults to the historical `Expenses:Tax:HST`.
+    @AppStorage(LedgerFormatPrefs.taxAccountKey) private var ledgerTaxAccount =
+        LedgerFormatPrefs.defaultTaxAccount
+    /// Common tax regimes → their beancount account. "Custom…" (in the picker)
+    /// covers anything else, including combined regimes.
+    private let taxPresets: [(label: String, value: String)] = [
+        (label: "HST (Canada)", value: "Expenses:Tax:HST"),
+        (label: "GST", value: "Expenses:Tax:GST"),
+        (label: "PST", value: "Expenses:Tax:PST"),
+        (label: "VAT", value: "Expenses:Tax:VAT"),
+        (label: "Sales tax", value: "Expenses:Tax:Sales"),
+    ]
+    /// A short common-currency list, with the device locale's own currency
+    /// pinned first so it isn't buried under "Custom…".
+    private var currencyPresets: [(label: String, value: String)] {
+        var codes = ["CAD", "USD", "EUR", "GBP", "AUD", "JPY", "CNY"]
+        if let local = LedgerFormatPrefs.localeCurrency, !codes.contains(local) {
+            codes.insert(local, at: 0)
+        }
+        return codes.map { (label: $0, value: $0) }
+    }
     /// Captures "Clear Old Receipts" must spare: the photo behind the result
     /// screen currently on top, so it can't vanish out from under the user while
     /// they're still looking at it, and every photo the pending import batch
@@ -538,6 +637,26 @@ struct SettingsView: View {
                     Toggle("Save details file", isOn: $includeDetailsJSON)
                 } footer: {
                     Text("Store a .json alongside each exported receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
+                }
+
+                Section {
+                    PresetOrCustomPicker(
+                        title: "Currency",
+                        presets: currencyPresets,
+                        customPlaceholder: "Currency code (e.g. USD)",
+                        uppercaseField: true,
+                        value: $ledgerCurrency
+                    )
+                    PresetOrCustomPicker(
+                        title: "Sales tax",
+                        presets: taxPresets,
+                        customPlaceholder: "Tax account (e.g. Expenses:Tax:GST)",
+                        value: $ledgerTaxAccount
+                    )
+                } header: {
+                    Text("Ledger")
+                } footer: {
+                    Text("The currency and tax account used in every beancount entry BeanBeaver generates. Currency defaults to your region.")
                 }
 
                 storageSection

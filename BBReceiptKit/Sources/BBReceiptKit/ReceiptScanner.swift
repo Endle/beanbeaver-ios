@@ -16,13 +16,29 @@ public extension OcrSession {
 
     /// Scan encoded image bytes (JPEG/PNG) using the current local date for
     /// date inference / the placeholder date.
-    func scan(imageData: Data, creditCardAccount: String) throws -> ReceiptResult {
+    ///
+    /// `currency` is the beancount commodity for every amount (e.g. `CAD`,
+    /// `USD`); `taxAccount` is where the tax posting lands (e.g.
+    /// `Expenses:Tax:HST`, `Expenses:Tax:VAT`). Both are the caller's per-device
+    /// settings — the core no longer hard-codes Canadian defaults.
+    func scan(
+        imageData: Data,
+        creditCardAccount: String,
+        currency: String,
+        taxAccount: String
+    ) throws -> ReceiptResult {
         let c = Calendar.current.dateComponents([.year, .month, .day], from: Date())
         let today = DateYmd(
             year: Int32(c.year ?? 1970),
             month: UInt32(c.month ?? 1),
             day: UInt32(c.day ?? 1)
         )
-        return try scan(imageBytes: imageData, today: today, creditCardAccount: creditCardAccount)
+        return try scan(
+            imageBytes: imageData,
+            today: today,
+            creditCardAccount: creditCardAccount,
+            currency: currency,
+            taxAccount: taxAccount
+        )
     }
 }

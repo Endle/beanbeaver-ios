@@ -17,8 +17,11 @@ publish = false
 # headless batch dump / snapshot diffing).
 # v0.4.1 adds merchant-recognition fixes (behavior only, no FFI change): a
 # PHARMASAVE family, and whitespace-tolerant corroborators (Costco "WHOL ESALE").
+# v0.5.0 makes the output currency + tax account configurable: scan /
+# scan_with_options / parse_detections / reformat_receipt gain `currency` +
+# `tax_account` params (breaking FFI change — drops the hard-coded CAD / HST).
 # After bumping, rerun ./build-xcframework.sh to regenerate the Swift glue + xcframework.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.4.1" }
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.5.0" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
