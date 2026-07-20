@@ -117,13 +117,16 @@ final class ReceiptPipeline {
         progressTask?.cancel()
         progressTask = Task { await self.animateEstimatedProgress() }
         let account = creditCardAccount
+        let currency = LedgerFormatPrefs.currency
+        let taxAccount = LedgerFormatPrefs.taxAccount
         do {
             let session = try OcrSessionProvider.loaded()
             let signpost = Self.signposter.beginInterval("scan")
             let started = Date()
             // OCR is CPU-heavy; keep it off the main actor.
             let result = try await Task.detached(priority: .userInitiated) {
-                try session.scan(imageData: imageData, creditCardAccount: account)
+                try session.scan(imageData: imageData, creditCardAccount: account,
+                                 currency: currency, taxAccount: taxAccount)
             }.value
             lastWallMs = Date().timeIntervalSince(started) * 1000
             Self.signposter.endInterval("scan", signpost)
@@ -315,7 +318,9 @@ enum BatchRunner {
             let started = Date()
             do {
                 let r = try session.scan(imageData: data,
-                                         creditCardAccount: "Liabilities:CreditCard")
+                                         creditCardAccount: "Liabilities:CreditCard",
+                                         currency: LedgerFormatPrefs.currency,
+                                         taxAccount: LedgerFormatPrefs.taxAccount)
                 results.append(Result(
                     name: name, merchant: r.merchant, date: r.date,
                     dateIsPlaceholder: r.dateIsPlaceholder, total: r.total,
