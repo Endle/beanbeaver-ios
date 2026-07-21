@@ -122,9 +122,9 @@ enum DebugInfoStore {
             beanbeaverId = r.beanbeaverId
             documentRelpath = r.documentRelpath
             timings = Timings(
-                prepMs: r.timings.prepMs, detectMs: r.timings.detectMs,
-                classifyMs: r.timings.classifyMs, recognizeMs: r.timings.recognizeMs,
-                parseMs: r.timings.parseMs, totalMs: r.timings.totalMs, wallMs: wallMs)
+                prepMs: r.timings.ms(.prep), detectMs: r.timings.ms(.detect),
+                classifyMs: r.timings.ms(.classify), recognizeMs: r.timings.ms(.recognize),
+                parseMs: r.timings.ms(.parse), totalMs: r.timings.totalMs, wallMs: wallMs)
         }
     }
 

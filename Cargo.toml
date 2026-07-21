@@ -21,7 +21,10 @@ publish = false
 # scan_with_options / parse_detections / reformat_receipt gain `currency` +
 # `tax_account` params (breaking FFI change — drops the hard-coded CAD / HST).
 # After bumping, rerun ./build-xcframework.sh to regenerate the Swift glue + xcframework.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.5.0" }
+# v0.6.0 reshapes ScanTimings into a `Phase` enum + `[PhaseSpan]` span list (the
+# shared cross-platform phase taxonomy) and adds a `decode` span. Breaking FFI
+# change — rerun ./build-xcframework.sh after bumping to regenerate the Swift glue.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.6.0" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).

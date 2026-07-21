@@ -1053,9 +1053,28 @@ struct ReceiptResultView: View {
     }
 }
 
+extension Phase {
+    /// Short row label for the debug timing readout. Names come from the core's
+    /// shared `Phase` taxonomy, so they match Android's breakdown verbatim.
+    var label: String {
+        switch self {
+        case .acquire: return "acquire"
+        case .encode: return "encode"
+        case .decode: return "decode"
+        case .prep: return "prep"
+        case .detect: return "detect"
+        case .classify: return "classify"
+        case .recognize: return "recognize"
+        case .parse: return "parse"
+        case .render: return "render"
+        @unknown default: return "?"
+        }
+    }
+}
+
 /// Compact per-stage latency readout under a result, for the real-device test.
 /// `wallMs` is the Swift-observed total (incl. decode + FFI); the stage rows are
-/// the Rust `ScanTimings` (prep → detect → recognize → classify → parse).
+/// the Rust `ScanTimings` phase spans (decode → prep → detect → … → parse).
 /// DEBUG-only diagnostic — never shown in a release build.
 struct ScanTimingsView: View {
     let timings: ScanTimings
@@ -1065,12 +1084,13 @@ struct ScanTimingsView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Debug: scan time").font(.caption).foregroundStyle(.secondary)
             if let wallMs { row("total (wall)", wallMs, emphasized: true) }
-            row("prep", timings.prepMs)
-            row("detect", timings.detectMs)
-            row("recognize", timings.recognizeMs)
-            row("classify", timings.classifyMs)
-            row("parse", timings.parseMs)
+            // Ordered phase spans straight from the core's shared taxonomy — new
+            // phases (e.g. app-side spans) appear here with no change to this view.
+            ForEach(Array(timings.spans.enumerated()), id: \.offset) { _, span in
+                row(span.phase.label, span.ms)
+            }
             row("rust total", timings.totalMs)
+            if let wallMs { row("other (wall−Σ)", wallMs - timings.totalMs) }
         }
         .font(.system(.caption2, design: .monospaced))
         .padding(8)
@@ -1100,9 +1120,14 @@ extension ContentView {
 
 extension ScanTimings {
     /// Plausible on-device stage split for previews/screenshots.
-    static let preview = ScanTimings(
-        prepMs: 28, detectMs: 322, classifyMs: 41,
-        recognizeMs: 408, parseMs: 17, totalMs: 816)
+    static let preview = ScanTimings(spans: [
+        PhaseSpan(phase: .decode, ms: 12),
+        PhaseSpan(phase: .prep, ms: 28),
+        PhaseSpan(phase: .detect, ms: 322),
+        PhaseSpan(phase: .classify, ms: 41),
+        PhaseSpan(phase: .recognize, ms: 408),
+        PhaseSpan(phase: .parse, ms: 17),
+    ])
 }
 
 extension ReceiptResult {

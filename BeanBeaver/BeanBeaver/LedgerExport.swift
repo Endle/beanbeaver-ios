@@ -77,9 +77,9 @@ struct ReceiptExportJSON: Encodable {
         }
         warnings = result.warnings
         timings = Timings(
-            prepMs: result.timings.prepMs, detectMs: result.timings.detectMs,
-            classifyMs: result.timings.classifyMs, recognizeMs: result.timings.recognizeMs,
-            parseMs: result.timings.parseMs, totalMs: result.timings.totalMs,
+            prepMs: result.timings.ms(.prep), detectMs: result.timings.ms(.detect),
+            classifyMs: result.timings.ms(.classify), recognizeMs: result.timings.ms(.recognize),
+            parseMs: result.timings.ms(.parse), totalMs: result.timings.totalMs,
             wallMs: wallMs)
     }
 }
