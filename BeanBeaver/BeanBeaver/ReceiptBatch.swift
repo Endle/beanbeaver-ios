@@ -21,28 +21,45 @@ import UIKit
 // of mirror structs plus two mappings, is more code to drift out of sync with
 // the core for no benefit the compiler can't already police.
 
+extension ScanTimings {
+    /// Milliseconds recorded for `phase`, or 0 if the span is absent (e.g. the
+    /// parse-only path, or a phase this build didn't measure).
+    func ms(_ phase: Phase) -> Double { spans.first { $0.phase == phase }?.ms ?? 0 }
+
+    /// The scan total is the sum of all phase spans (there is no separate
+    /// `total` span). Kept as `totalMs` so existing call sites read naturally.
+    var totalMs: Double { spans.reduce(0) { $0 + $1.ms } }
+}
+
+// ScanTimings now carries an ordered `[PhaseSpan]`; we still serialize it as a
+// flat `{ decodeMs, prepMs, … , totalMs }` object so the batch/latency harness
+// schema (device-latency.py) is unchanged. Missing keys decode to 0.
 extension ScanTimings: @retroactive Codable {
     enum CodingKeys: String, CodingKey {
-        case prepMs, detectMs, classifyMs, recognizeMs, parseMs, totalMs
+        case decodeMs, prepMs, detectMs, classifyMs, recognizeMs, parseMs, totalMs
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(prepMs: try c.decode(Double.self, forKey: .prepMs),
-                  detectMs: try c.decode(Double.self, forKey: .detectMs),
-                  classifyMs: try c.decode(Double.self, forKey: .classifyMs),
-                  recognizeMs: try c.decode(Double.self, forKey: .recognizeMs),
-                  parseMs: try c.decode(Double.self, forKey: .parseMs),
-                  totalMs: try c.decode(Double.self, forKey: .totalMs))
+        func d(_ k: CodingKeys) -> Double { (try? c.decode(Double.self, forKey: k)) ?? 0 }
+        self.init(spans: [
+            PhaseSpan(phase: .decode, ms: d(.decodeMs)),
+            PhaseSpan(phase: .prep, ms: d(.prepMs)),
+            PhaseSpan(phase: .detect, ms: d(.detectMs)),
+            PhaseSpan(phase: .classify, ms: d(.classifyMs)),
+            PhaseSpan(phase: .recognize, ms: d(.recognizeMs)),
+            PhaseSpan(phase: .parse, ms: d(.parseMs)),
+        ])
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(prepMs, forKey: .prepMs)
-        try c.encode(detectMs, forKey: .detectMs)
-        try c.encode(classifyMs, forKey: .classifyMs)
-        try c.encode(recognizeMs, forKey: .recognizeMs)
-        try c.encode(parseMs, forKey: .parseMs)
+        try c.encode(ms(.decode), forKey: .decodeMs)
+        try c.encode(ms(.prep), forKey: .prepMs)
+        try c.encode(ms(.detect), forKey: .detectMs)
+        try c.encode(ms(.classify), forKey: .classifyMs)
+        try c.encode(ms(.recognize), forKey: .recognizeMs)
+        try c.encode(ms(.parse), forKey: .parseMs)
         try c.encode(totalMs, forKey: .totalMs)
     }
 }

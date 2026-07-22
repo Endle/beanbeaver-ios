@@ -330,9 +330,9 @@ enum BatchRunner {
                     warnings: r.warnings,
                     wallMs: Date().timeIntervalSince(started) * 1000,
                     timings: Timings(
-                        prepMs: r.timings.prepMs, detectMs: r.timings.detectMs,
-                        classifyMs: r.timings.classifyMs, recognizeMs: r.timings.recognizeMs,
-                        parseMs: r.timings.parseMs, totalMs: r.timings.totalMs),
+                        prepMs: r.timings.ms(.prep), detectMs: r.timings.ms(.detect),
+                        classifyMs: r.timings.ms(.classify), recognizeMs: r.timings.ms(.recognize),
+                        parseMs: r.timings.ms(.parse), totalMs: r.timings.totalMs),
                     error: nil,
                     merchantRaw: r.merchantMatch.raw,
                     merchantCanonical: r.merchantMatch.canonical,
