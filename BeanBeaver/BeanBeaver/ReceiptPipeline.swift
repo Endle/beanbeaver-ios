@@ -129,6 +129,7 @@ final class ReceiptPipeline {
                                  currency: currency, taxAccount: taxAccount)
             }.value
             lastWallMs = Date().timeIntervalSince(started) * 1000
+            lastWallMs.map(rememberScanDuration)
             Self.signposter.endInterval("scan", signpost)
             progressTask?.cancel()
             scanProgress = 1
@@ -141,38 +142,59 @@ final class ReceiptPipeline {
         }
     }
 
-    /// Hardcoded rough per-stage duration guesses (ms), taken from a typical
-    /// on-device scan (see the `ScanTimings.preview` fixture). Used only to
-    /// animate a progress bar client-side — not a measurement of the live scan.
+    /// The *shape* of a scan — relative per-phase weights, not absolute times.
+    /// The absolute total comes from the last real scan (`estimatedTotalMs`), so
+    /// only the proportions live here; recognize is ~half, which keeps the bar
+    /// moving through the long ONNX step instead of parking at the cap. Weights
+    /// are a measured release split (mirrors the Android client).
     private enum StepEstimate {
-        static let steps: [(label: String, ms: Double)] = [
-            ("Preparing image…", 28),
-            ("Detecting text…", 322),
-            ("Checking orientation…", 41),
-            ("Recognizing text…", 408),
-            ("Parsing receipt…", 17),
+        static let defaultTotalMs = 2500.0
+        static let minTotalMs = 500.0
+        static let maxTotalMs = 20000.0
+        static let steps: [(label: String, weight: Double)] = [
+            ("Preparing image…", 380),
+            ("Detecting text…", 600),
+            ("Checking orientation…", 1450),
+            ("Recognizing text…", 3450),
+            ("Parsing receipt…", 780),
         ]
-        /// Running total of `ms` after each step, e.g. [28, 350, 391, 799, 816].
-        static let cumulativeMs: [Double] = {
-            var sum = 0.0
-            return steps.map { sum += $0.ms; return sum }
-        }()
-        static let totalMs = cumulativeMs.last ?? 1
+        /// Label-boundary times: the weights scaled to fill `totalMs`.
+        static func cumulativeMs(totalMs: Double) -> [Double] {
+            let sum = steps.reduce(0) { $0 + $1.weight }
+            var acc = 0.0
+            return steps.map { acc += $0.weight; return acc / sum * totalMs }
+        }
     }
 
-    /// Ticks `scanProgress`/`scanStepLabel` by comparing elapsed time against
-    /// `StepEstimate`, since there's no real progress signal across the FFI
-    /// boundary. Caps at 96% so a scan that runs long than the estimate doesn't
-    /// look finished before the actual result arrives; `scan(imageData:)` snaps
-    /// it to 100% itself once the result is in.
+    private static let lastScanKey = "lastScanWallMs"
+
+    /// Last real scan's wall time (persisted), clamped to a sane range — the seed
+    /// for the next scan's progress estimate, so the bar tracks *this device*
+    /// instead of a stale constant. Defaults before the first scan.
+    private func estimatedTotalMs() -> Double {
+        let stored = UserDefaults.standard.double(forKey: Self.lastScanKey)
+        let total = stored > 0 ? stored : StepEstimate.defaultTotalMs
+        return min(max(total, StepEstimate.minTotalMs), StepEstimate.maxTotalMs)
+    }
+
+    private func rememberScanDuration(_ wallMs: Double) {
+        UserDefaults.standard.set(wallMs, forKey: Self.lastScanKey)
+    }
+
+    /// Ticks `scanProgress`/`scanStepLabel` against `estimatedTotalMs` (the last
+    /// real scan), since there's no live progress signal across the FFI boundary.
+    /// Caps at 96% so a scan that runs longer than the estimate doesn't look
+    /// finished before the result arrives; `scan(imageData:)` snaps it to 100%.
     private func animateEstimatedProgress() async {
+        let total = estimatedTotalMs()
+        let cumulative = StepEstimate.cumulativeMs(totalMs: total)
         let started = Date()
         while !Task.isCancelled {
             let elapsedMs = Date().timeIntervalSince(started) * 1000
-            let stepIndex = StepEstimate.cumulativeMs.firstIndex { elapsedMs < $0 }
+            let stepIndex = cumulative.firstIndex { elapsedMs < $0 }
                 ?? StepEstimate.steps.count - 1
             scanStepLabel = StepEstimate.steps[stepIndex].label
-            scanProgress = min(elapsedMs / StepEstimate.totalMs, 0.96)
+            scanProgress = min(elapsedMs / total, 0.96)
             try? await Task.sleep(nanoseconds: 80_000_000)
         }
     }
