@@ -3,11 +3,12 @@ import BBReceiptKit
 
 /// Backs the opt-in "Store detailed debug info" setting (Settings › Debug,
 /// off by default). Enabling it keeps a full copy of each scan's parsed
-/// contents — merchant, items, prices, the raw OCR text, per-field
-/// confidence, and the generated beancount — plus internal error detail, in
-/// a JSON file per scan, so a specific problem can be diagnosed later. That's
-/// more than BeanBeaver normally retains, so every entry point here is a
-/// no-op unless `isEnabled`; nothing is written by default.
+/// contents — merchant, items, prices, the raw OCR text and its detection
+/// boxes, per-field confidence, and the generated beancount — plus internal
+/// error detail, in a JSON file per scan, so a specific problem can be
+/// diagnosed later. That's more than BeanBeaver normally retains, so every
+/// entry point here is a no-op unless `isEnabled`; nothing is written by
+/// default.
 enum DebugInfoStore {
     static let enabledKey = "storeDetailedDebugInfo"
     private static let filenamePrefix = "debug_info_"
@@ -26,9 +27,9 @@ enum DebugInfoStore {
     /// Full snapshot of one parsed receipt, for diagnosis. Deliberately richer
     /// than `ReceiptExportJSON` (the ledger sidecar, which trims to what the
     /// ledger needs): this keeps everything the parser returns — the raw OCR
-    /// dump, the merchant resolution, per-field confidence, split tenders, and
-    /// the generated beancount — so a bad parse can be understood off-device
-    /// without re-running the scan on hardware.
+    /// dump and its detection boxes, the merchant resolution, per-field
+    /// confidence, split tenders, and the generated beancount — so a bad parse
+    /// can be understood off-device without re-running the scan on hardware.
     private struct DebugReceiptJSON: Encodable {
         struct Item: Encodable {
             let description: String
@@ -63,6 +64,17 @@ enum DebugInfoStore {
             let message: String
             let afterItemIndex: Int32?
         }
+        /// One OCR text box, as the recognizer emitted it — polygon, text and
+        /// score, before any line grouping or parsing. Kept because `rawText`
+        /// alone can't show *why* a line came out wrong: a column misread
+        /// looks fine as text and only reveals itself in the geometry. Same
+        /// shape as `BatchRunner.Detection`, so a device dump can be diffed
+        /// against the harness output and the frozen `.ocr.json` snapshots.
+        struct Detection: Encodable {
+            let pointsXy: [Double]
+            let text: String
+            let confidence: Double
+        }
         struct Timings: Encodable {
             let prepMs: Double
             let detectMs: Double
@@ -86,6 +98,7 @@ enum DebugInfoStore {
         let tenders: [Tender]
         let confidence: Confidence
         let rawText: String
+        let detections: [Detection]
         let imageFilename: String
         let beancount: String
         let beanbeaverId: String?
@@ -117,6 +130,9 @@ enum DebugInfoStore {
                 merchant: r.confidence.merchant, date: r.confidence.date, total: r.confidence.total,
                 itemsCategorized: r.confidence.itemsCategorized, needsReview: r.confidence.needsReview)
             rawText = r.rawText
+            detections = r.detections.map {
+                Detection(pointsXy: $0.pointsXy, text: $0.text, confidence: $0.confidence)
+            }
             imageFilename = r.imageFilename
             beancount = r.beancount
             beanbeaverId = r.beanbeaverId
