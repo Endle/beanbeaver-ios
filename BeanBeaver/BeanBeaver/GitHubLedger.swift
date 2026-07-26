@@ -70,11 +70,10 @@ final class GitHubLedger: LedgerDestination {
         let owner, repo, token: String
     }
 
-    /// One file destined for the repo, with the commit message that carries it.
+    /// One file destined for the repo.
     private struct RepoFile {
         let path: String
         let data: Data
-        let message: String
     }
 
     /// One receipt resolved to where it lands in the repo. Splitting this out of
@@ -86,18 +85,15 @@ final class GitHubLedger: LedgerDestination {
         let basename: String
         let dateToken: String
 
-        /// What this receipt contributes to the repo, in commit order.
+        /// What this receipt contributes to the repo.
         var files: [RepoFile] {
             var out = [RepoFile(path: "\(folder)/\(basename).beancount",
-                                data: Data(entry.beancount.utf8),
-                                message: "BeanBeaver: add receipt transaction")]
+                                data: Data(entry.beancount.utf8))]
             if let json = entry.json {
-                out.append(RepoFile(path: "\(folder)/\(basename).json", data: json,
-                                    message: "BeanBeaver: add receipt JSON"))
+                out.append(RepoFile(path: "\(folder)/\(basename).json", data: json))
             }
             if let document = entry.document {
-                out.append(RepoFile(path: "\(folder)/\(basename).jpg", data: document.data,
-                                    message: "BeanBeaver: add receipt image"))
+                out.append(RepoFile(path: "\(folder)/\(basename).jpg", data: document.data))
             }
             return out
         }
@@ -163,25 +159,59 @@ final class GitHubLedger: LedgerDestination {
                 : "All \(filings.count) receipts are already filed in the repo — nothing to open a pull request for.")
         }
 
-        // 3. New branch off the base head.
+        // 3. Upload every file as a blob, then hang them all off one tree and one
+        //    commit. The contents API (one PUT per file) was simpler but commits
+        //    per file, so a receipt landed as three commits — transaction, JSON,
+        //    image — and a batch as three per receipt. A PR is a review unit, and
+        //    the reviewable change is the receipt, not the file.
+        //
+        //    Blobs are content-addressed and belong to no branch, so nothing is
+        //    visible in the repo until the ref is created in step 4. That is why
+        //    the branch is created last: a failure part-way through leaves
+        //    unreferenced blobs for GitHub to garbage-collect rather than a
+        //    half-populated branch.
+        let flattened = pending.flatMap { $0 }
+        var treeEntries: [[String: Any]] = []
+        for (position, file) in flattened.enumerated() {
+            await progress(flattened.count == 1
+                ? "Uploading the receipt…"
+                : "Uploading file \(position + 1) of \(flattened.count)…")
+            let blob: ShaResponse = try await api(cfg, "POST", "\(repoRoot)/git/blobs", body: [
+                "content": file.data.base64EncodedString(),
+                "encoding": "base64",
+            ])
+            treeEntries.append([
+                "path": file.path,
+                // 100644 = a non-executable regular file; the only mode we write.
+                "mode": "100644",
+                "type": "blob",
+                "sha": blob.sha,
+            ])
+        }
+
+        await progress("Committing…")
+        // `base_tree` takes a *tree* sha, not a commit sha, so resolve the base
+        // commit's tree first. Without it the new tree would replace the repo
+        // wholesale and every existing file would read as deleted.
+        let baseCommit: CommitResponse = try await api(
+            cfg, "GET", "\(repoRoot)/git/commits/\(baseSha)")
+        let tree: ShaResponse = try await api(cfg, "POST", "\(repoRoot)/git/trees", body: [
+            "base_tree": baseCommit.tree.sha,
+            "tree": treeEntries,
+        ])
+        let commit: ShaResponse = try await api(cfg, "POST", "\(repoRoot)/git/commits", body: [
+            "message": commitMessage(for: filings),
+            "tree": tree.sha,
+            "parents": [baseSha],
+        ])
+
+        // 4. Point a new branch at that commit — the first moment any of this is
+        //    reachable in the repo.
         await progress("Creating the branch…")
         let stamp = branchStamp()
         let branch = "beanbeaver/receipt-\(stamp)"
         let _: RefResponse = try await api(cfg, "POST", "\(repoRoot)/git/refs",
-            body: ["ref": "refs/heads/\(branch)", "sha": baseSha])
-
-        // 4. One folder per receipt (see `Filing`), one commit per file — the
-        //    contents API has no way to put several files in a single commit.
-        //    Serial by necessity: each commit builds on the last, so uploading
-        //    in parallel would race on the branch head.
-        for (position, group) in pending.enumerated() {
-            await progress(pending.count == 1
-                ? "Uploading the receipt…"
-                : "Uploading receipt \(position + 1) of \(pending.count)…")
-            for file in group {
-                try await putFile(cfg, repoRoot: repoRoot, file: file, branch: branch)
-            }
-        }
+            body: ["ref": "refs/heads/\(branch)", "sha": commit.sha])
 
         // 5. Open the PR.
         await progress("Opening the pull request…")
@@ -202,6 +232,14 @@ final class GitHubLedger: LedgerDestination {
             return "Add \(filings.count) receipts"
         }
         return "Add receipt: \(only.entry.merchantSlug) \(only.dateToken)"
+    }
+
+    /// Subject for the single commit the whole batch lands as. Mirrors the PR
+    /// title, with the folders in the body so the commit stands on its own once
+    /// it's squashed out of the PR context.
+    private nonisolated static func commitMessage(for filings: [Filing]) -> String {
+        "BeanBeaver: \(title(for: filings).lowercasedFirst)\n\n"
+            + filings.map { "- \($0.folder)/" }.joined(separator: "\n")
     }
 
     private nonisolated static func prBody(for filings: [Filing]) -> String {
@@ -226,17 +264,6 @@ final class GitHubLedger: LedgerDestination {
         } catch let e as HTTPStatusError where e.status == 404 {
             return false
         }
-    }
-
-    private nonisolated static func putFile(
-        _ cfg: Config, repoRoot: String, file: RepoFile, branch: String
-    ) async throws {
-        let escaped = file.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? file.path
-        let _: PutResponse = try await api(cfg, "PUT", "\(repoRoot)/contents/\(escaped)", body: [
-            "message": file.message,
-            "content": file.data.base64EncodedString(),
-            "branch": branch,
-        ])
     }
 
     private nonisolated static func branchStamp() -> String {
@@ -316,7 +343,9 @@ final class GitHubLedger: LedgerDestination {
         enum CodingKeys: String, CodingKey { case defaultBranch = "default_branch" }
     }
     private struct RefResponse: Decodable { let object: Obj; struct Obj: Decodable { let sha: String } }
-    private struct PutResponse: Decodable { let commit: Commit; struct Commit: Decodable { let sha: String } }
+    /// Blob / tree / commit creation all answer with the new object's sha.
+    private struct ShaResponse: Decodable { let sha: String }
+    private struct CommitResponse: Decodable { let tree: Tree; struct Tree: Decodable { let sha: String } }
     private struct PullResponse: Decodable {
         let htmlUrl: String
         enum CodingKeys: String, CodingKey { case htmlUrl = "html_url" }
@@ -335,4 +364,7 @@ final class GitHubLedger: LedgerDestination {
 
 private extension String {
     var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// "Add receipt: …" -> "add receipt: …", so it reads as one sentence after
+    /// the "BeanBeaver: " prefix.
+    var lowercasedFirst: String { isEmpty ? self : prefix(1).lowercased() + dropFirst() }
 }
