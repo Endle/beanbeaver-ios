@@ -47,7 +47,7 @@ struct LedgerSettingsView: View {
     /// GitHub-only user still sees Money Manager exists without any friction).
     private func exporterLabel(_ option: ExportTarget) -> String {
         var label = option.label
-        if option.requiresPremium && !Entitlements.isPremium { label += " 🔒" }
+        if option.requiresPremium && !Entitlements.shared.isPremium { label += " 🔒" }
         return label
     }
 
@@ -73,7 +73,7 @@ struct LedgerSettingsView: View {
             case .github:
                 gitHubSection
             case .moneyManager:
-                if Entitlements.isPremium {
+                if Entitlements.shared.isPremium {
                     moneyManagerSection
                 } else {
                     moneyManagerLockedSection
@@ -196,8 +196,9 @@ struct LedgerSettingsView: View {
     }
 
     /// Non-premium view of the Money Manager exporter — shown in place of the
-    /// account field so a locked user still sees what it is. No purchase flow yet
-    /// (premium is open through the TestFlight phase), so this is informational.
+    /// account field so a locked user still sees what it is. Unreachable until
+    /// there are products to buy (`Entitlements.isPremium` is open to everyone);
+    /// launch with `-lockPremium` to see it. This is where a paywall would go.
     private var moneyManagerLockedSection: some View {
         Section {
             Label("Premium feature", systemImage: "lock.fill")
@@ -571,9 +572,9 @@ struct LedgerExportButtons: View {
         }
 
         // Premium: hidden entirely for free users (no lock, no paywall). One
-        // gate — `Entitlements.isPremium` — so the eventual purchase check lands
-        // in a single place.
-        if Entitlements.isPremium {
+        // gate — `Entitlements.shared.isPremium` — so the eventual purchase
+        // check lands in a single place.
+        if Entitlements.shared.isPremium {
             Button {
                 onExportMoneyManager()
             } label: {

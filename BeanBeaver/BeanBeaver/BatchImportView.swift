@@ -99,7 +99,7 @@ struct BatchImportView: View {
     /// batch in place. A temp-write failure is rare and non-fatal; it's captured
     /// for support rather than surfaced.
     private func presentMoneyManager() {
-        guard Entitlements.isPremium else { return }
+        guard Entitlements.shared.isPremium else { return }
         do {
             moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: batch.parsedResults))
         } catch {
@@ -270,7 +270,7 @@ struct BatchImportView: View {
                 awaitingConfirmation = true
             }
         } else {
-            guard Entitlements.isPremium else { onConfigure(); return }
+            guard Entitlements.shared.isPremium else { onConfigure(); return }
             presentMoneyManager()
         }
     }

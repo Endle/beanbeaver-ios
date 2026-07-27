@@ -456,7 +456,7 @@ final class LedgerExporter {
     /// destination, or premium unlocked for the Money Manager share export.
     var selectedTargetReady: Bool {
         if let kind = selectedTarget.ledgerKind { return destination(for: kind).isConfigured }
-        return Entitlements.isPremium
+        return Entitlements.shared.isPremium
     }
 
     /// Label for an "Export:" button — the selected target's name, with a lock
@@ -464,7 +464,7 @@ final class LedgerExporter {
     /// result screen so they never drift.
     var exportIndicator: String {
         var label = selectedTarget.label
-        if selectedTarget.requiresPremium && !Entitlements.isPremium { label += " 🔒" }
+        if selectedTarget.requiresPremium && !Entitlements.shared.isPremium { label += " 🔒" }
         return label
     }
 
