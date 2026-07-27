@@ -1,6 +1,6 @@
 # BeanBeaver privacy policy
 
-_Last updated: 2026-07-13_
+_Last updated: 2026-07-26_
 
 BeanBeaver turns a photo of a receipt into a Beancount transaction. This policy
 explains what happens to that photo.
@@ -52,8 +52,25 @@ on its own when the device is short of storage. If you turn on "Save a copy to
 Photos", a copy is additionally written to your own photo library.
 
 **No history is kept.** BeanBeaver has no ledger, no database, and no list of
-past receipts. A parsed transaction lives on the result screen until you copy,
-share or sync it, and is not saved anywhere afterwards.
+past receipts. A transaction parsed from a single scan lives on the result screen
+until you copy, share or sync it, and is not saved anywhere afterwards.
+
+**Receipts waiting in a batch are the exception**, because they have to survive
+being interrupted. When you import several photos at once, that pending batch —
+the photos and whatever has been parsed from them so far — is written to the
+app's private storage, so closing the app mid-way doesn't lose your place. Each
+receipt is removed from it once you export it, and discarding the batch deletes
+the file outright.
+
+**If you turn on "Store detailed debug info"** (Settings → Debug, off unless you
+switch it on), BeanBeaver additionally keeps a full record of each scan in the
+app's private storage: the merchant, items and prices, the raw recognised text
+and where each piece sat on the receipt, the confidence scores, and the generated
+transaction — plus error detail from failed scans and syncs. This is more than
+the app otherwise retains, and the raw text can include anything printed on the
+receipt. It exists so a specific parsing problem can be diagnosed later. It stays
+on your device, is never uploaded, can be read or deleted under Settings → Stored
+Debug Info, and nothing is written while the setting is off.
 
 **The only other things stored** are your settings, the GitHub repository you
 picked, and — if you connect GitHub — its access token, which is held in the iOS

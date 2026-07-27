@@ -73,7 +73,7 @@ struct ContentView: View {
     /// A failure here is a rare temp-file write error and non-fatal — captured for
     /// support rather than surfaced, matching the ledger exporter's error handling.
     private func presentMoneyManager(for results: [ReceiptResult]) {
-        guard Entitlements.isPremium else { return }
+        guard Entitlements.shared.isPremium else { return }
         do {
             moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: results))
         } catch {
@@ -581,9 +581,6 @@ struct SettingsView: View {
     /// "Store detailed debug info" (Settings › Debug). Off by default — see
     /// `DebugInfoStore` for what turning it on actually keeps around.
     @AppStorage(DebugInfoStore.enabledKey) private var storeDetailedDebugInfo = false
-    /// The "Enable premium features" switch — the stub premium control while
-    /// BeanBeaver is TestFlight-only. Defaults on; see `Entitlements.isPremium`.
-    @AppStorage(Entitlements.premiumEnabledKey) private var premiumEnabled = true
     /// Operating currency for every generated beancount amount. Defaults to the
     /// device locale's currency (falling back to CAD); the picker + pipeline
     /// share `LedgerFormatPrefs`, so this and the scan output stay in step.
@@ -690,7 +687,6 @@ struct SettingsView: View {
 
                 Section {
                     Toggle("Store detailed debug info", isOn: $storeDetailedDebugInfo)
-                    Toggle("Enable premium features", isOn: $premiumEnabled)
 #if DEBUG
                     NavigationLink("Dump All Data") {
                         DataDumpView()
@@ -1047,7 +1043,7 @@ struct ReceiptResultView: View {
             let entry = LedgerEntry.make(from: result, imageURL: capturedImageURL, wallMs: wallMs)
             await exporter.export([entry], to: kind)
         } else {
-            guard Entitlements.isPremium else { onConfigure(); return }
+            guard Entitlements.shared.isPremium else { onConfigure(); return }
             onExportMoneyManager()
         }
     }
