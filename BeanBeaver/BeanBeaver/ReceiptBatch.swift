@@ -105,16 +105,57 @@ extension MerchantMatch: @retroactive Codable {
     }
 }
 
-extension ReceiptItem: @retroactive Codable {
-    enum CodingKeys: String, CodingKey { case description, price, quantity, category, tags }
+extension ItemTag: @retroactive Codable {
+    enum CodingKeys: String, CodingKey { case path, display }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(path: try c.decode(String.self, forKey: .path),
+                  display: try c.decode(String.self, forKey: .display))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(path, forKey: .path)
+        try c.encode(display, forKey: .display)
+    }
+}
+
+extension ReceiptItem: @retroactive Codable {
+    enum CodingKeys: String, CodingKey {
+        case description, price, quantity, account, tags
+        /// Pre-0.7.0 batches wrote a classifier key here, not an account.
+        case category
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+
+        // A batch saved by an older build is still sitting in Application
+        // Support when the app updates, so both shapes have to decode or the
+        // user loses an in-progress import.
+        //
+        // The old `category` deliberately does NOT become `account`: it held a
+        // classifier key (`grocery_dairy`), not a beancount account, so copying
+        // it across would fabricate a wrong account. The draft's rendered
+        // beancount text is stored alongside and remains authoritative.
+        let account = try c.decodeIfPresent(String.self, forKey: .account)
+
+        let tags: [ItemTag]
+        if let labelled = try? c.decode([ItemTag].self, forKey: .tags) {
+            tags = labelled
+        } else {
+            // Old flat tags were bare segments; only the last was ever shown, so
+            // a capitalized fallback keeps a legacy draft rendering sensibly.
+            let legacy = (try? c.decode([String].self, forKey: .tags)) ?? []
+            tags = legacy.map { ItemTag(path: $0, display: $0.capitalized) }
+        }
+
         self.init(description: try c.decode(String.self, forKey: .description),
                   price: try c.decode(String.self, forKey: .price),
                   quantity: try c.decode(Int32.self, forKey: .quantity),
-                  category: try c.decodeIfPresent(String.self, forKey: .category),
-                  tags: try c.decode([String].self, forKey: .tags))
+                  account: account,
+                  tags: tags)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -122,7 +163,7 @@ extension ReceiptItem: @retroactive Codable {
         try c.encode(description, forKey: .description)
         try c.encode(price, forKey: .price)
         try c.encode(quantity, forKey: .quantity)
-        try c.encodeIfPresent(category, forKey: .category)
+        try c.encodeIfPresent(account, forKey: .account)
         try c.encode(tags, forKey: .tags)
     }
 }

@@ -7,3 +7,4 @@ BBReceiptKit/Sources/BBReceiptKit/Generated/
 **/.build/
 
 .DS_Store
+__pycache__/

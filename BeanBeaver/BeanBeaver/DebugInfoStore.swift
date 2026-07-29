@@ -35,7 +35,7 @@ enum DebugInfoStore {
             let description: String
             let price: String
             let quantity: Int32
-            let category: String?
+            let account: String?
             let tags: [String]
         }
         struct Merchant: Encodable {
@@ -117,7 +117,7 @@ enum DebugInfoStore {
             tax = r.tax
             items = r.items.map {
                 Item(description: $0.description, price: $0.price, quantity: $0.quantity,
-                     category: $0.category, tags: $0.tags)
+                     account: $0.account, tags: $0.tags.map(\.path))
             }
             warnings = r.warnings.enumerated().map { i, message in
                 let idx = i < r.warningAfterItemIndices.count ? r.warningAfterItemIndices[i] : -1

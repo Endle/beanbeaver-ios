@@ -34,10 +34,11 @@ struct ReceiptExportJSON: Encodable {
         let description: String
         let price: String
         let quantity: Int32
-        let category: String?
-        /// Beanbeaver-internal semantic tags (broad→specific), the classification
-        /// the app displays from. Preserved here so the raw parse keeps the full
-        /// tag set even if the beancount account mapping later changes.
+        /// The resolved beancount account for this line.
+        let account: String?
+        /// Tag paths, least specific first (`["grocery", "grocery/dairy"]`).
+        /// Preserved so the raw parse keeps the full classification even if the
+        /// tag → account mapping later changes.
         let tags: [String]
     }
     /// Per-stage on-device timings (ms), mirrored from the Rust `ScanTimings` —
@@ -73,7 +74,7 @@ struct ReceiptExportJSON: Encodable {
         tax = result.tax
         items = result.items.map {
             Item(description: $0.description, price: $0.price, quantity: $0.quantity,
-                 category: $0.category, tags: $0.tags)
+                 account: $0.account, tags: $0.tags.map(\.path))
         }
         warnings = result.warnings
         timings = Timings(

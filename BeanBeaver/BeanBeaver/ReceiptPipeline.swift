@@ -236,7 +236,7 @@ enum BatchRunner {
     struct Item: Codable {
         let description: String
         let price: String
-        let category: String?
+        let account: String?
     }
 
     /// One raw OCR detection box, mirrored from the Rust `OcrDetection` so the
@@ -348,7 +348,7 @@ enum BatchRunner {
                     dateIsPlaceholder: r.dateIsPlaceholder, total: r.total,
                     subtotal: r.subtotal, tax: r.tax,
                     items: r.items.map { Item(description: $0.description,
-                                              price: $0.price, category: $0.category) },
+                                              price: $0.price, account: $0.account) },
                     warnings: r.warnings,
                     wallMs: Date().timeIntervalSince(started) * 1000,
                     timings: Timings(

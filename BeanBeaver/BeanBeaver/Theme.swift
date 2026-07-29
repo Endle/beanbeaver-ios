@@ -1,4 +1,5 @@
 import SwiftUI
+import BBReceiptKit
 
 extension Color {
     /// Primary brand accent — a legible red, not flag-saturated.
@@ -102,19 +103,22 @@ enum CategoryDisplay {
     /// context. This is the source of truth for the row's category display; the
     /// beancount account is no longer reverse-engineered for the label.
     struct TagDisplay {
-        /// Most specific tag, capitalized (e.g. "Chicken"). Empty tags → nil.
+        /// Most specific tag's authored label (e.g. "Chicken"). No tags → nil.
         let primary: String?
-        /// The remaining (broader) tags, capitalized, in classifier order.
+        /// The remaining (broader) labels, least specific first.
         let rest: [String]
     }
 
-    static func tagDisplay(for tags: [String]) -> TagDisplay {
-        let cleaned = tags.filter { !$0.isEmpty }
+    static func tagDisplay(for tags: [ItemTag]) -> TagDisplay {
+        let cleaned = tags.filter { !$0.display.isEmpty }
         guard let last = cleaned.last else {
             return TagDisplay(primary: nil, rest: [])
         }
-        let rest = cleaned.dropLast().map { $0.capitalized }
-        return TagDisplay(primary: last.capitalized, rest: rest)
+        // `display` is authored in the core's tag vocabulary, so it is used
+        // verbatim. This used to capitalize the raw tag, which is why
+        // `energy_drink` reached the card as "Energy_drink".
+        let rest = cleaned.dropLast().map { $0.display }
+        return TagDisplay(primary: last.display, rest: rest)
     }
 
     /// Keyword → SF Symbol, checked as a substring against the whole

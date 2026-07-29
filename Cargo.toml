@@ -28,7 +28,7 @@ publish = false
 # "COSTCO" over "WHOLESALE", Shoppers' "SHOPPERS" over "DRUG MART") stay separate
 # lines and are rejoined for merchant matching, plus merchant-scoped abbreviation
 # expansion and vowel-dropped brand abbreviations.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.6.4" }
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.7.0" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
