@@ -89,13 +89,13 @@ final class ReceiptPipeline {
     /// photo picker. Shipped (not DEBUG-only) so anyone without a receipt in
     /// hand — an App Review tester, a curious first-time user — can still see
     /// the whole scan → beancount flow.
-    func scanBundledSample(named name: String) async {
+    func scanBundledSample(named name: String, options: ParseOptions? = nil) async {
         guard let url = Bundle.main.url(forResource: name, withExtension: "jpg"),
               let data = try? Data(contentsOf: url) else {
             status = .failed("Bundled sample \(name).jpg not found")
             return
         }
-        await scan(imageData: data)
+        await scan(imageData: data, options: options)
     }
 
     /// Return to the home screen (idle state) so the user can scan another receipt.
@@ -108,7 +108,8 @@ final class ReceiptPipeline {
         scanStepLabel = StepEstimate.steps[0].label
     }
 
-    func scan(imageData: Data) async {
+    func scan(imageData: Data, options: ParseOptions? = nil) async {
+        let opts = options ?? ItemRuleStore.shared.parseOptions
         status = .scanning
         capturedImageURL = persistCapture(imageData)
         lastWallMs = nil
@@ -126,7 +127,8 @@ final class ReceiptPipeline {
             // OCR is CPU-heavy; keep it off the main actor.
             let result = try await Task.detached(priority: .userInitiated) {
                 try session.scan(imageData: imageData, creditCardAccount: account,
-                                 currency: currency, taxAccount: taxAccount)
+                                 currency: currency, taxAccount: taxAccount,
+                                 options: opts)
             }.value
             lastWallMs = Date().timeIntervalSince(started) * 1000
             lastWallMs.map(rememberScanDuration)

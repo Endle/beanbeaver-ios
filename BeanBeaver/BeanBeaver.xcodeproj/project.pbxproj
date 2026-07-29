@@ -12,6 +12,8 @@
 		1C0000000000000000000003 /* ReceiptPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000003 /* ReceiptPipeline.swift */; };
 		1C0000000000000000000004 /* DocumentScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000004 /* DocumentScanner.swift */; };
 		1C0000000000000000000005 /* PhotoSaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000005 /* PhotoSaver.swift */; };
+		1C0000000000000000000090 /* ItemRuleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000090 /* ItemRuleStore.swift */; };
+		1C0000000000000000000091 /* ItemRulesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000091 /* ItemRulesView.swift */; };
 		1C0000000000000000000006 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000006 /* Theme.swift */; };
 		1C0000000000000000000007 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000007 /* Keychain.swift */; };
 		1C0000000000000000000008 /* LedgerExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000008 /* LedgerExport.swift */; };
@@ -51,6 +53,8 @@
 		1B0000000000000000000003 /* ReceiptPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptPipeline.swift; sourceTree = "<group>"; };
 		1B0000000000000000000004 /* DocumentScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentScanner.swift; sourceTree = "<group>"; };
 		1B0000000000000000000005 /* PhotoSaver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoSaver.swift; sourceTree = "<group>"; };
+		1B0000000000000000000090 /* ItemRuleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemRuleStore.swift; sourceTree = "<group>"; };
+		1B0000000000000000000091 /* ItemRulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemRulesView.swift; sourceTree = "<group>"; };
 		1B0000000000000000000006 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		1B0000000000000000000007 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		1B0000000000000000000008 /* LedgerExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerExport.swift; sourceTree = "<group>"; };
@@ -119,6 +123,8 @@
 				1B0000000000000000000003 /* ReceiptPipeline.swift */,
 				1B0000000000000000000004 /* DocumentScanner.swift */,
 				1B0000000000000000000005 /* PhotoSaver.swift */,
+				1B0000000000000000000090 /* ItemRuleStore.swift */,
+				1B0000000000000000000091 /* ItemRulesView.swift */,
 				1B0000000000000000000006 /* Theme.swift */,
 				1B0000000000000000000007 /* Keychain.swift */,
 				1B0000000000000000000008 /* LedgerExport.swift */,
@@ -247,6 +253,8 @@
 				1C0000000000000000000003 /* ReceiptPipeline.swift in Sources */,
 				1C0000000000000000000004 /* DocumentScanner.swift in Sources */,
 				1C0000000000000000000005 /* PhotoSaver.swift in Sources */,
+				1C0000000000000000000090 /* ItemRuleStore.swift in Sources */,
+				1C0000000000000000000091 /* ItemRulesView.swift in Sources */,
 				1C0000000000000000000006 /* Theme.swift in Sources */,
 				1C0000000000000000000007 /* Keychain.swift in Sources */,
 				1C0000000000000000000008 /* LedgerExport.swift in Sources */,

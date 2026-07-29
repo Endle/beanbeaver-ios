@@ -656,6 +656,16 @@ struct SettingsView: View {
                     Text("The currency and tax account used in every beancount entry BeanBeaver generates. Currency defaults to your region.")
                 }
 
+                Section {
+                    NavigationLink {
+                        ItemRulesView(store: ItemRuleStore.shared)
+                    } label: {
+                        Label("Categories & Tags", systemImage: "tag")
+                    }
+                } footer: {
+                    Text("See how items are sorted into accounts, check why a particular item was categorized the way it was, and bring in your own rules.")
+                }
+
                 storageSection
 
                 Section {
