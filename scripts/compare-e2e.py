@@ -116,9 +116,17 @@ def check_items(res, exp, tol=frozenset()):
         prices = [dec(it.get("price")) for it in matches]
         if want_price not in prices:
             return False
-        want_cat = c.get("category")
+        # Fixtures have always spelled this "category" while holding a beancount
+        # account string. Core v0.7.0 renamed the *emitted* field to `account`
+        # (the old `category` held a classifier key, not necessarily an account),
+        # so read the new name and fall back to the old for pre-0.7.0 output.
+        want_cat = c.get("account") or c.get("category")
         if want_cat and not c.get("category_optional") and not category_tolerated(pat, tol):
-            cats = [it.get("category") or "" for it in matches if dec(it.get("price")) == want_price]
+            cats = [
+                it.get("account") or it.get("category") or ""
+                for it in matches
+                if dec(it.get("price")) == want_price
+            ]
             if not any(want_cat in cat for cat in cats):
                 return False
     return True
@@ -148,7 +156,8 @@ def main():
         res = results.get(name)
         known = set(exp.get("known_failures", []))
         tol_hits += sum(1 for c in (exp.get("critical_items") or [])
-                        if c.get("category") and category_tolerated(c["description"].upper(), tol))
+                        if (c.get("account") or c.get("category"))
+                        and category_tolerated(c["description"].upper(), tol))
         if res is None:
             rows.append((name, "NO RESULT", {}, "—"))
             total_fail += 1
