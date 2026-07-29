@@ -500,13 +500,15 @@ final class ReceiptBatch {
             let account = creditCardAccount
             let currency = LedgerFormatPrefs.currency
             let taxAccount = LedgerFormatPrefs.taxAccount
+            let opts = ItemRuleStore.shared.parseOptions
             do {
                 let session = try OcrSessionProvider.loaded()
                 let started = Date()
                 // OCR is CPU-heavy; keep it off the main actor.
                 let result = try await Task.detached(priority: .userInitiated) {
                     try session.scan(imageData: data, creditCardAccount: account,
-                                     currency: currency, taxAccount: taxAccount)
+                                     currency: currency, taxAccount: taxAccount,
+                                     options: opts)
                 }.value
                 let wallMs = Date().timeIntervalSince(started) * 1000
                 setState(.parsed(result), for: draft.id, wallMs: wallMs)

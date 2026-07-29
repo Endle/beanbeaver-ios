@@ -25,7 +25,10 @@ public extension OcrSession {
         imageData: Data,
         creditCardAccount: String,
         currency: String,
-        taxAccount: String
+        taxAccount: String,
+        /// Rule overlays. Defaults to the bundled corpus, so existing callers
+        /// are unaffected; the app passes the user's imported documents here.
+        options: ParseOptions = ParseOptions(ruleDocuments: [], knownMerchants: [])
     ) throws -> ReceiptResult {
         let c = Calendar.current.dateComponents([.year, .month, .day], from: Date())
         let today = DateYmd(
@@ -33,12 +36,13 @@ public extension OcrSession {
             month: UInt32(c.month ?? 1),
             day: UInt32(c.day ?? 1)
         )
-        return try scan(
+        return try scanWithOptions(
             imageBytes: imageData,
             today: today,
             creditCardAccount: creditCardAccount,
             currency: currency,
-            taxAccount: taxAccount
+            taxAccount: taxAccount,
+            options: options
         )
     }
 }
