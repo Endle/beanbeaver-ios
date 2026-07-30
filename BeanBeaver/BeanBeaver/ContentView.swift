@@ -278,15 +278,26 @@ struct ContentView: View {
                     let records = SpendStore.shared.records
                     for id in SpendSummary.monthIds(from: records) {
                         let month = SpendSummary.month(id, from: records)
-                        NSLog("[Spending] \(month.label) | tracked=\(month.tracked) items=\(month.itemsTotal) "
+                        dumpLine("[Spending] \(month.label) | tracked=\(month.tracked) items=\(month.itemsTotal) "
                             + "tax=\(month.tax) receiptTotal=\(month.receiptTotal) "
                             + "receipts=\(month.receiptCount) excluded=\(month.excludedCount) "
                             + "unreadable=\(month.unreadablePriceCount)")
                         for group in month.roots {
-                            NSLog("[Spending]   root \(group.id) \"\(group.label)\"=\(group.amount) "
+                            dumpLine("[Spending]   root \(group.id) \"\(group.label)\"=\(group.amount) "
                                 + "(\(group.itemCount) items)")
                             for leaf in group.leaves {
-                                NSLog("[Spending]     leaf \(leaf.label)=\(leaf.amount) (\(leaf.itemCount) items)")
+                                dumpLine("[Spending]     leaf \(leaf.label)=\(leaf.amount) (\(leaf.itemCount) items)")
+                                // The drill-down's own query, not a re-derivation:
+                                // these are the rows `CategoryItemsView` lists, so a
+                                // leaf whose entries don't sum to its total is
+                                // greppable rather than only visible by tapping.
+                                let entries = SpendSummary.items(.leaf(leaf.label), from: month.records)
+                                let sum = entries.reduce(0) { $0 + $1.amount }
+                                dumpLine("[Spending]       items sum=\(sum) count=\(entries.count)")
+                                for entry in entries {
+                                    dumpLine("[Spending]       · \(entry.item.description)=\(entry.amount) "
+                                        + "from \(entry.record.result.merchant)")
+                                }
                             }
                         }
                     }

@@ -247,8 +247,67 @@ enum SpendSummary {
     /// The item's display leaf — the app's existing label
     /// (`CategoryDisplay.tagDisplay(for:)`), so spending, the result card and the
     /// Money Manager export agree by construction.
-    private static func leafLabel(of item: ReceiptItem) -> String {
+    ///
+    /// Not private: `CategoryItemsView` groups by the same label the totals were
+    /// accumulated under, so a drill-down can't disagree with the figure that
+    /// was tapped to reach it.
+    static func leafLabel(of item: ReceiptItem) -> String {
         CategoryDisplay.tagDisplay(for: item.tags).primary ?? "Uncategorized"
+    }
+
+    // MARK: - Drill-down
+
+    /// One line item, with the receipt it came from. What a category total is
+    /// actually made of — tapping "Dairy $19.38" asks *which items*, and a
+    /// receipt list would answer with whole-receipt totals that have nothing to
+    /// do with the number tapped.
+    struct ItemEntry: Identifiable {
+        /// Stable within a month: a record's id plus the item's index in it.
+        /// Two identical lines on one receipt stay distinct rows.
+        let id: String
+        let item: ReceiptItem
+        let record: SpendRecord
+        let amount: Double
+    }
+
+    /// What a category is selected by — a whole top-level group, or one leaf
+    /// inside it. The two cases exist because tapping a card's header and
+    /// tapping a row in it are different questions.
+    ///
+    /// A root is selected by its **raw tag id**, not its display label: the
+    /// group's label is whatever authored wording any of its items supplied
+    /// (`"personalcare"` -> `"Personal Care"`), so matching on the label would
+    /// drop every item in the group that didn't carry the root tag itself. A
+    /// leaf carries no such id — `leafLabel` is the only thing it was ever
+    /// accumulated under — so it matches on the label it was grouped by.
+    enum Category: Equatable {
+        case root(String)
+        case leaf(String)
+    }
+
+    /// Every item in `records` under `category`, newest receipt first, and
+    /// within a receipt in the order the items were printed.
+    ///
+    /// Recomputed from `Month.records` rather than stored during accumulation:
+    /// the substrate is small, and deriving it here means the list and the total
+    /// can't drift apart. Excluded receipts are left out, matching every other
+    /// figure on the spending screen.
+    static func items(_ category: Category, from records: [SpendRecord]) -> [ItemEntry] {
+        var entries: [ItemEntry] = []
+        for record in records where !record.isExcluded {
+            for (index, item) in record.result.items.enumerated() {
+                let matches: Bool
+                switch category {
+                case .root(let id): matches = root(of: item) == id
+                case .leaf(let label): matches = leafLabel(of: item) == label
+                }
+                guard matches else { continue }
+                entries.append(ItemEntry(id: "\(record.id.uuidString)-\(index)",
+                                         item: item, record: record,
+                                         amount: PriceFormat.value(item.price) ?? 0))
+            }
+        }
+        return entries
     }
 
     // MARK: - Arithmetic

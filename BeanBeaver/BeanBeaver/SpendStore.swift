@@ -232,11 +232,20 @@ final class SpendStore {
 }
 
 #if DEBUG
+/// Log an already-interpolated line without letting its text be read as a
+/// format string. Receipt text routinely contains `%` ("2% FINE-FILT"), and
+/// `NSLog("\(text)")` hands that straight to the formatter — which turned that
+/// item into `2 0.000000INE-FILT` in a dump while the app rendered it correctly
+/// on screen. Every dump line that can carry OCR'd text goes through here.
+func dumpLine(_ message: String) {
+    NSLog("%@", message)
+}
+
 extension SpendStore {
     func logState(_ label: String) {
-        NSLog("[Spend] \(label): records=\(records.count) unexported=\(unexportedRecords.count)")
+        dumpLine("[Spend] \(label): records=\(records.count) unexported=\(unexportedRecords.count)")
         for record in records {
-            NSLog("[Spend]   \(record.result.merchant)|\(record.result.total)"
+            dumpLine("[Spend]   \(record.result.merchant)|\(record.result.total)"
                 + "|id=\(record.result.beanbeaverId ?? "nil")"
                 + "|exportedAt=\(record.exportedAt.map(\.description) ?? "nil")"
                 + "|targets=\(record.exportedTargets.joined(separator: ","))"

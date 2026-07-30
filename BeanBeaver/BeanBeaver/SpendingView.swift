@@ -176,17 +176,32 @@ struct SpendingView: View {
     private func rootCard(_ group: SpendSummary.RootGroup) -> some View {
         let hasTarget = group.id == targetRoot && monthlyAmount != nil
         return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: CategoryDisplay.style(for: group.label).icon)
-                    .foregroundStyle(Color.bbAccent)
-                    .frame(width: 22)
-                Text(group.label)
-                    .font(.headline)
-                Spacer()
-                Text(PriceFormat.currency(group.amount))
-                    .font(.headline)
-                    .monospacedDigit()
+            // Header and leaves both drill into the items behind the figure —
+            // the question a tapped total actually raises. Selected by raw tag
+            // id for a root, by display label for a leaf; see
+            // `SpendSummary.Category`.
+            NavigationLink {
+                CategoryItemsView(category: .root(group.id), title: group.label,
+                                  monthID: activeMonthID)
+            } label: {
+                HStack {
+                    Image(systemName: CategoryDisplay.style(for: group.label).icon)
+                        .foregroundStyle(Color.bbAccent)
+                        .frame(width: 22)
+                    Text(group.label)
+                        .font(.headline)
+                    Spacer()
+                    Text(PriceFormat.currency(group.amount))
+                        .font(.headline)
+                        .monospacedDigit()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(.primary)
+                .contentShape(.rect)
             }
+            .buttonStyle(.plain)
 
             if hasTarget, let target = monthlyAmount {
                 targetBar(spent: group.amount, target: target)
@@ -195,7 +210,13 @@ struct SpendingView: View {
             if !group.leaves.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(group.leaves) { leaf in
-                        leafRow(leaf)
+                        NavigationLink {
+                            CategoryItemsView(category: .leaf(leaf.label), title: leaf.label,
+                                              monthID: activeMonthID)
+                        } label: {
+                            leafRow(leaf)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -216,7 +237,12 @@ struct SpendingView: View {
                 Text(PriceFormat.currency(leaf.amount))
                     .font(.subheadline.weight(.medium))
                     .monospacedDigit()
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
+            .foregroundStyle(.primary)
+            .contentShape(.rect)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.bbAccentSoft)
