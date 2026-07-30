@@ -41,10 +41,3 @@ App code under `BeanBeaver/BeanBeaver/`, by concern (open the file for detail):
   anything spanning services → Settings.
 
 - Avoid using macro #if DEBUG - think twice that if it's necessary
-
-- **One commit per PR.** A PR opened against this repo must contain exactly one
-  commit — squash before opening (`git rebase -i`'s interactive mode isn't
-  available here, so use `git reset --soft $(git merge-base HEAD main)` and
-  recommit, or `git commit --amend` while the work is still a single commit).
-  Follow-up review fixes get amended into that commit and force-pushed, not
-  stacked on top.
