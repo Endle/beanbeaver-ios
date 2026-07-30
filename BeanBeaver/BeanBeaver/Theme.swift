@@ -196,13 +196,31 @@ enum PriceFormat {
         let isNegative: Bool
     }
 
+    /// The numeric value behind a raw price string, or nil if it isn't
+    /// parseable. Shared by `display(_:)` and every other place that needs the
+    /// number rather than a formatted string — the budget arithmetic
+    /// (`SpendSummary`) and `MoneyManagerExport.amountString`, so there's one
+    /// parse of this loosely-formatted OCR output, not three.
+    static func value(_ raw: String) -> Double? {
+        Double(raw.filter { $0.isNumber || $0 == "." || $0 == "-" })
+    }
+
+    /// A computed amount as "$X.XX" — the summing side of the app (spending
+    /// totals, category rows, the home card) rather than the raw-string side
+    /// `display(_:)` handles. Single currency: `$` is hardcoded app-wide today,
+    /// same as `display`; reconciling that with `LedgerFormatPrefs.currency` is
+    /// pre-existing and out of scope here.
+    static func currency(_ amount: Double) -> String {
+        let sign = amount < 0 ? "-" : ""
+        return "\(sign)$" + String(format: "%.2f", abs(amount))
+    }
+
     static func display(_ raw: String) -> Display {
-        let filtered = raw.filter { $0.isNumber || $0 == "." || $0 == "-" }
-        guard let value = Double(filtered) else {
+        guard let val = value(raw) else {
             return Display(text: raw, isNegative: false)
         }
-        let sign = value < 0 ? "-" : ""
-        let text = "\(sign)$" + String(format: "%.2f", abs(value))
-        return Display(text: text, isNegative: value < 0)
+        let sign = val < 0 ? "-" : ""
+        let text = "\(sign)$" + String(format: "%.2f", abs(val))
+        return Display(text: text, isNegative: val < 0)
     }
 }

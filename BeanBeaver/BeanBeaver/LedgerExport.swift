@@ -494,6 +494,10 @@ final class LedgerExporter {
             }
             result = Result(title: outcome.title, message: outcome.message,
                             openURL: outcome.openableURL, isError: false)
+            // One hook covers every ledger call site — result screen, batch
+            // page, Receipts screen — so none of them has to remember to mark
+            // what it just sent.
+            SpendStore.shared.markExported(ids: entries.compactMap(\.beanbeaverId), target: kind.shortTitle)
             return true
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription

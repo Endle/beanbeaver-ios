@@ -44,6 +44,10 @@
 		1C0000000000000000000021 /* MoneyManagerExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000021 /* MoneyManagerExport.swift */; };
 		1C0000000000000000000022 /* Entitlements.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000022 /* Entitlements.swift */; };
 		1C0000000000000000000023 /* ZoomableImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000023 /* ZoomableImageView.swift */; };
+		1C0000000000000000000024 /* SpendStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000024 /* SpendStore.swift */; };
+		1C0000000000000000000025 /* SpendSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000025 /* SpendSummary.swift */; };
+		1C0000000000000000000026 /* SpendingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000026 /* SpendingView.swift */; };
+		1C0000000000000000000027 /* ReceiptsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000027 /* ReceiptsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -84,6 +88,10 @@
 		1B0000000000000000000021 /* MoneyManagerExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyManagerExport.swift; sourceTree = "<group>"; };
 		1B0000000000000000000022 /* Entitlements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entitlements.swift; sourceTree = "<group>"; };
 		1B0000000000000000000023 /* ZoomableImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomableImageView.swift; sourceTree = "<group>"; };
+		1B0000000000000000000024 /* SpendStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendStore.swift; sourceTree = "<group>"; };
+		1B0000000000000000000025 /* SpendSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendSummary.swift; sourceTree = "<group>"; };
+		1B0000000000000000000026 /* SpendingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendingView.swift; sourceTree = "<group>"; };
+		1B0000000000000000000027 /* ReceiptsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -135,6 +143,10 @@
 				1B000000000000000000000D /* DataDump.swift */,
 				1B000000000000000000000E /* DataDumpView.swift */,
 				1B000000000000000000000F /* ReceiptCaptureStore.swift */,
+				1B0000000000000000000024 /* SpendStore.swift */,
+				1B0000000000000000000025 /* SpendSummary.swift */,
+				1B0000000000000000000026 /* SpendingView.swift */,
+				1B0000000000000000000027 /* ReceiptsView.swift */,
 				1B000000000000000000001E /* BatchImportView.swift */,
 				1B000000000000000000001F /* MoneyManagerWorkbook.swift */,
 				1B0000000000000000000021 /* MoneyManagerExport.swift */,
@@ -275,6 +287,10 @@
 				1C000000000000000000001C /* DebugInfoListView.swift in Sources */,
 				1C0000000000000000000016 /* LaunchTiming.swift in Sources */,
 				1C0000000000000000000017 /* BundledDocumentView.swift in Sources */,
+				1C0000000000000000000024 /* SpendStore.swift in Sources */,
+				1C0000000000000000000025 /* SpendSummary.swift in Sources */,
+				1C0000000000000000000026 /* SpendingView.swift in Sources */,
+				1C0000000000000000000027 /* ReceiptsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

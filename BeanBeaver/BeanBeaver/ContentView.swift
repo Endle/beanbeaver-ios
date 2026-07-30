@@ -12,6 +12,10 @@ struct ContentView: View {
     @State private var showScanner = false
     /// Also opened by the `-showBatchImport` DEBUG deep-link.
     @State private var showBatchImport = false
+    /// Also opened by the `-showSpending` DEBUG deep-link.
+    @State private var showSpending = false
+    /// Also opened by the `-showReceipts` DEBUG deep-link.
+    @State private var showReceipts = false
     @State private var showOriginReceipt = false
     @State private var showSettings = false
     /// Also opened by the `-showLedgerSettings` DEBUG deep-link, so it can be
@@ -60,13 +64,10 @@ struct ContentView: View {
         batch.isEmpty ? "" : " (\(batch.drafts.count))"
     }
 
-    /// Every capture "Clear Old Receipts" must spare: the photo behind the
-    /// result currently on screen, plus every photo the pending batch still
-    /// needs to parse, review, or export.
-    private var keptCaptureFilenames: Set<String> {
-        var kept = batch.liveCaptureFilenames
-        if let name = pipeline.capturedImageURL?.lastPathComponent { kept.insert(name) }
-        return kept
+    /// Same idiom as `batchBadge`, for the "Receipts" home button.
+    private var receiptsBadge: String {
+        let count = SpendStore.shared.records.count
+        return count == 0 ? "" : " (\(count))"
     }
 
     /// Build the Money Manager `.xlsx` for `results` and present its share sheet.
@@ -76,6 +77,10 @@ struct ContentView: View {
         guard Entitlements.shared.isPremium else { return }
         do {
             moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: results))
+            // Marked at presentation, not confirmed delivery — the share sheet
+            // that follows may be cancelled — which is why the row says
+            // "Shared", never "Filed".
+            SpendStore.shared.markShared(results: results)
         } catch {
             DebugInfoStore.recordExportFailure(context: "Money Manager export",
                                                message: error.localizedDescription)
@@ -163,6 +168,13 @@ struct ContentView: View {
                 BatchImportView(batch: batch, exporter: exporter,
                                 onConfigure: { showLedgerSettings = true })
             }
+            .navigationDestination(isPresented: $showSpending) {
+                SpendingView(onScan: { showScanner = true }, exporter: exporter,
+                             onConfigure: { showLedgerSettings = true })
+            }
+            .navigationDestination(isPresented: $showReceipts) {
+                ReceiptsView(exporter: exporter, onConfigure: { showLedgerSettings = true })
+            }
             .fullScreenCover(isPresented: $showScanner) {
                 ScannerWithHint(
                     onScan: { data in
@@ -188,8 +200,7 @@ struct ContentView: View {
                 ActivityView(items: [share.url])
             }
             .sheet(isPresented: $showSettings) {
-                SettingsView(saveScansToPhotos: $saveScansToPhotos,
-                             keptCaptureFilenames: keptCaptureFilenames) {
+                SettingsView(saveScansToPhotos: $saveScansToPhotos) {
                     Task { await pipeline.scanBundledSample(named: sampleName) }
                 }
             }
@@ -237,6 +248,12 @@ struct ContentView: View {
                 if ProcessInfo.processInfo.arguments.contains("-showBatchImport") {
                     showBatchImport = true
                 }
+                if ProcessInfo.processInfo.arguments.contains("-showSpending") {
+                    showSpending = true
+                }
+                if ProcessInfo.processInfo.arguments.contains("-showReceipts") {
+                    showReceipts = true
+                }
                 if ProcessInfo.processInfo.arguments.contains("-showDataDump") {
                     debugShowDataDump = true
                 }
@@ -246,13 +263,33 @@ struct ContentView: View {
                 if ProcessInfo.processInfo.arguments.contains("-showDebugInfoList") {
                     debugShowDebugInfoList = true
                 }
-                // Headless check for `ReceiptCaptureStore.clearOld`: logs before/after
-                // counts so a `simctl launch` run can be grepped for correctness.
-                if ProcessInfo.processInfo.arguments.contains("-clearOldReceipts") {
-                    let before = ReceiptCaptureStore.totalBytes()
-                    let result = ReceiptCaptureStore.clearOld(keeping: keptCaptureFilenames)
-                    let after = ReceiptCaptureStore.totalBytes()
-                    NSLog("[ClearOldReceipts] before=\(before)B after=\(after)B removed=\(result.count) freed=\(result.bytes)B")
+                // `-dumpSpend`: every SpendRecord, so the two explicit states
+                // (photo, export) and the exclusion flag are greppable rather
+                // than eyeballed on a screenshot.
+                if ProcessInfo.processInfo.arguments.contains("-dumpSpend") {
+                    SpendStore.shared.logState("dump")
+                }
+                // `-dumpSpending`: each month's arithmetic, by hand-checkable
+                // line — the same numbers `SpendingView` renders. `tracked`
+                // should land on `receiptTotal`, and every root and leaf is
+                // listed so a category total can be checked against the receipt
+                // it came from.
+                if ProcessInfo.processInfo.arguments.contains("-dumpSpending") {
+                    let records = SpendStore.shared.records
+                    for id in SpendSummary.monthIds(from: records) {
+                        let month = SpendSummary.month(id, from: records)
+                        NSLog("[Spending] \(month.label) | tracked=\(month.tracked) items=\(month.itemsTotal) "
+                            + "tax=\(month.tax) receiptTotal=\(month.receiptTotal) "
+                            + "receipts=\(month.receiptCount) excluded=\(month.excludedCount) "
+                            + "unreadable=\(month.unreadablePriceCount)")
+                        for group in month.roots {
+                            NSLog("[Spending]   root \(group.id) \"\(group.label)\"=\(group.amount) "
+                                + "(\(group.itemCount) items)")
+                            for leaf in group.leaves {
+                                NSLog("[Spending]     leaf \(leaf.label)=\(leaf.amount) (\(leaf.itemCount) items)")
+                            }
+                        }
+                    }
                 }
                 // `-autoRunBatch`: headless E2E over Documents/batch_in/*.jpg → batch_out.json.
                 if BatchRunner.isRequested {
@@ -310,6 +347,8 @@ struct ContentView: View {
                     .padding(.horizontal, 24)
             }
 
+            spendCard
+
             VStack(spacing: 12) {
                 if VNDocumentCameraViewController.isSupported {
                     Button {
@@ -335,6 +374,18 @@ struct ContentView: View {
                     showBatchImport = true
                 } label: {
                     Label("Import from Photos\(batchBadge)", systemImage: "photo.on.rectangle")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .tint(.bbAccent)
+                .controlSize(.large)
+
+                Button {
+                    showReceipts = true
+                } label: {
+                    Label("Receipts\(receiptsBadge)", systemImage: "clock.arrow.circlepath")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
@@ -375,6 +426,50 @@ struct ContentView: View {
             .padding(.horizontal, 12)
         }
         .padding(.top, 20)
+    }
+
+    /// The current month's tracked spend, right on the home screen — the one
+    /// number the app exists to produce, and the way through to `SpendingView`.
+    /// A button labelled "Spending" would hide it behind a tap for no gain.
+    ///
+    /// Hidden until something has been scanned: a card reading `$0.00` is worse
+    /// than no card, and a new user's first move is the scanner below anyway.
+    /// Which month it shows comes from `SpendSummary.defaultMonthId` — the same
+    /// rule `SpendingView` opens on, so the card can't advertise one month and
+    /// hand you another.
+    @ViewBuilder
+    private var spendCard: some View {
+        if !SpendStore.shared.records.isEmpty {
+            let records = SpendStore.shared.records
+            let month = SpendSummary.month(SpendSummary.defaultMonthId(from: records),
+                                           from: records)
+            Button {
+                showSpending = true
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(month.label)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                    Text(PriceFormat.currency(month.tracked))
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundStyle(Color.bbAccent)
+                        .monospacedDigit()
+
+                    Text("tracked spend · \(month.receiptCount) receipt\(month.receiptCount == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+            }
+            .buttonStyle(.plain)
+            .bbCard()
+        }
     }
 
     // MARK: - Scanning
@@ -608,28 +703,19 @@ struct SettingsView: View {
         }
         return codes.map { (label: $0, value: $0) }
     }
-    /// Captures "Clear Old Receipts" must spare: the photo behind the result
-    /// screen currently on top, so it can't vanish out from under the user while
-    /// they're still looking at it, and every photo the pending import batch
-    /// still needs.
-    var keptCaptureFilenames: Set<String>
     var onRunSample: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var capturedBytes = ReceiptCaptureStore.totalBytes()
-    @State private var clearResultMessage: String?
+    @State private var spendStore = SpendStore.shared
+    @State private var budgetRoot: String = BudgetPrefs.root
+    @State private var budgetAmountText: String =
+        BudgetPrefs.monthlyAmount.map { String(format: "%.2f", $0) } ?? ""
+    @State private var confirmClearAllPhotos = false
+    @State private var confirmDeleteAllReceipts = false
 
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
             List {
-                if VNDocumentCameraViewController.isSupported {
-                    Section {
-                        Toggle("Save a copy to Photos", isOn: $saveScansToPhotos)
-                    } footer: {
-                        Text("Keep a copy of each camera scan in your Photos library.")
-                    }
-                }
-
                 Section {
                     Toggle("Save details file", isOn: $includeDetailsJSON)
                 } footer: {
@@ -666,7 +752,8 @@ struct SettingsView: View {
                     Text("See how items are sorted into accounts, check why a particular item was categorized the way it was, and bring in your own rules.")
                 }
 
-                storageSection
+                budgetSection
+                receiptsSection
 
                 Section {
                     Button {
@@ -696,6 +783,9 @@ struct SettingsView: View {
                 versionSection
 
                 Section {
+                    if VNDocumentCameraViewController.isSupported {
+                        Toggle("Save a copy to Photos", isOn: $saveScansToPhotos)
+                    }
                     Toggle("Store detailed debug info", isOn: $storeDetailedDebugInfo)
 #if DEBUG
                     NavigationLink("Dump All Data") {
@@ -708,7 +798,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Debug")
                 } footer: {
-                    Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.")
+                    Text("\"Save a copy to Photos\" copies each camera scan into your photo library, where the app's own delete controls can't reach it — leave it off unless you're diagnosing capture quality.\n\nOff by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.")
                 }
                 .id("debug")
             }
@@ -729,14 +819,6 @@ struct SettingsView: View {
                 }
             }
 #endif
-            .alert("Storage", isPresented: Binding(
-                get: { clearResultMessage != nil },
-                set: { if !$0 { clearResultMessage = nil } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(clearResultMessage ?? "")
-            }
             }
         }
     }
@@ -765,22 +847,68 @@ struct SettingsView: View {
         }
     }
 
-    private var storageSection: some View {
+    /// Root-tag picker + monthly target — the only two things `SpendingView`
+    /// itself doesn't already let the user set inline (it has its own amount
+    /// sheet, sharing this same `BudgetPrefs` storage, so the two can't drift).
+    private var budgetSection: some View {
         Section {
-            LabeledContent("Captured receipt photos",
-                           value: ByteCountFormatter.string(fromByteCount: capturedBytes, countStyle: .file))
-            Button(role: .destructive) {
-                let result = ReceiptCaptureStore.clearOld(keeping: keptCaptureFilenames)
-                capturedBytes = ReceiptCaptureStore.totalBytes()
-                clearResultMessage = result.count > 0
-                    ? "Cleared \(result.count) receipt photo\(result.count == 1 ? "" : "s"), "
-                        + "freed \(ByteCountFormatter.string(fromByteCount: result.bytes, countStyle: .file))."
-                    : "No old receipt photos to clear."
-            } label: {
-                Label("Clear Old Receipts", systemImage: "trash")
+            Picker("Budget category", selection: $budgetRoot) {
+                ForEach(BudgetPrefs.declaredRoots(), id: \.self) { root in
+                    Text(root.capitalized).tag(root)
+                }
             }
+            .onChange(of: budgetRoot) { _, newValue in BudgetPrefs.root = newValue }
+            TextField("Monthly amount", text: $budgetAmountText)
+                .keyboardType(.decimalPad)
+                .onChange(of: budgetAmountText) { _, newValue in
+                    BudgetPrefs.monthlyAmount = Double(newValue)
+                }
+        } header: {
+            Text("Budget")
         } footer: {
-            Text("Each scan keeps a copy of the receipt photo on your device so you can review the original later. This removes all of them except the one you're currently viewing and any still waiting in a photo import.")
+            Text("Which tracked category gets a monthly target on the Spending screen — computed from your scanned receipts' items, not the receipt totals. Leave the amount blank to track spend with no target.")
+        }
+    }
+
+    /// The honest successor to the old "Clear Old Receipts": no heuristic, and
+    /// each action says exactly what it keeps. A scanned receipt itself is now
+    /// kept until the user removes it — see `SpendStore` — so this is the only
+    /// place that storage is freed from.
+    private var receiptsSection: some View {
+        Section {
+            LabeledContent("Receipts recorded", value: "\(spendStore.records.count)")
+            LabeledContent("Receipt photos",
+                           value: ByteCountFormatter.string(
+                               fromByteCount: spendStore.totalPhotoBytes(), countStyle: .file))
+            Button {
+                confirmClearAllPhotos = true
+            } label: {
+                Label("Clear All Photos", systemImage: "photo.badge.minus")
+            }
+            Button(role: .destructive) {
+                confirmDeleteAllReceipts = true
+            } label: {
+                Label("Delete All Receipts", systemImage: "trash")
+            }
+        } header: {
+            Text("Receipts")
+        } footer: {
+            Text("Clear All Photos frees the space used by every receipt photo — every receipt's parsed data and every budget figure stay exactly as they are. Delete All Receipts removes the parsed data and the photos for every scanned receipt on this device; anything already exported to your ledger is untouched, and originals stay in your photo library.")
+        }
+        .alert("Clear all photos?", isPresented: $confirmClearAllPhotos) {
+            Button("Clear Photos", role: .destructive) { spendStore.clearAllPhotos() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Frees the space used by every receipt photo. Every receipt's parsed data and every budget figure stay exactly as they are.")
+        }
+        .alert("Delete all receipts?", isPresented: $confirmDeleteAllReceipts) {
+            Button("Delete \(spendStore.records.count) Receipt\(spendStore.records.count == 1 ? "" : "s")",
+                   role: .destructive) {
+                spendStore.removeAll()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Removes the parsed data and the photos for every scanned receipt on this device. Anything already exported to your ledger is untouched, and originals stay in your photo library.")
         }
     }
 }

@@ -48,6 +48,8 @@ struct DataDump {
         "githubOwner",
         "githubRepo",
         "storeDetailedDebugInfo",
+        "budgetRootTag",
+        "budgetMonthlyAmount",
     ]
 
     private static func captureUserDefaults() -> [Entry] {

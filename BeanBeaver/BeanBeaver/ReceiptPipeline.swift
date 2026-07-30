@@ -137,6 +137,8 @@ final class ReceiptPipeline {
             scanProgress = 1
             status = .done(result)
             DebugInfoStore.recordSuccess(result: result, wallMs: lastWallMs)
+            SpendStore.shared.record(result: result, captureFilename: capturedImageURL?.lastPathComponent,
+                                     wallMs: lastWallMs)
         } catch {
             progressTask?.cancel()
             status = .failed(String(describing: error))

@@ -1,6 +1,6 @@
 # BeanBeaver privacy policy
 
-_Last updated: 2026-07-26_
+_Last updated: 2026-07-29_
 
 BeanBeaver turns a photo of a receipt into a Beancount transaction. This policy
 explains what happens to that photo.
@@ -37,30 +37,33 @@ BeanBeaver cannot see your receipts, your ledger, or how you use it.
 ## Permissions BeanBeaver asks for
 
 - **Camera** — to photograph a receipt. Used only while the scanner is open.
-- **Add to Photos** — only if you turn on "Save a copy to Photos".
+- **Add to Photos** — only if you turn on "Save a copy to Photos", a debug
+  option under Settings → Debug, off by default.
 - **Photo library selection** — handled by the system picker; BeanBeaver only
   receives the specific image you choose, and has no access to the rest of your
   library.
 
 ## What stays on your device
 
-**Photos you scan** are stored on your device, in the app's private storage, so
-you can review the original behind a scan later. They are never uploaded as part
-of scanning. You can remove them at any time with Settings → Clear Old Receipts,
-and they are deleted along with the app if you delete it. iOS may also clear them
-on its own when the device is short of storage. If you turn on "Save a copy to
-Photos", a copy is additionally written to your own photo library.
+**A record of every receipt you scan is kept on your device.** BeanBeaver keeps
+this — merchant, date, line items, prices, category tags, and the total — in
+the app's private, backup-excluded storage, along with the receipt's photo,
+because that record is what the "This Month" budget is computed from. The
+budget itself adds no further data: it's derived from these records each time
+it's shown, and nothing about it is stored separately. They are never uploaded
+as part of scanning. You can delete a single receipt at any time (swipe it away
+on the Receipts screen), delete every receipt at once, or clear just the
+photos while every figure stays exactly as it is — Settings → Receipts has
+both bulk actions, and each says plainly what it does and doesn't touch.
+Everything is deleted along with the app if you delete it, and iOS may also
+clear a receipt's photo on its own when the device is short of storage — the
+receipt's numbers survive that even if its photo doesn't.
 
-**No history is kept.** BeanBeaver has no ledger, no database, and no list of
-past receipts. A transaction parsed from a single scan lives on the result screen
-until you copy, share or sync it, and is not saved anywhere afterwards.
-
-**Receipts waiting in a batch are the exception**, because they have to survive
-being interrupted. When you import several photos at once, that pending batch —
-the photos and whatever has been parsed from them so far — is written to the
-app's private storage, so closing the app mid-way doesn't lose your place. Each
-receipt is removed from it once you export it, and discarding the batch deletes
-the file outright.
+If you turn on "Save a copy to Photos" (a debug option, off by default — see
+below), a copy of each camera scan is *additionally* written to your own photo
+library. That copy sits outside BeanBeaver's storage, so none of the app's own
+delete controls — clearing a photo, deleting a receipt, Delete All Receipts —
+can reach it; removing it means deleting it from Photos yourself.
 
 **If you turn on "Store detailed debug info"** (Settings → Debug, off unless you
 switch it on), BeanBeaver additionally keeps a full record of each scan in the
