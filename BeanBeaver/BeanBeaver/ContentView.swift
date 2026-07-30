@@ -34,6 +34,9 @@ struct ContentView: View {
     /// The Money Manager `.xlsx` awaiting the share sheet — one presentation point
     /// for both the toolbar menu and the result card's menu.
     @State private var moneyManagerShare: ShareFile?
+    /// Masks the money figures on the home card and the spending screens when
+    /// the user has asked for it — see `AmountPrivacy`.
+    @State private var amountPrivacy = AmountPrivacy.shared
     @Environment(\.openURL) private var openURL
 
     /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
@@ -291,12 +294,24 @@ struct ContentView: View {
                                 // these are the rows `CategoryItemsView` lists, so a
                                 // leaf whose entries don't sum to its total is
                                 // greppable rather than only visible by tapping.
+                                // Grouped by receipt the way the screen groups them,
+                                // and the flat sum kept alongside so a grouping that
+                                // dropped or double-counted an item shows up as the
+                                // two numbers disagreeing.
                                 let entries = SpendSummary.items(.leaf(leaf.label), from: month.records)
                                 let sum = entries.reduce(0) { $0 + $1.amount }
                                 dumpLine("[Spending]       items sum=\(sum) count=\(entries.count)")
-                                for entry in entries {
-                                    dumpLine("[Spending]       · \(entry.item.description)=\(entry.amount) "
-                                        + "from \(entry.record.result.merchant)")
+                                for group in SpendSummary.receipts(.leaf(leaf.label), from: month.records) {
+                                    let merchant: String = group.record.result.merchant
+                                    let receiptTotal: String = group.receiptTotal.map { "\($0)" } ?? "unparsed"
+                                    let here: Int = group.entries.count
+                                    let onReceipt: Int = group.record.result.items.count
+                                    dumpLine("[Spending]       receipt \(merchant) share=\(group.amount) "
+                                        + "of \(receiptTotal) (\(here) of \(onReceipt) items)")
+                                    for entry in group.entries {
+                                        let description: String = entry.item.description
+                                        dumpLine("[Spending]         · \(description)=\(entry.amount)")
+                                    }
                                 }
                             }
                         }
@@ -454,31 +469,60 @@ struct ContentView: View {
             let records = SpendStore.shared.records
             let month = SpendSummary.month(SpendSummary.defaultMonthId(from: records),
                                            from: records)
-            Button {
-                showSpending = true
-            } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(month.label)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                    Text(PriceFormat.currency(month.tracked))
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundStyle(Color.bbAccent)
-                        .monospacedDigit()
-
-                    Text("tracked spend · \(month.receiptCount) receipt\(month.receiptCount == 1 ? "" : "s")")
+            // Two sibling buttons, not one nested in the other: an eye laid over
+            // the card's own Button loses the hit test to it, so tapping the eye
+            // pushed Spending instead of unmasking. Side by side, each owns its
+            // taps outright.
+            HStack(spacing: 0) {
+                Button {
+                    showSpending = true
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(month.label)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                        // Deliberately quieter than it was (34pt, accent red): this
+                        // is the only card on the screen, so it doesn't need to
+                        // shout to be found, and at full volume it competed with
+                        // the tagline above over what the app *is*. Accent red also
+                        // reads as "alert" on a money figure, which `tracked spend`
+                        // doesn't mean. The filled "Scan a Receipt" button below
+                        // stays the loudest thing here — it's the primary action.
+                        Text(amountPrivacy.text(PriceFormat.currency(month.tracked)))
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundStyle(.primary)
+                            .monospacedDigit()
+
+                        Text("tracked spend · \(month.receiptCount) receipt\(month.receiptCount == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
+                .buttonStyle(.plain)
+
+                // Always present, not just while masked: it's a toggle now, so
+                // hiding it after a reveal would strand the user with no way
+                // back short of Settings.
+                Button {
+                    amountPrivacy.toggle()
+                } label: {
+                    Image(systemName: amountPrivacy.hideAmounts ? "eye" : "eye.slash")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(amountPrivacy.hideAmounts ? "Show amounts" : "Hide amounts")
             }
-            .buttonStyle(.plain)
+            .padding()
             .bbCard()
         }
     }
@@ -717,6 +761,7 @@ struct SettingsView: View {
     var onRunSample: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var spendStore = SpendStore.shared
+    @State private var amountPrivacy = AmountPrivacy.shared
     @State private var budgetRoot: String = BudgetPrefs.root
     @State private var budgetAmountText: String =
         BudgetPrefs.monthlyAmount.map { String(format: "%.2f", $0) } ?? ""
@@ -863,6 +908,7 @@ struct SettingsView: View {
     /// sheet, sharing this same `BudgetPrefs` storage, so the two can't drift).
     private var budgetSection: some View {
         Section {
+            Toggle("Hide amounts", isOn: $amountPrivacy.hideAmounts)
             Picker("Budget category", selection: $budgetRoot) {
                 ForEach(BudgetPrefs.declaredRoots(), id: \.self) { root in
                     Text(root.capitalized).tag(root)
@@ -877,7 +923,7 @@ struct SettingsView: View {
         } header: {
             Text("Budget")
         } footer: {
-            Text("Which tracked category gets a monthly target on the Spending screen — computed from your scanned receipts' items, not the receipt totals. Leave the amount blank to track spend with no target.")
+            Text("Which tracked category gets a monthly target on the Spending screen — computed from your scanned receipts' items, not the receipt totals. Leave the amount blank to track spend with no target.\n\nHide amounts covers every figure on the home card and the spending screens, so a glance at your phone doesn't read your month. On by default. The eye on the home card and on the Spending screen is this same switch, so flipping it anywhere changes it everywhere. Your receipts and exports are unchanged either way.")
         }
     }
 

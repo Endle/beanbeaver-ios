@@ -270,6 +270,29 @@ enum SpendSummary {
         let amount: Double
     }
 
+    /// One receipt's contribution to a category: the items of it that landed
+    /// under the tapped category, and the receipt they were printed on.
+    ///
+    /// The unit the drill-down lists, because a category total is spread over
+    /// *purchases* — "$8.42 of this Costco run was dairy" is the shape of the
+    /// answer, and repeating the merchant on every item row buries it.
+    ///
+    /// Derived from `items(_:from:)` rather than accumulated separately: one
+    /// matching predicate means a group can't disagree with the flat list, or
+    /// with the figure that was tapped to reach it.
+    struct ReceiptGroup: Identifiable {
+        var id: UUID { record.id }
+        let record: SpendRecord
+        /// The matching items, in the order they were printed.
+        let entries: [ItemEntry]
+        /// What those items add up to — this receipt's share of the category
+        /// total. `entries` sums to this, and every group sums to the category.
+        let amount: Double
+        /// The whole receipt's total, or nil when `result.total` didn't parse.
+        /// Carried as context only — never spent from, per this type's header.
+        let receiptTotal: Double?
+    }
+
     /// What a category is selected by — a whole top-level group, or one leaf
     /// inside it. The two cases exist because tapping a card's header and
     /// tapping a row in it are different questions.
@@ -308,6 +331,31 @@ enum SpendSummary {
             }
         }
         return entries
+    }
+
+    /// `items(_:from:)`, grouped by the receipt each item was printed on.
+    ///
+    /// Newest receipt first, and within a receipt the printed order — both
+    /// inherited rather than re-sorted: `items` walks `records` in store order
+    /// (newest-first) and each receipt's items in `enumerated()` order, so
+    /// accumulating in first-seen order preserves both.
+    static func receipts(_ category: Category, from records: [SpendRecord]) -> [ReceiptGroup] {
+        var order: [UUID] = []
+        var grouped: [UUID: (record: SpendRecord, entries: [ItemEntry], amount: Double)] = [:]
+        for entry in items(category, from: records) {
+            let id = entry.record.id
+            if grouped[id] == nil {
+                order.append(id)
+                grouped[id] = (record: entry.record, entries: [], amount: 0)
+            }
+            grouped[id]!.entries.append(entry)
+            grouped[id]!.amount += entry.amount
+        }
+        return order.compactMap { id in
+            guard let group = grouped[id] else { return nil }
+            return ReceiptGroup(record: group.record, entries: group.entries, amount: group.amount,
+                                receiptTotal: PriceFormat.value(group.record.result.total))
+        }
     }
 
     // MARK: - Arithmetic

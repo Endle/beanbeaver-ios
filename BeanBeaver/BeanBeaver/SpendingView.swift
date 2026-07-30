@@ -19,6 +19,7 @@ struct SpendingView: View {
     var onConfigure: () -> Void = {}
 
     @State private var store = SpendStore.shared
+    @State private var amountPrivacy = AmountPrivacy.shared
     @State private var selectedMonthID: String?
     @State private var monthlyAmount: Double? = BudgetPrefs.monthlyAmount
     @State private var showBudgetAmountSheet = false
@@ -64,6 +65,16 @@ struct SpendingView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !store.records.isEmpty {
+                // The same single state the home card's eye and the Settings
+                // toggle write — three places, one value, so they agree.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        amountPrivacy.toggle()
+                    } label: {
+                        Label(amountPrivacy.hideAmounts ? "Show Amounts" : "Hide Amounts",
+                              systemImage: amountPrivacy.hideAmounts ? "eye" : "eye.slash")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         ReceiptsView(exporter: exporter, onConfigure: onConfigure)
@@ -145,7 +156,7 @@ struct SpendingView: View {
     /// natural place to reach for when you want to see what made up the number.
     private var headline: some View {
         VStack(spacing: 4) {
-            Text(PriceFormat.currency(summary.tracked))
+            Text(amountPrivacy.text(PriceFormat.currency(summary.tracked)))
                 .font(.system(size: 44, weight: .bold))
                 .foregroundStyle(Color.bbAccent)
             Text("tracked spend")
@@ -191,7 +202,7 @@ struct SpendingView: View {
                     Text(group.label)
                         .font(.headline)
                     Spacer()
-                    Text(PriceFormat.currency(group.amount))
+                    Text(amountPrivacy.text(PriceFormat.currency(group.amount)))
                         .font(.headline)
                         .monospacedDigit()
                     Image(systemName: "chevron.right")
@@ -199,6 +210,10 @@ struct SpendingView: View {
                         .foregroundStyle(.secondary)
                 }
                 .foregroundStyle(.primary)
+                // Padding before `contentShape` so the padded frame is what gets
+                // hit, not just the glyphs: the header's own text band is only
+                // ~17pt tall, well under the 44pt touch minimum.
+                .padding(.vertical, 8)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -208,7 +223,10 @@ struct SpendingView: View {
             }
 
             if !group.leaves.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
+                // No spacing of its own: each row carries its gap as padding
+                // instead, so the space between two leaves is *tappable* and
+                // belongs to one of them rather than being a dead band.
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(group.leaves) { leaf in
                         NavigationLink {
                             CategoryItemsView(category: .leaf(leaf.label), title: leaf.label,
@@ -227,6 +245,12 @@ struct SpendingView: View {
 
     /// Leaf bars scale to `summary.maxLeafAmount` — the largest leaf anywhere in
     /// the month — so a bar means the same thing in every card on the screen.
+    ///
+    /// The whole row is one touch target: label, bar, and the padding around
+    /// them. Shaping only the text line (which is what this did) left a ~25pt
+    /// strip broken by a dead gap above the bar — a row that looks comfortably
+    /// tappable but isn't, on a card where neighbouring rows lead to *different*
+    /// categories and a near miss is a wrong answer rather than a no-op.
     private func leafRow(_ leaf: SpendSummary.Leaf) -> some View {
         let maxAmount = summary.maxLeafAmount
         return VStack(alignment: .leading, spacing: 4) {
@@ -234,15 +258,13 @@ struct SpendingView: View {
                 Text(leaf.label)
                     .font(.subheadline)
                 Spacer()
-                Text(PriceFormat.currency(leaf.amount))
+                Text(amountPrivacy.text(PriceFormat.currency(leaf.amount)))
                     .font(.subheadline.weight(.medium))
                     .monospacedDigit()
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            .foregroundStyle(.primary)
-            .contentShape(.rect)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.bbAccentSoft)
@@ -253,6 +275,12 @@ struct SpendingView: View {
             }
             .frame(height: 6)
         }
+        .foregroundStyle(.primary)
+        // Padding *then* `contentShape`, so the hit region is the padded frame
+        // rather than the drawn glyphs and capsules. Replaces the spacing the
+        // enclosing stack used to add, so this buys hit area rather than height.
+        .padding(.vertical, 8)
+        .contentShape(.rect)
     }
 
     // MARK: - The optional target
@@ -272,14 +300,14 @@ struct SpendingView: View {
             .frame(height: 10)
             HStack {
                 Text(remaining >= 0
-                     ? "\(PriceFormat.currency(remaining)) left"
-                     : "\(PriceFormat.currency(-remaining)) over")
+                     ? "\(amountPrivacy.text(PriceFormat.currency(remaining))) left"
+                     : "\(amountPrivacy.text(PriceFormat.currency(-remaining))) over")
                     .font(.subheadline.weight(.medium))
                 Spacer()
                 Button {
                     showBudgetAmountSheet = true
                 } label: {
-                    Text("of \(PriceFormat.currency(target))")
+                    Text("of \(amountPrivacy.text(PriceFormat.currency(target)))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -301,8 +329,8 @@ struct SpendingView: View {
         let expectedByNow = target * Double(day) / Double(daysInMonth)
         let delta = expectedByNow - spent
         let text = delta >= 0
-            ? "day \(day) of \(daysInMonth) · \(PriceFormat.currency(delta)) ahead of pace"
-            : "day \(day) of \(daysInMonth) · \(PriceFormat.currency(-delta)) behind pace"
+            ? "day \(day) of \(daysInMonth) · \(amountPrivacy.text(PriceFormat.currency(delta))) ahead of pace"
+            : "day \(day) of \(daysInMonth) · \(amountPrivacy.text(PriceFormat.currency(-delta))) behind pace"
         return Text(text)
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -336,13 +364,13 @@ struct SpendingView: View {
     /// look like arithmetic the app got wrong.
     private var footerSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            footerRow("Items", PriceFormat.currency(summary.itemsTotal))
+            footerRow("Items", amountPrivacy.text(PriceFormat.currency(summary.itemsTotal)))
             if summary.tax > 0 {
-                footerRow("Tax", PriceFormat.currency(summary.tax))
+                footerRow("Tax", amountPrivacy.text(PriceFormat.currency(summary.tax)))
             }
-            footerRow("Receipt total", PriceFormat.currency(summary.receiptTotal))
+            footerRow("Receipt total", amountPrivacy.text(PriceFormat.currency(summary.receiptTotal)))
             if let gap = summary.unaccounted {
-                footerRow("Unaccounted", PriceFormat.currency(gap))
+                footerRow("Unaccounted", amountPrivacy.text(PriceFormat.currency(gap)))
                 Text("Items and tax don't add up to what the receipts say — usually a discount or a line the scan didn't read.")
                     .font(.caption2)
                     .padding(.top, 2)
