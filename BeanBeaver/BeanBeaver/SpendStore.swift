@@ -129,6 +129,21 @@ final class SpendStore {
         save()
     }
 
+    /// Drop a chosen set of rows and their photos in one pass — the middle
+    /// ground between `remove(_:)` and `removeAll()`, so tidying up a handful of
+    /// receipts isn't one swipe at a time. Saves once, not once per row.
+    func remove(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let before = records.count
+        for record in records where ids.contains(record.id) {
+            if let filename = record.captureFilename {
+                ReceiptCaptureStore.delete(filename: filename)
+            }
+        }
+        records.removeAll { ids.contains($0.id) }
+        if records.count != before { save() }
+    }
+
     /// Every row and photo, gone.
     func removeAll() {
         for record in records {
