@@ -28,6 +28,20 @@ App code under `BeanBeaver/BeanBeaver/`, by concern (open the file for detail):
   build fails to link x86_64; build the simulator with `ARCHS=arm64 ONLY_ACTIVE_ARCH=YES`
   (or target a specific arm64 simulator). Device builds are arm64 and unaffected.
 
+- **After `build-xcframework.sh`, do a `clean` build — Xcode will not relink on its
+  own.** The script replaces `sim.a`/`device.a` in place and the xcframework path
+  never changes, so the incremental build sees no dirty input: `xcodebuild … build`
+  prints **BUILD SUCCEEDED** and keeps the *previous* core inside
+  `BeanBeaver.debug.dylib`. Everything else lies convincingly — `CoreVersion.swift`,
+  `Cargo.lock`, and the `.a` itself all report the new tag while the app runs the old
+  one, so a core bump looks like it silently had no effect. Verify what actually got
+  linked:
+
+      strings <App>.app/BeanBeaver.debug.dylib | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$'
+
+  A stale build installs on a device perfectly happily, so check this before trusting
+  any on-device or simulator result that is supposed to exercise a new core.
+
 - **Sync page vs. general Settings — where UI config lives.** The **Sync page**
   (`LedgerSettingsView`, opened from the home screen's "Sync:" button and the
   result/batch "Sync Settings…" action) is the single place to pick *and* configure the
