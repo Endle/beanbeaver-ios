@@ -16,6 +16,7 @@ struct ReceiptsView: View {
     @State private var editMode: EditMode = .inactive
     @State private var selection = Set<UUID>()
     @State private var confirmDeleteAll = false
+    @State private var confirmDeleteSelected = false
     @State private var confirmClearAllPhotos = false
     @State private var moneyManagerShare: ShareFile?
 
@@ -88,6 +89,16 @@ struct ReceiptsView: View {
         } message: {
             Text("Frees the space used by every receipt photo. Every receipt's parsed data and every budget figure stay exactly as they are.")
         }
+        .alert(selectedRecords.count == 1 ? "Delete this receipt?" : "Delete \(selectedRecords.count) receipts?",
+               isPresented: $confirmDeleteSelected) {
+            Button("Delete \(selectedRecords.count) Receipt\(selectedRecords.count == 1 ? "" : "s")",
+                   role: .destructive) {
+                deleteSelected()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Removes the parsed data and the photos for the receipts you selected. Everything else stays. Anything already exported to your ledger is untouched, and originals stay in your photo library.")
+        }
         .alert("Delete all receipts?", isPresented: $confirmDeleteAll) {
             Button("Delete \(store.records.count) Receipt\(store.records.count == 1 ? "" : "s")",
                    role: .destructive) {
@@ -114,7 +125,7 @@ struct ReceiptsView: View {
             .listStyle(.insetGrouped)
 
             if isEditing {
-                exportFooter
+                editFooter
             }
         }
         .background(Color(.systemGroupedBackground))
@@ -165,22 +176,55 @@ struct ReceiptsView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    // MARK: - Bulk export
+    // MARK: - Bulk actions
 
-    private var exportFooter: some View {
-        Button {
-            Task { await exportSelected() }
-        } label: {
-            ExportButtonLabel(idleLabel: exportLabel, exporter: exporter)
+    /// Both things a selection can be used for, side by side. Deleting a chosen
+    /// few used to have no home here: the swipe action does one row and the
+    /// overflow menu does all of them, so trimming a dozen receipts meant a
+    /// dozen swipes. Selection already existed for export — this just lets the
+    /// same selection be thrown away, which is also why "Select Unexported" now
+    /// composes into "delete what I never filed".
+    private var editFooter: some View {
+        HStack(spacing: 12) {
+            Button(role: .destructive) {
+                confirmDeleteSelected = true
+            } label: {
+                Image(systemName: "trash")
+                    .font(.headline)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.bordered)
+            .tint(.red)
+            .controlSize(.large)
+            .disabled(selectedRecords.isEmpty)
+            .accessibilityLabel(selectedRecords.count == 1
+                                ? "Delete 1 selected receipt"
+                                : "Delete \(selectedRecords.count) selected receipts")
+
+            Button {
+                Task { await exportSelected() }
+            } label: {
+                ExportButtonLabel(idleLabel: exportLabel, exporter: exporter)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(exporter.exportTint)
+            .controlSize(.large)
+            .disabled(selectedRecords.isEmpty)
+            .allowsHitTesting(exporter.runningKind == nil)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(exporter.exportTint)
-        .controlSize(.large)
-        .disabled(selectedRecords.isEmpty)
-        .allowsHitTesting(exporter.runningKind == nil)
         .padding(.horizontal)
         .padding(.vertical, 12)
         .background(.bar)
+    }
+
+    /// Delete the selection, then leave the user somewhere sensible: selection
+    /// emptied either way, and edit mode dropped when the list is now empty —
+    /// otherwise the toolbar (hidden for an empty list) takes "Done" with it and
+    /// strands the screen in edit mode.
+    private func deleteSelected() {
+        store.remove(ids: selection)
+        selection.removeAll()
+        if records.isEmpty { editMode = .inactive }
     }
 
     private var exportLabel: String {
