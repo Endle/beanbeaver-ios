@@ -773,12 +773,6 @@ struct SettingsView: View {
             ScrollViewReader { proxy in
             List {
                 Section {
-                    Toggle("Save details file", isOn: $includeDetailsJSON)
-                } footer: {
-                    Text("Store a .json alongside each exported receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
-                }
-
-                Section {
                     PresetOrCustomPicker(
                         title: "Currency",
                         presets: currencyPresets,
@@ -796,6 +790,17 @@ struct SettingsView: View {
                     Text("Ledger")
                 } footer: {
                     Text("The currency and tax account used in every beancount entry BeanBeaver generates. Currency defaults to your region.")
+                }
+
+                // Sits under Ledger rather than at the top of the page: it's the
+                // same kind of setting — what an export writes — and it's a
+                // narrow one, so it shouldn't be the first thing Settings opens
+                // on. Still its own section, not folded into Ledger, because it
+                // spans every file backend rather than the beancount format.
+                Section {
+                    Toggle("Save details file", isOn: $includeDetailsJSON)
+                } footer: {
+                    Text("Store a .json alongside each exported receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
                 }
 
                 Section {
@@ -837,6 +842,7 @@ struct SettingsView: View {
                 }
 
                 versionSection
+                feedbackSection
 
                 Section {
                     if VNDocumentCameraViewController.isSupported {
@@ -902,6 +908,45 @@ struct SettingsView: View {
             Text("beanbeaver-core is the on-device scanning engine. Include both versions when reporting a scan issue.")
         }
     }
+
+    /// Where to reach the project. Placed directly under About so the two read
+    /// as one move: the versions to quote, then somewhere to quote them.
+    ///
+    /// Built with `if let` rather than a force-unwrap so a typo'd URL drops a
+    /// row instead of trapping the app. `Link` hands the URL to the system,
+    /// which is what lets iOS open the Discord or Element app when it's
+    /// installed and fall back to Safari when it isn't.
+    private var feedbackSection: some View {
+        Section {
+            ForEach(Self.feedbackRooms) { room in
+                if let url = URL(string: room.urlString) {
+                    Link(destination: url) {
+                        Label(room.title, systemImage: room.symbol)
+                    }
+                }
+            }
+        } header: {
+            Text("Feedback")
+        } footer: {
+            Text("Questions, bugs, and receipts that came out wrong — whichever room suits you. When it's a scan problem, include the two versions above.")
+        }
+    }
+
+    /// A room the project can be reached in. A named type, not a tuple: `ForEach`
+    /// needs an `id`, and key paths can't address tuple members.
+    private struct FeedbackRoom: Identifiable {
+        let title: String
+        let symbol: String
+        let urlString: String
+        var id: String { title }
+    }
+
+    private static let feedbackRooms: [FeedbackRoom] = [
+        FeedbackRoom(title: "Discord", symbol: "bubble.left.and.bubble.right",
+                     urlString: "https://discord.gg/qsfS7uUMHQ"),
+        FeedbackRoom(title: "Matrix", symbol: "number.square",
+                     urlString: "https://matrix.to/#/#beanbeaver:matrix.org"),
+    ]
 
     /// Root-tag picker + monthly target — the only two things `SpendingView`
     /// itself doesn't already let the user set inline (it has its own amount
