@@ -1,12 +1,12 @@
 import Foundation
 
 /// The on-disk home for captured-receipt JPEGs (`ReceiptPipeline.persistCapture`)
-/// and for the pending import batch (`ReceiptBatch`'s `batch.json`), plus the
-/// manual cleanup for the photos. These are kept intentionally — unlike a
-/// cache, they're not deleted after each scan — so a user can come back and
-/// review the original photo later. Since nothing here auto-expires yet, this
-/// is also the thing to point at when explaining where "the receipt photo"
-/// lives for the "we don't keep what we don't need" promise.
+/// and for the pending import batch (`ReceiptBatch`'s `batch.json`). A capture
+/// is no longer expired by any heuristic here — once a scan succeeds, its photo
+/// is owned by that receipt's `SpendRecord` (`SpendStore`) and lives until the
+/// user deletes the receipt or clears its photo. This type only knows how to
+/// name, total, and delete captures; it has no opinion about which ones a
+/// caller should keep.
 ///
 /// Application Support rather than `tmp`: the system purges `tmp` whenever the
 /// app isn't running, which for a batch that outlives a launch would strand it
@@ -54,27 +54,29 @@ enum ReceiptCaptureStore {
         return items.filter { $0.lastPathComponent.hasPrefix(filenamePrefix) }
     }
 
-    /// Total bytes currently used by captured-receipt JPEGs. `batch.json` shares
-    /// this directory but isn't a capture, so the prefix filter leaves it out of
-    /// both the total and `clearOld`.
+    /// Total bytes currently used by captured-receipt JPEGs. `batch.json` and
+    /// `spend.json` share this directory but aren't captures, so the prefix
+    /// filter leaves them out of the total.
     static func totalBytes() -> Int64 {
         allCaptures.reduce(Int64(0)) { $0 + Int64(fileSize($1)) }
     }
 
-    /// Delete every captured-receipt JPEG except the ones named in `keeping` —
-    /// the photo currently on screen, plus every photo a pending batch still
-    /// needs to parse, review, or export. Returns how many files were removed and
-    /// how many bytes that freed, for the confirmation message.
-    ///
-    /// Matched on filename rather than `URL` equality: the two sides are built
-    /// from different bases (a persisted batch record vs. a directory listing),
-    /// and `/var` against `/private/var` compares unequal for the same file.
+    /// Delete one capture by name. A no-op if it's already gone. The caller —
+    /// `SpendStore`, today — is the one that knows whether anything still needs
+    /// this photo.
+    static func delete(filename: String) {
+        try? FileManager.default.removeItem(at: url(forFilename: filename))
+    }
+
+    /// Delete every captured-receipt JPEG, unconditionally. Returns how many
+    /// files were removed and how many bytes that freed, for a confirmation
+    /// message.
     @discardableResult
-    static func clearOld(keeping: Set<String>) -> (count: Int, bytes: Int64) {
+    static func deleteAllPhotos() -> (count: Int, bytes: Int64) {
         let fm = FileManager.default
         var count = 0
         var bytes: Int64 = 0
-        for url in allCaptures where !keeping.contains(url.lastPathComponent) {
+        for url in allCaptures {
             let size = fileSize(url)
             guard (try? fm.removeItem(at: url)) != nil else { continue }
             count += 1

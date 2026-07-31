@@ -102,6 +102,7 @@ struct BatchImportView: View {
         guard Entitlements.shared.isPremium else { return }
         do {
             moneyManagerShare = ShareFile(url: try MoneyManagerExport.makeFile(for: batch.parsedResults))
+            SpendStore.shared.markShared(results: batch.parsedResults)
         } catch {
             DebugInfoStore.recordExportFailure(context: "Money Manager batch export",
                                              message: error.localizedDescription)
@@ -307,8 +308,13 @@ struct BatchImportView: View {
 
 // MARK: - Rows
 
-private struct ParsedRow: View {
+/// A parsed receipt's row: merchant, needs-attention badge, date/item-count
+/// subtitle, total. Shared by the batch list and `ReceiptsView`, which adds an
+/// optional `caption` line below the subtitle for its export/photo/excluded
+/// state — nil here, so the batch call site is unchanged.
+struct ParsedRow: View {
     let result: ReceiptResult
+    var caption: String?
 
     private var subtitle: String {
         var parts: [String] = []
@@ -334,6 +340,11 @@ private struct ParsedRow: View {
                 if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let caption, !caption.isEmpty {
+                    Text(caption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -400,8 +411,14 @@ struct BatchReceiptDetailView: View {
     let result: ReceiptResult
     var wallMs: Double?
     var imageURL: URL?
+    /// Present only when opened from `ReceiptsView`, where the photo belongs to
+    /// a settled `SpendRecord` the user can choose to clear. Nil in the batch
+    /// review flow, where photos aren't yet something the user manages
+    /// per-receipt — so the toolbar there stays the single photo button.
+    var onClearPhoto: (() -> Void)?
 
     @State private var showOriginReceipt = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ScrollView {
@@ -413,12 +430,36 @@ struct BatchReceiptDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showOriginReceipt = true
-                } label: {
-                    Image(systemName: "photo")
+                if let onClearPhoto {
+                    Menu {
+                        Button {
+                            showOriginReceipt = true
+                        } label: {
+                            Label("Show Original Receipt", systemImage: "photo")
+                        }
+                        .disabled(imageURL == nil)
+                        Button(role: .destructive) {
+                            // The photo is gone the moment this returns, so the
+                            // `imageURL` this screen was pushed with is now
+                            // stale — pop back to the list rather than show a
+                            // photo button pointing at a deleted file.
+                            onClearPhoto()
+                            dismiss()
+                        } label: {
+                            Label("Clear Photo", systemImage: "photo.badge.minus")
+                        }
+                        .disabled(imageURL == nil)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                } else {
+                    Button {
+                        showOriginReceipt = true
+                    } label: {
+                        Image(systemName: "photo")
+                    }
+                    .disabled(imageURL == nil)
                 }
-                .disabled(imageURL == nil)
             }
         }
         .sheet(isPresented: $showOriginReceipt) {

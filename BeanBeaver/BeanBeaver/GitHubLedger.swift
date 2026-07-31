@@ -146,12 +146,13 @@ final class GitHubLedger: LedgerDestination {
             await progress(filings.count == 1
                 ? "Checking what's already filed…"
                 : "Checking receipt \(index + 1) of \(filings.count)…")
-            var missing: [RepoFile] = []
-            for file in filing.files {
-                if try await fileExists(cfg, repoRoot: repoRoot, path: file.path, ref: base) { continue }
-                missing.append(file)
-            }
-            if !missing.isEmpty { pending.append(missing) }
+            // Identity, not filename: `basename` carries the export's clock time
+            // (`hhmm`), so a receipt re-filed a minute later would land on a
+            // path that has never existed and file itself twice. `folder` is
+            // derived only from merchant + date + image hash, so what's already
+            // in it is the real answer.
+            if try await isAlreadyFiled(cfg, repoRoot: repoRoot, folder: filing.folder, ref: base) { continue }
+            pending.append(filing.files)
         }
         guard !pending.isEmpty else {
             throw LedgerExportError(filings.count == 1
@@ -250,17 +251,18 @@ final class GitHubLedger: LedgerDestination {
         return "Filed a scanned receipt under `\(only.folder)/` with BeanBeaver iOS."
     }
 
-    /// Whether `path` already exists at `ref`. Every path here is
-    /// content-addressed (the sha8 token), so a file that's present is
-    /// necessarily identical — which is what keeps re-exports idempotent.
-    private nonisolated static func fileExists(
-        _ cfg: Config, repoRoot: String, path: String, ref: String
+    /// Whether `folder` already holds a filing for this receipt — one GET per
+    /// receipt rather than one per file. Every path under `rootDir` is
+    /// content-addressed (the sha8 token in the folder name), so a listing that
+    /// contains a `.beancount` at all is necessarily this receipt's.
+    private nonisolated static func isAlreadyFiled(
+        _ cfg: Config, repoRoot: String, folder: String, ref: String
     ) async throws -> Bool {
-        let escaped = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+        let escaped = folder.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? folder
         do {
-            let _: ContentsResponse = try await api(
+            let entries: [DirEntryResponse] = try await api(
                 cfg, "GET", "\(repoRoot)/contents/\(escaped)?ref=\(ref)")
-            return true
+            return entries.contains { $0.name.hasSuffix(".beancount") }
         } catch let e as HTTPStatusError where e.status == 404 {
             return false
         }
@@ -350,16 +352,11 @@ final class GitHubLedger: LedgerDestination {
         let htmlUrl: String
         enum CodingKeys: String, CodingKey { case htmlUrl = "html_url" }
     }
-    private struct ContentsResponse: Decodable {
-        let content: String
-        let sha: String
-        /// GitHub returns base64 with embedded newlines; strip them before decoding.
-        var decodedContent: String {
-            let cleaned = content.replacingOccurrences(of: "\n", with: "")
-            guard let data = Data(base64Encoded: cleaned) else { return "" }
-            return String(data: data, encoding: .utf8) ?? ""
-        }
-    }
+    /// One entry in a directory listing — `contents/<folder>` (no `path`
+    /// query) returns an array of these rather than the single-file shape
+    /// `ContentsResponse` used to decode, which required `content` and would
+    /// fail on a directory listing.
+    private struct DirEntryResponse: Decodable { let name: String; let type: String }
 }
 
 private extension String {

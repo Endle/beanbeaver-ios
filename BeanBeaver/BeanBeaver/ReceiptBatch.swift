@@ -290,9 +290,10 @@ struct ReceiptDraft: Identifiable, Codable {
 /// interesting states are the ones that outlive a process.
 ///
 /// Separate from `ReceiptPipeline`, which drives the single camera scan — they
-/// share the OCR session and `ReceiptCaptureStore`, but nothing else. Photos
-/// are never deleted here; `ReceiptCaptureStore.clearOld` owns that, and a
-/// draft leaving the batch is what makes its photo eligible.
+/// share the OCR session and `ReceiptCaptureStore`, but nothing else. A photo
+/// is deleted here only when its own draft is explicitly removed or discarded
+/// — never by leaving the batch (`removeParsed`) or by any age-based sweep;
+/// once a draft parses, its `SpendRecord` (`SpendStore`) owns the photo.
 @Observable
 @MainActor
 final class ReceiptBatch {
@@ -377,12 +378,6 @@ final class ReceiptBatch {
         ReceiptCaptureStore.url(forFilename: draft.captureFilename)
     }
 
-    /// Filenames the batch still needs, so `Clear Old Receipts` doesn't delete
-    /// the photos out from under a pending import.
-    var liveCaptureFilenames: Set<String> {
-        Set(drafts.map(\.captureFilename))
-    }
-
     // MARK: Mutation
 
     enum AddOutcome {
@@ -412,20 +407,26 @@ final class ReceiptBatch {
         return .added
     }
 
-    /// Drop a draft, photo and all. Removing a row means the user doesn't want
-    /// it: nothing else refers to the photo, and it's their storage.
+    /// Drop a draft, photo and all — an explicit "I don't want this receipt".
+    /// Also drops the matching `SpendRecord`, if this draft had already parsed
+    /// and recorded one, so a discarded import doesn't quietly stay in someone's
+    /// budget.
     func remove(_ id: UUID) {
         guard let index = drafts.firstIndex(where: { $0.id == id }) else { return }
-        deleteCapture(drafts.remove(at: index))
+        let draft = drafts.remove(at: index)
+        SpendStore.shared.removeRecords(withCaptureFilenames: [draft.captureFilename])
+        deleteCapture(draft)
         save()
     }
 
     /// Throw the whole batch away — the only bulk exit other than exporting, and
     /// the one that makes a batch of receipts that will never parse endable.
     /// Cancels any scan in flight: no point finishing one for a draft that's
-    /// going anyway.
+    /// going anyway. Also drops any `SpendRecord`s the discarded drafts had
+    /// already parsed and recorded, same reasoning as `remove(_:)`.
     func discardAll() {
         stopParsing()
+        SpendStore.shared.removeRecords(withCaptureFilenames: Set(drafts.map(\.captureFilename)))
         drafts.forEach(deleteCapture)
         drafts = []
         save()
@@ -433,9 +434,11 @@ final class ReceiptBatch {
 
     /// Drop everything that parsed — what a successful export drains.
     ///
-    /// Photos deliberately stay for `Clear Old Receipts`: they're in the ledger
-    /// now, and what to keep after an export is the cleanup workflow that hasn't
-    /// been designed yet. Leaving the batch is what makes them collectable.
+    /// Photos deliberately stay: each parsed receipt already recorded a
+    /// `SpendRecord` when it finished parsing (see `parseLoop`), and that record
+    /// now owns the photo's lifetime — not a future sweep. Leaving the batch
+    /// just clears the review queue; the receipt itself lives on in
+    /// `SpendStore`/`ReceiptsView`.
     func removeParsed() {
         drafts.removeAll { $0.state.result != nil }
         save()
@@ -513,6 +516,7 @@ final class ReceiptBatch {
                 let wallMs = Date().timeIntervalSince(started) * 1000
                 setState(.parsed(result), for: draft.id, wallMs: wallMs)
                 DebugInfoStore.recordSuccess(result: result, wallMs: wallMs)
+                SpendStore.shared.record(result: result, captureFilename: draft.captureFilename, wallMs: wallMs)
             } catch {
                 setState(.failed(String(describing: error)), for: draft.id)
                 DebugInfoStore.recordFailure(error)

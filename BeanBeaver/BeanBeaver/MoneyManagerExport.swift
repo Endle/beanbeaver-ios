@@ -99,13 +99,12 @@ enum MoneyManagerExport {
         return usFormatter.string(from: today)
     }
 
-    /// Parse a loosely-formatted price to a plain, positive 2-dp number string
-    /// plus its sign — mirrors ``PriceFormat`` but emits a bare number (Money
-    /// Manager wants the amount with no currency symbol). Unparseable → "0.00"
-    /// positive, so a row never carries a blank amount.
+    /// A plain, positive 2-dp number string plus its sign — mirrors
+    /// ``PriceFormat/display(_:)`` but emits a bare number (Money Manager wants
+    /// the amount with no currency symbol). Unparseable → "0.00" positive, so a
+    /// row never carries a blank amount.
     private static func amountString(_ raw: String) -> (magnitude: String, isNegative: Bool) {
-        let filtered = raw.filter { $0.isNumber || $0 == "." || $0 == "-" }
-        guard let value = Double(filtered) else { return ("0.00", false) }
+        guard let value = PriceFormat.value(raw) else { return ("0.00", false) }
         return (String(format: "%.2f", abs(value)), value < 0)
     }
 

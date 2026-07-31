@@ -186,6 +186,72 @@ enum ReceiptDateFormat {
     }
 }
 
+/// Whether money figures are shown or masked on the glanceable surfaces — the
+/// home card and the spending screens.
+///
+/// Exists because the home screen states a month's total, in full, on launch,
+/// before any authentication: anyone glancing at the phone reads it. That sits
+/// badly against an app whose pitch is that your spending is nobody's business,
+/// so this makes the promise something the UI actually does rather than only
+/// says.
+///
+/// **One piece of state**, deliberately. An earlier version had a persisted
+/// preference plus a session-only "reveal", so that putting the phone down
+/// re-armed the mask. It read as a bug: tapping the eye on the home card showed
+/// the figures while Settings still said "Hide amounts" was on. Two controls
+/// over what looks like one thing have to agree, and the honest way to make them
+/// agree is for there to be only one thing — so the eye *is* the setting.
+///
+/// **On by default**, for the same reason: not showing a number that turns out
+/// to matter is a far cheaper mistake than having already shown it to the room,
+/// and one tap of the eye undoes it.
+@MainActor
+@Observable
+final class AmountPrivacy {
+    static let shared = AmountPrivacy()
+    static let hideKey = "hideAmounts"
+
+    /// What a masked figure reads as. Same `$` the rest of the app hardcodes
+    /// (see `PriceFormat`), so a masked column still lines up with an unmasked
+    /// one.
+    static let placeholder = "$•••"
+
+    /// The one piece of state, and what both the eye and the Settings toggle
+    /// write. Written through to `UserDefaults` on change rather than read at
+    /// compute time, so this type stays the single source of truth and Settings
+    /// can bind straight to it.
+    var hideAmounts: Bool {
+        didSet { UserDefaults.standard.set(hideAmounts, forKey: Self.hideKey) }
+    }
+
+    /// `-showAmounts`: forces real figures for a run that needs them — App Store
+    /// screenshots and demos, which would otherwise capture a wall of `$•••`
+    /// now that masking is the default. Not `#if DEBUG`, so a Release build can
+    /// be screenshotted. Overrides the preference without writing it, so a
+    /// capture run can't leave the setting changed behind it.
+    private let forcedVisible: Bool
+
+    private init() {
+        // `bool(forKey:)` reads false for an unset key, so the on-by-default
+        // preference has to be registered rather than assumed.
+        UserDefaults.standard.register(defaults: [Self.hideKey: true])
+        hideAmounts = UserDefaults.standard.bool(forKey: Self.hideKey)
+        forcedVisible = ProcessInfo.processInfo.arguments.contains("-showAmounts")
+    }
+
+    var isMasked: Bool { hideAmounts && !forcedVisible }
+
+    /// The figure as it should appear. Every money string on a glanceable
+    /// surface goes through here, so a screen can't half-mask.
+    func text(_ formatted: String) -> String {
+        isMasked ? Self.placeholder : formatted
+    }
+
+    /// What the eye does, wherever it appears. The same write the Settings
+    /// toggle performs, so the two can't disagree.
+    func toggle() { hideAmounts.toggle() }
+}
+
 /// Receipt prices/totals arrive as loosely-formatted strings from the OCR
 /// pipeline (e.g. "17.1900", "-3.5000", or already-clean "$2.49") — normalize
 /// them to a consistent "$X.XX" for display. Falls back to the raw string
@@ -196,13 +262,31 @@ enum PriceFormat {
         let isNegative: Bool
     }
 
+    /// The numeric value behind a raw price string, or nil if it isn't
+    /// parseable. Shared by `display(_:)` and every other place that needs the
+    /// number rather than a formatted string — the budget arithmetic
+    /// (`SpendSummary`) and `MoneyManagerExport.amountString`, so there's one
+    /// parse of this loosely-formatted OCR output, not three.
+    static func value(_ raw: String) -> Double? {
+        Double(raw.filter { $0.isNumber || $0 == "." || $0 == "-" })
+    }
+
+    /// A computed amount as "$X.XX" — the summing side of the app (spending
+    /// totals, category rows, the home card) rather than the raw-string side
+    /// `display(_:)` handles. Single currency: `$` is hardcoded app-wide today,
+    /// same as `display`; reconciling that with `LedgerFormatPrefs.currency` is
+    /// pre-existing and out of scope here.
+    static func currency(_ amount: Double) -> String {
+        let sign = amount < 0 ? "-" : ""
+        return "\(sign)$" + String(format: "%.2f", abs(amount))
+    }
+
     static func display(_ raw: String) -> Display {
-        let filtered = raw.filter { $0.isNumber || $0 == "." || $0 == "-" }
-        guard let value = Double(filtered) else {
+        guard let val = value(raw) else {
             return Display(text: raw, isNegative: false)
         }
-        let sign = value < 0 ? "-" : ""
-        let text = "\(sign)$" + String(format: "%.2f", abs(value))
-        return Display(text: text, isNegative: value < 0)
+        let sign = val < 0 ? "-" : ""
+        let text = "\(sign)$" + String(format: "%.2f", abs(val))
+        return Display(text: text, isNegative: val < 0)
     }
 }
