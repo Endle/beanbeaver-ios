@@ -52,7 +52,22 @@ publish = false
 # "TNS RD HT BF BRR". It now applies only to unpriced lines. Also fixes a date
 # read 24 years off when OCR mangles "DateTime:" into "Datelime:", and files
 # CHICKN as meat rather than letting ORANGE win.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.7.5" }
+# v0.7.6 is parser/rules only, no FFI change, and recovers dropped items on
+# weighed produce: OCR renders "lb @" as "1b'@" or "1b-@", which the weight-rate
+# pattern didn't match, so the row stopped being a quantity expression, became an
+# item itself, and took the price while dropping the name printed above it
+# ("Napa Round", "Winter Melon" → Expenses:FIXME). Also reads a comma-for-decimal
+# grand total ("Total after Tax 110,05" used to yield a 0.00 card posting), and
+# files winter melon as a vegetable rather than fruit.
+# v0.7.7 is parser-only, no FFI change, and fixes receipts photographed at a
+# tilt. On a 3.8-deg tilt the price column drifts a full row across the receipt's
+# width, so every price is claimed by the row below its own — one No Frills scan
+# lost an item and gave the remaining three their neighbours' prices while
+# reporting itself clean. The deskew pass needed 5 same-row item/price pairs to
+# measure the tilt and a short receipt cannot supply them; it now falls back to
+# a pairing-free row-tightness search, still gated on agreement from the pairs it
+# does have. Also reads a total whose "$" OCR'd as a "5" ("$173.15" → "5173.15").
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.7.7" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
