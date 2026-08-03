@@ -268,7 +268,7 @@ dependencies = [
 [[package]]
 name = "bb-receipt-ffi"
 version = "0.7.1"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.7.1#84311f5369a488bbcfb1fa3caa6d1fc59c852db4"
+source = "git+https://github.com/Endle/beanbeaver-core?branch=dev#b9d3e197a84e2f719496b8f96e30cb7271ef28c5"
 dependencies = [
  "image",
  "ocr-paddle",
@@ -1390,7 +1390,7 @@ dependencies = [
 [[package]]
 name = "ocr-paddle"
 version = "0.7.1"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.7.1#84311f5369a488bbcfb1fa3caa6d1fc59c852db4"
+source = "git+https://github.com/Endle/beanbeaver-core?branch=dev#b9d3e197a84e2f719496b8f96e30cb7271ef28c5"
 dependencies = [
  "geo",
  "image",
@@ -1788,7 +1788,7 @@ dependencies = [
 [[package]]
 name = "receipt-core"
 version = "0.7.1"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.7.1#84311f5369a488bbcfb1fa3caa6d1fc59c852db4"
+source = "git+https://github.com/Endle/beanbeaver-core?branch=dev#b9d3e197a84e2f719496b8f96e30cb7271ef28c5"
 dependencies = [
  "regex",
  "serde",
@@ -1798,7 +1798,7 @@ dependencies = [
 [[package]]
 name = "receipt-image"
 version = "0.7.1"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.7.1#84311f5369a488bbcfb1fa3caa6d1fc59c852db4"
+source = "git+https://github.com/Endle/beanbeaver-core?branch=dev#b9d3e197a84e2f719496b8f96e30cb7271ef28c5"
 dependencies = [
  "image",
  "thiserror 2.0.18",
