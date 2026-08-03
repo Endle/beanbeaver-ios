@@ -37,7 +37,22 @@ publish = false
 # unreachable on any real receipt — so this is the first build where a tilted
 # photo gets its rows re-seated. Note #38 removed three public DESKEW_* RANSAC
 # constants; nothing here referenced them.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.7.2" }
+# v0.7.3 is parser/rules only, no FFI change: parse_receipt now warns when the
+# item + tax postings *overshoot* the receipt total (the formatter only ever
+# closed an undershoot, so an unbalanced transaction shipped with an empty
+# warnings list). Expect the ⚠️ badge to appear on the 6 corpus receipts that are
+# genuinely wrong. Also classifies WATERMLN/WTRMLN as fruit, not a drink.
+# v0.7.4 is rules-data only, no FFI change: "YOG" (how No Frills abbreviates
+# yogurt) classifies as dairy instead of falling through to Expenses:FIXME. The
+# rules are compiled into the staticlib, so the xcframework still has to be
+# rebuilt for the app to see them.
+# v0.7.5 is parser/rules only, no FFI change, and recovers dropped items: the
+# address veto in the spatial pairer alternated over bare tokens (RD, ST, DR,
+# ON), so any item containing one was silently discarded — "ON THE GO BOTTLE",
+# "TNS RD HT BF BRR". It now applies only to unpriced lines. Also fixes a date
+# read 24 years off when OCR mangles "DateTime:" into "Datelime:", and files
+# CHICKN as meat rather than letting ORANGE win.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.7.5" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
