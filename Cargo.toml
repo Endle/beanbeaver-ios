@@ -67,7 +67,15 @@ publish = false
 # measure the tilt and a short receipt cannot supply them; it now falls back to
 # a pairing-free row-tightness search, still gated on agreement from the pairs it
 # does have. Also reads a total whose "$" OCR'd as a "5" ("$173.15" → "5173.15").
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.7.7" }
+# v0.7.8 is parser-only, no FFI change. Two summary-block fixes plus a new
+# warning. (a) A tax that is *impossible* — equal to the total or the subtotal,
+# which is how label/amount drift in the summary block shows up — is re-derived
+# from SUBTOTAL + TAX = TOTAL. (b) The parser now says so when the items
+# disagree with the printed subtotal: an undershoot used to be closed silently
+# by an Expenses:FIXME plug, so a receipt could be entirely mis-paired and still
+# report clean. Expect the warning badge on more receipts — 14 -> 21 of 122 in
+# the corpus, every new one genuinely wrong, two of which parsed zero items.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.7.8" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
