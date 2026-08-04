@@ -41,8 +41,12 @@ profile_dir="$PROFILE"; [ "$PROFILE" = "debug" ] && profile_dir=debug
 rm -rf "$WORK"; mkdir -p "$WORK"
 
 # Locate the prebuilt libonnxruntime.a that `ort` cached for a given target.
+# The `|| true` is load-bearing: when $ORT_CACHE doesn't exist at all, `find`
+# exits non-zero, `set -o pipefail` propagates that through `head`, and the
+# failing command substitution in the caller trips `set -e` — killing the script
+# with a bare `exit 1` *before* it can say what was wrong.
 ort_lib() {
-  find "$ORT_CACHE" -type f -name libonnxruntime.a -path "*/$1/*" 2>/dev/null | head -1
+  find "$ORT_CACHE" -type f -name libonnxruntime.a -path "*/$1/*" 2>/dev/null | head -1 || true
 }
 
 # Build + (rust .a ⊕ ort .a) -> one combined static lib for a single target.
@@ -51,9 +55,22 @@ combine_target() {
   echo ">> building $CRATE for $target ($PROFILE)"
   cargo build "${cargo_flags[@]}" --target "$target" >/dev/null
   local rust_a="$REPO_ROOT/target/$target/$profile_dir/$LIB"
-  local ort_a; ort_a="$(ort_lib "$target")"
   [ -f "$rust_a" ] || { echo "missing $rust_a" >&2; exit 1; }
-  [ -n "$ort_a" ] || { echo "no cached libonnxruntime.a for $target" >&2; exit 1; }
+  local ort_a; ort_a="$(ort_lib "$target")"
+  if [ -z "$ort_a" ]; then
+    # ort-sys downloads this archive from its *build script*, into $ORT_CACHE —
+    # which lives outside target/. cargo's fingerprint records only that the
+    # build script ran, never that its download still exists, so a warm target/
+    # over a cold $ORT_CACHE (evicted CI cache, cleared ~/Library/Caches) leaves
+    # the archive with nothing to regenerate it. Cargo itself can't notice: a
+    # staticlib build only *references* ORT symbols, so it succeeds regardless.
+    # Discard ort-sys so its build script re-runs and re-downloads.
+    echo "   ort: nothing cached for $target — forcing ort-sys to re-download"
+    cargo clean -p ort-sys >/dev/null 2>&1 || true
+    cargo build "${cargo_flags[@]}" --target "$target" >/dev/null
+    ort_a="$(ort_lib "$target")"
+  fi
+  [ -n "$ort_a" ] || { echo "no libonnxruntime.a for $target under $ORT_CACHE" >&2; exit 1; }
   echo "   ort: $ort_a"
   xcrun libtool -static -o "$out_a" "$rust_a" "$ort_a"
 }
