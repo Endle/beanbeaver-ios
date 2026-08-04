@@ -33,26 +33,28 @@ jobs:
           rustup target add aarch64-apple-ios aarch64-apple-ios-sim
           rustc --version
 
-      # Cargo registry/git + build outputs. Keyed on Cargo.lock so it busts when
-      # deps change.
-      - name: Cache cargo
+      # Cargo registry/git + build outputs, *plus* the prebuilt libonnxruntime.a
+      # that ort-sys downloads to ~/Library/Caches/ort.pyke.io and that
+      # build-xcframework.sh libtool-merges into each slice. Keyed on Cargo.lock
+      # so it busts when deps change.
+      #
+      # These MUST stay one entry. They were two, and the pair went out of sync:
+      # `target` restored while the ORT dir didn't (its cache had been evicted —
+      # the repo sits over the 10 GB Actions cache limit — and the surviving
+      # copies were PR-scoped, invisible to main). A restored `target` marks
+      # ort-sys's build script as already run, so the download that would refill
+      # the ORT dir never fires, and nothing else can produce that archive. One
+      # entry makes a hit on one impossible without the other.
+      - name: Cache cargo + ONNX Runtime
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
-
-      # `ort` downloads a prebuilt libonnxruntime.a here; caching it avoids a
-      # network fetch every run (build-xcframework.sh reads from this path).
-      - name: Cache ONNX Runtime
-        uses: actions/cache@v4
-        with:
-          path: ~/Library/Caches/ort.pyke.io
-          key: ort-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ort-${{ runner.os }}-
+            ~/Library/Caches/ort.pyke.io
+          key: cargo-ort-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-ort-${{ runner.os }}-
 
       # Debug profile: faster than release and enough to prove the build is green.
       - name: Build BBReceiptFFI.xcframework
@@ -102,22 +104,18 @@ jobs:
           rustup default "$RUST_TOOLCHAIN"
           rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 
-      - name: Cache cargo
+      # One entry, same reason as the build job above: `target` and the ORT
+      # download directory must be restored together or not at all.
+      - name: Cache cargo + ONNX Runtime
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
-
-      - name: Cache ONNX Runtime
-        uses: actions/cache@v4
-        with:
-          path: ~/Library/Caches/ort.pyke.io
-          key: ort-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ort-${{ runner.os }}-
+            ~/Library/Caches/ort.pyke.io
+          key: cargo-ort-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-ort-${{ runner.os }}-
 
       - name: Build BBReceiptFFI.xcframework
         run: PROFILE=debug ./build-xcframework.sh
