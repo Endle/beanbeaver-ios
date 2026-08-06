@@ -76,7 +76,11 @@ struct ReceiptExportJSON: Encodable {
             Item(description: $0.description, price: $0.price, quantity: $0.quantity,
                  account: $0.account, tags: $0.tags.map(\.path))
         }
-        warnings = result.warnings
+        // The sidecar's schema is a list of strings, and stays one. Filtered
+        // to what it has always contained: before kinds existed, `warnings`
+        // held only findings about the numbers, so exporting the new
+        // `.info`-level ones would quietly change every details file.
+        warnings = result.warnings.worthShowing.map(\.message)
         timings = Timings(
             prepMs: result.timings.ms(.prep), detectMs: result.timings.ms(.detect),
             classifyMs: result.timings.ms(.classify), recognizeMs: result.timings.ms(.recognize),
