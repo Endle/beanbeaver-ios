@@ -418,7 +418,16 @@ struct BatchReceiptDetailView: View {
     var onClearPhoto: (() -> Void)?
 
     @State private var showOriginReceipt = false
+    /// Outcome of the last "Save to Camera Roll", shown in an alert. One piece
+    /// of state for both outcomes: the action is invisible either way once the
+    /// menu closes, so success needs saying as much as failure does.
+    @State private var saveOutcome: SaveOutcome?
     @Environment(\.dismiss) private var dismiss
+
+    private struct SaveOutcome {
+        let title: String
+        let message: String
+    }
 
     var body: some View {
         ScrollView {
@@ -436,6 +445,12 @@ struct BatchReceiptDetailView: View {
                             showOriginReceipt = true
                         } label: {
                             Label("Show Original Receipt", systemImage: "photo")
+                        }
+                        .disabled(imageURL == nil)
+                        Button {
+                            Task { await saveToCameraRoll() }
+                        } label: {
+                            Label("Save to Camera Roll", systemImage: "square.and.arrow.down")
                         }
                         .disabled(imageURL == nil)
                         Button(role: .destructive) {
@@ -464,6 +479,32 @@ struct BatchReceiptDetailView: View {
         }
         .sheet(isPresented: $showOriginReceipt) {
             OriginReceiptView(imageURL: imageURL)
+        }
+        .alert(saveOutcome?.title ?? "", isPresented: showingSaveOutcome, presenting: saveOutcome) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { outcome in
+            Text(outcome.message)
+        }
+    }
+
+    private var showingSaveOutcome: Binding<Bool> {
+        Binding(get: { saveOutcome != nil }, set: { if !$0 { saveOutcome = nil } })
+    }
+
+    /// Copy this receipt's photo into the user's photo library. The copy lands
+    /// outside the app's storage, so it survives Clear Photo and Delete All
+    /// Receipts — that's the point of the action, and why the confirmation says
+    /// so rather than just "Saved".
+    private func saveToCameraRoll() async {
+        guard let imageURL else { return }
+        do {
+            try await PhotoSaver.save(imageAt: imageURL)
+            saveOutcome = SaveOutcome(
+                title: "Saved to Camera Roll",
+                message: "A copy of this receipt photo is now in your photo library. Deleting the receipt here won't remove it.")
+        } catch {
+            saveOutcome = SaveOutcome(title: "Couldn't Save Photo",
+                                      message: error.localizedDescription)
         }
     }
 }

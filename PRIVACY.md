@@ -1,6 +1,6 @@
 # BeanBeaver privacy policy
 
-_Last updated: 2026-07-29_
+_Last updated: 2026-08-06_
 
 BeanBeaver turns a photo of a receipt into a Beancount transaction. This policy
 explains what happens to that photo.
@@ -37,8 +37,9 @@ BeanBeaver cannot see your receipts, your ledger, or how you use it.
 ## Permissions BeanBeaver asks for
 
 - **Camera** — to photograph a receipt. Used only while the scanner is open.
-- **Add to Photos** — only if you turn on "Save a copy to Photos", a debug
-  option under Settings → Debug, off by default.
+- **Add to Photos** — only when you use "Save to Camera Roll" on a receipt, and
+  only for that receipt's photo. Add-only access: BeanBeaver cannot see anything
+  already in your library.
 - **Photo library selection** — handled by the system picker; BeanBeaver only
   receives the specific image you choose, and has no access to the rest of your
   library.
@@ -59,11 +60,12 @@ Everything is deleted along with the app if you delete it, and iOS may also
 clear a receipt's photo on its own when the device is short of storage — the
 receipt's numbers survive that even if its photo doesn't.
 
-If you turn on "Save a copy to Photos" (a debug option, off by default — see
-below), a copy of each camera scan is *additionally* written to your own photo
-library. That copy sits outside BeanBeaver's storage, so none of the app's own
-delete controls — clearing a photo, deleting a receipt, Delete All Receipts —
-can reach it; removing it means deleting it from Photos yourself.
+If you use **"Save to Camera Roll"** (Receipts → a receipt → the ⋯ menu), a copy
+of that one receipt's photo is *additionally* written to your own photo library.
+That copy sits outside BeanBeaver's storage, so none of the app's own delete
+controls — clearing a photo, deleting a receipt, Delete All Receipts — can reach
+it; removing it means deleting it from Photos yourself. Nothing is written to
+your photo library unless you ask for it this way.
 
 **If you turn on "Store detailed debug info"** (Settings → Debug, off unless you
 switch it on), BeanBeaver additionally keeps a full record of each scan in the
