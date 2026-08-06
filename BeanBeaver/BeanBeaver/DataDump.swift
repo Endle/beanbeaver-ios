@@ -42,7 +42,6 @@ struct DataDump {
     /// Update this list whenever a new `UserDefaults.standard.set(forKey:)` call
     /// is added elsewhere in the app.
     private static let knownDefaultsKeys = [
-        "saveScansToPhotos",
         "ledgerInboxBookmark",
         "ledgerInboxName",
         "githubOwner",
@@ -136,8 +135,9 @@ extension DataDump {
         }
 
         lines.append("\n== Photos library ==")
-        lines.append("BeanBeaver only writes here if \"Save a copy to Photos\" is on; "
-            + "current setting: \(UserDefaults.standard.bool(forKey: "saveScansToPhotos") ? "ON" : "off").")
+        lines.append("BeanBeaver only writes here when you use \"Save to Camera Roll\" on a "
+            + "receipt, one photo at a time. It can't read the library, so it can't list "
+            + "what it has written — check Photos itself.")
 
         return lines.joined(separator: "\n")
     }

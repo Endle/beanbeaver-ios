@@ -39,9 +39,6 @@ struct ContentView: View {
     @State private var amountPrivacy = AmountPrivacy.shared
     @Environment(\.openURL) private var openURL
 
-    /// When on, a copy of each camera-scanned receipt is saved to the camera roll.
-    @AppStorage("saveScansToPhotos") private var saveScansToPhotos = false
-
     /// Bundled sample receipt (a redacted Costco fixture), offered in Settings so
     /// the app can be tried without a receipt to hand.
     private let sampleName = "costco_20260301_redact"
@@ -181,7 +178,6 @@ struct ContentView: View {
             .fullScreenCover(isPresented: $showScanner) {
                 ScannerWithHint(
                     onScan: { data in
-                        if saveScansToPhotos { PhotoSaver.save(imageData: data) }
                         Task { await pipeline.scan(imageData: data) }
                     },
                     onFinish: { showScanner = false }
@@ -203,7 +199,7 @@ struct ContentView: View {
                 ActivityView(items: [share.url])
             }
             .sheet(isPresented: $showSettings) {
-                SettingsView(saveScansToPhotos: $saveScansToPhotos) {
+                SettingsView {
                     Task { await pipeline.scanBundledSample(named: sampleName) }
                 }
             }
@@ -723,7 +719,6 @@ private struct PresetOrCustomPicker: View {
 }
 
 struct SettingsView: View {
-    @Binding var saveScansToPhotos: Bool
     /// Whether a `.json` details sidecar is written next to each exported receipt.
     /// Shares its key with `LedgerFileOptions.includeDetailsJSON`, which the
     /// export path reads. Default on.
@@ -845,9 +840,6 @@ struct SettingsView: View {
                 feedbackSection
 
                 Section {
-                    if VNDocumentCameraViewController.isSupported {
-                        Toggle("Save a copy to Photos", isOn: $saveScansToPhotos)
-                    }
                     Toggle("Store detailed debug info", isOn: $storeDetailedDebugInfo)
 #if DEBUG
                     NavigationLink("Dump All Data") {
@@ -860,7 +852,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Debug")
                 } footer: {
-                    Text("\"Save a copy to Photos\" copies each camera scan into your photo library, where the app's own delete controls can't reach it — leave it off unless you're diagnosing capture quality.\n\nOff by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.")
+                    Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.")
                 }
                 .id("debug")
             }
