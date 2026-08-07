@@ -7,6 +7,48 @@ extension Color {
 
     /// Soft red tint for badges/banners over a white/system background.
     static let bbAccentSoft = Color.bbAccent.opacity(0.12)
+
+    /// "This receipt reached your ledger." Deliberately *not* `bbAccent`: red is
+    /// the tap-me colour (see `BBQuietButton`), and export state is a readout,
+    /// never an action.
+    static let bbExported = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.30, green: 0.78, blue: 0.44, alpha: 1)   // lifted for dark
+            : UIColor(red: 0.14, green: 0.54, blue: 0.24, alpha: 1)   // #248A3D
+    })
+
+    /// "Not filed yet." Amber rather than red because a backlog is a *pending*
+    /// state, not an error — nothing is wrong with a receipt you scanned two
+    /// minutes ago.
+    static let bbUnexported = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.91, green: 0.60, blue: 0.32, alpha: 1)
+            : UIColor(red: 0.78, green: 0.41, blue: 0.16, alpha: 1)   // #C7692A
+    })
+}
+
+/// One receipt's export state as a single glyph — filled green for filed, a
+/// hollow amber ring for a backlog.
+///
+/// A ring rather than a second fill for `.notExported`: the two states have to
+/// be tellable apart at 9pt *and* by someone who can't separate the hues, so
+/// they differ in shape first and colour second.
+struct ExportStatusDot: View {
+    let status: SpendRecord.ExportStatus
+    var size: CGFloat = 9
+
+    var body: some View {
+        Group {
+            switch status {
+            case .exported:
+                Circle().fill(Color.bbExported)
+            case .notExported:
+                Circle().strokeBorder(Color.bbUnexported, lineWidth: 1.5)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel(status.label)
+    }
 }
 
 /// The quiet tier: actions that are valid and safe to try, but that we don't

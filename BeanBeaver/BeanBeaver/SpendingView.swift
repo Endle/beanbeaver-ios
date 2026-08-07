@@ -151,14 +151,26 @@ struct SpendingView: View {
 
     // MARK: - Headline
 
+    /// This month's unfiled receipts — the same `isExported` split the Receipts
+    /// screen's dots and chips draw, scoped to the month on screen.
+    private var monthBacklog: Int {
+        summary.records.filter { !$0.isExported }.count
+    }
+
     /// Everything tracked this month, and the way through to the receipts behind
     /// it. The count is the tap target rather than inert text — it's the most
-    /// natural place to reach for when you want to see what made up the number.
+    /// natural place to reach for when you want to see what made up the number,
+    /// and it's where the month's backlog says so.
+    ///
+    /// The figure is label colour, not accent: red on a 44pt money total reads
+    /// as an alarm, and "tracked spend" is not an alarm. Accent is reserved for
+    /// things you can tap — the link below it, and the target bar.
     private var headline: some View {
         VStack(spacing: 4) {
             Text(amountPrivacy.text(PriceFormat.currency(summary.tracked)))
                 .font(.system(size: 44, weight: .bold))
-                .foregroundStyle(Color.bbAccent)
+                .foregroundStyle(.primary)
+                .monospacedDigit()
             Text("tracked spend")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -168,6 +180,11 @@ struct SpendingView: View {
             } label: {
                 HStack(spacing: 4) {
                     Text("\(summary.records.count) receipt\(summary.records.count == 1 ? "" : "s")")
+                    if monthBacklog > 0 {
+                        ExportStatusDot(status: .notExported, size: 7)
+                            .padding(.leading, 2)
+                        Text("\(monthBacklog) not exported")
+                    }
                     Image(systemName: "chevron.right").font(.caption2)
                 }
                 .font(.caption)
@@ -197,7 +214,7 @@ struct SpendingView: View {
             } label: {
                 HStack {
                     Image(systemName: CategoryDisplay.style(for: group.label).icon)
-                        .foregroundStyle(Color.bbAccent)
+                        .foregroundStyle(.secondary)
                         .frame(width: 22)
                     Text(group.label)
                         .font(.headline)
@@ -246,6 +263,11 @@ struct SpendingView: View {
     /// Leaf bars scale to `summary.maxLeafAmount` — the largest leaf anywhere in
     /// the month — so a bar means the same thing in every card on the screen.
     ///
+    /// Neutral fill, not accent. Every category on the screen drawn in alarm red
+    /// makes the one bar that *is* a judgement — the target bar above, which can
+    /// actually go over — indistinguishable from a dozen bars that are just
+    /// measurements.
+    ///
     /// The whole row is one touch target: label, bar, and the padding around
     /// them. Shaping only the text line (which is what this did) left a ~25pt
     /// strip broken by a dead gap above the bar — a row that looks comfortably
@@ -267,9 +289,9 @@ struct SpendingView: View {
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.bbAccentSoft)
+                    Capsule().fill(.quaternary)
                     Capsule()
-                        .fill(Color.bbAccent)
+                        .fill(.secondary)
                         .frame(width: geo.size.width * (maxAmount > 0 ? leaf.amount / maxAmount : 0))
                 }
             }
