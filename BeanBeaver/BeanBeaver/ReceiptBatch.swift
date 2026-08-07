@@ -168,6 +168,53 @@ extension ReceiptItem: @retroactive Codable {
     }
 }
 
+/// On-disk form of a parser finding. `ReceiptWarning` comes from uniffi and has
+/// no `Codable`, and its kind has no raw value, so the mapping is spelled out
+/// here — exhaustively, so a new core variant is a compiler error in one place
+/// rather than a silently mis-stored receipt.
+private struct StoredWarning: Codable {
+    let kind: String
+    let message: String
+    let afterItemIndex: Int32
+
+    init(_ w: ReceiptWarning) {
+        kind = Self.name(for: w.kind)
+        message = w.message
+        afterItemIndex = w.afterItemIndex
+    }
+
+    var warning: ReceiptWarning {
+        ReceiptWarning(kind: Self.kind(named: kind), message: message,
+                       afterItemIndex: afterItemIndex)
+    }
+
+    private static func name(for kind: ReceiptWarningKind) -> String {
+        switch kind {
+        case .totalMismatch: return "totalMismatch"
+        case .subtotalMismatch: return "subtotalMismatch"
+        case .possibleMissedItem: return "possibleMissedItem"
+        case .priceAutoCorrected: return "priceAutoCorrected"
+        case .droppedImplausiblePrice: return "droppedImplausiblePrice"
+        case .uncategorizedItem: return "uncategorizedItem"
+        @unknown default: return "possibleMissedItem"
+        }
+    }
+
+    /// An unrecognized name means the file was written by a *newer* build than
+    /// this one — downgrade, or a restored backup. Land on the same fallback
+    /// `WarningSeverity` gives an unknown kind: shown, quietly.
+    private static func kind(named name: String) -> ReceiptWarningKind {
+        switch name {
+        case "totalMismatch": return .totalMismatch
+        case "subtotalMismatch": return .subtotalMismatch
+        case "priceAutoCorrected": return .priceAutoCorrected
+        case "droppedImplausiblePrice": return .droppedImplausiblePrice
+        case "uncategorizedItem": return .uncategorizedItem
+        default: return .possibleMissedItem
+        }
+    }
+}
+
 extension ReceiptResult: @retroactive Codable {
     enum CodingKeys: String, CodingKey {
         case merchant, merchantMatch, date, dateIsPlaceholder, total, tax, subtotal
@@ -184,13 +231,12 @@ extension ReceiptResult: @retroactive Codable {
                   tax: try c.decodeIfPresent(String.self, forKey: .tax),
                   subtotal: try c.decodeIfPresent(String.self, forKey: .subtotal),
                   items: try c.decode([ReceiptItem].self, forKey: .items),
-                  warnings: try c.decode([String].self, forKey: .warnings),
+                  warnings: ReceiptResult.decodeWarnings(from: c),
                   // v0.3.3 (and v0.4.0's `detections`) grew ReceiptResult with
                   // these FFI fields. No batch UI reads them yet, and the persisted
                   // batch JSON predates them, so default here rather than widen the
                   // on-disk schema (CodingKeys / encode stay unchanged, keeping old
                   // batch files loadable).
-                  warningAfterItemIndices: [],
                   rawText: "",
                   imageFilename: "receipt.jpg",
                   tenders: [],
@@ -213,7 +259,7 @@ extension ReceiptResult: @retroactive Codable {
         try c.encodeIfPresent(tax, forKey: .tax)
         try c.encodeIfPresent(subtotal, forKey: .subtotal)
         try c.encode(items, forKey: .items)
-        try c.encode(warnings, forKey: .warnings)
+        try c.encode(warnings.map(StoredWarning.init), forKey: .warnings)
         try c.encode(beancount, forKey: .beancount)
         try c.encodeIfPresent(beanbeaverId, forKey: .beanbeaverId)
         try c.encodeIfPresent(documentRelpath, forKey: .documentRelpath)
@@ -222,14 +268,42 @@ extension ReceiptResult: @retroactive Codable {
 }
 
 extension ReceiptResult {
-    /// Whether this parse is worth a second look before it lands in a ledger:
-    /// the parser flagged something, the merchant is only a guess, or an item
-    /// came back with no classification. Drives the row's badge — never blocks
-    /// an export, since the user may well be fine with it.
+    /// Read the `warnings` key in either shape.
+    ///
+    /// Files written before core v0.8.0 hold bare strings, and a string's kind
+    /// cannot be recovered without pattern-matching the English — the exact
+    /// thing kinds exist to abolish, and a guess here would mis-rank a stored
+    /// receipt forever. So a legacy list is dropped rather than invented.
+    /// What's lost is the "Heads up" text on receipts already scanned and
+    /// already reviewed; what's kept is everything that matters later — the
+    /// items, the totals, and the stored beancount, whose own `; WARN:PARSER`
+    /// comments still carry those messages verbatim.
+    fileprivate static func decodeWarnings(
+        from c: KeyedDecodingContainer<ReceiptResult.CodingKeys>
+    ) -> [ReceiptWarning] {
+        if let stored = try? c.decode([StoredWarning].self, forKey: .warnings) {
+            return stored.map(\.warning)
+        }
+        return []
+    }
+
+    /// Whether this parse is worth a second look before it lands in a ledger.
+    /// Drives the row's badge — never blocks an export, since the user may well
+    /// be fine with it.
+    ///
+    /// Two clauses, both about things that are actually wrong: a finding the
+    /// app ranks as `.attention` (see `WarningSeverity`), or a merchant that is
+    /// only a guess. The third clause used to be
+    /// `items.contains { $0.tags.isEmpty }` — this app deciding, on its own,
+    /// that an unclassified line meant a bad parse. It reported 83 of 124
+    /// corpus receipts, including every receipt carrying a *correctly parsed*
+    /// discount line, which is not a product and matches no product rule. A
+    /// badge that lights on two receipts in three is not a badge, so that
+    /// judgment now lives in core as `UncategorizedItem` and is ranked `.info`.
     var needsAttention: Bool {
-        if !warnings.isEmpty { return true }
+        if warnings.contains(where: { $0.severity >= .attention }) { return true }
         if case .suggested = merchantMatch.status { return true }
-        return items.contains { $0.tags.isEmpty }
+        return false
     }
 }
 

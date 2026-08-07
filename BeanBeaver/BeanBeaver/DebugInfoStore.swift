@@ -57,10 +57,14 @@ enum DebugInfoStore {
             let itemsCategorized: Double
             let needsReview: Bool
         }
-        /// A parser warning paired with the item it follows (nil = not tied to a
-        /// specific line), reconstructed from the parallel `warnings` /
-        /// `warningAfterItemIndices` arrays the FFI returns.
+        /// A parser finding: what it is, what it said, and which item it
+        /// follows (nil = about the receipt as a whole). `kind` is dumped
+        /// alongside `severity` so a support dump shows both what core
+        /// reported and how this build chose to rank it — the two are set in
+        /// different repos and drift is exactly what you'd want to see here.
         struct Warning: Encodable {
+            let kind: String
+            let severity: String
             let message: String
             let afterItemIndex: Int32?
         }
@@ -119,9 +123,13 @@ enum DebugInfoStore {
                 Item(description: $0.description, price: $0.price, quantity: $0.quantity,
                      account: $0.account, tags: $0.tags.map(\.path))
             }
-            warnings = r.warnings.enumerated().map { i, message in
-                let idx = i < r.warningAfterItemIndices.count ? r.warningAfterItemIndices[i] : -1
-                return Warning(message: message, afterItemIndex: idx >= 0 ? idx : nil)
+            // Unfiltered on purpose: this is the debug record, so it keeps
+            // the `.info` findings the card and the exports leave out.
+            warnings = r.warnings.map {
+                Warning(kind: String(describing: $0.kind),
+                        severity: String(describing: $0.severity),
+                        message: $0.message,
+                        afterItemIndex: $0.afterItemIndex >= 0 ? $0.afterItemIndex : nil)
             }
             tenders = r.tenders.map {
                 Tender(amount: $0.amount, account: $0.account, kind: $0.kind, rawLabel: $0.rawLabel)

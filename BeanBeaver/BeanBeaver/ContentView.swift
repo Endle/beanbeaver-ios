@@ -1032,7 +1032,7 @@ struct ReceiptCard: View {
             }
             .bbCard()
 
-            if !result.warnings.isEmpty {
+            if !result.warnings.worthShowing.isEmpty {
                 warningsBanner
             }
 
@@ -1198,18 +1198,28 @@ struct ReceiptCard: View {
         }
     }
 
+    /// The findings worth reading, each in its own rank's color. The banner as
+    /// a whole takes the loudest one — a receipt whose only finding is a
+    /// possible missed item shouldn't wear the same red as one that cannot
+    /// balance. `.info` findings never reach here: an uncategorized line is
+    /// already labelled "Uncategorized" on its own row.
     private var warningsBanner: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Heads up", systemImage: "exclamationmark.circle.fill")
+        let shown = result.warnings.worthShowing
+        let top = shown.highestSeverity ?? .notice
+        return VStack(alignment: .leading, spacing: 6) {
+            Label(top == .attention ? "Heads up" : "Worth a look", systemImage: top.symbol)
                 .font(.subheadline.bold())
-            ForEach(result.warnings, id: \.self) { warning in
-                Text(warning).font(.caption)
+                .foregroundStyle(top.tint)
+            ForEach(Array(shown.enumerated()), id: \.offset) { _, warning in
+                Text(warning.message)
+                    .font(.caption)
+                    .foregroundStyle(warning.severity.tint)
             }
         }
-        .foregroundStyle(Color.bbAccent)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color.bbAccentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(top == .attention ? Color.bbAccentSoft : Color.orange.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
@@ -1382,7 +1392,6 @@ extension ReceiptResult {
             ReceiptItem(description: "MYSTERY ITEM", price: "$3.00", quantity: 2, account: nil, tags: []),
         ],
         warnings: [],
-        warningAfterItemIndices: [],
         rawText: "",
         imageFilename: "receipt.jpg",
         tenders: [],
@@ -1413,8 +1422,12 @@ extension ReceiptResult {
         tax: nil,
         subtotal: nil,
         items: [],
-        warnings: ["No line items detected", "Date inferred from today"],
-        warningAfterItemIndices: [-1, -1],
+        warnings: [
+            ReceiptWarning(kind: .subtotalMismatch,
+                           message: "No line items detected", afterItemIndex: -1),
+            ReceiptWarning(kind: .possibleMissedItem,
+                           message: "maybe missed item near price 4.99", afterItemIndex: -1),
+        ],
         rawText: "",
         imageFilename: "receipt.jpg",
         tenders: [],
@@ -1448,7 +1461,6 @@ extension ReceiptResult {
             ReceiptItem(description: "ORG EGGS 24CT", price: "$9.49", quantity: 1, account: "Expenses:Food:Grocery", tags: [.init(path: "grocery", display: "Grocery"), .init(path: "grocery/dairy", display: "Dairy")]),
         ],
         warnings: [],
-        warningAfterItemIndices: [],
         rawText: "",
         imageFilename: "receipt.jpg",
         tenders: [],

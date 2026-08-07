@@ -353,7 +353,9 @@ enum BatchRunner {
                     subtotal: r.subtotal, tax: r.tax,
                     items: r.items.map { Item(description: $0.description,
                                               price: $0.price, account: $0.account) },
-                    warnings: r.warnings,
+                    // Schema unchanged for compare-e2e.py: the messages, and
+                    // only the kinds this list carried before v0.8.0.
+                    warnings: r.warnings.worthShowing.map(\.message),
                     wallMs: Date().timeIntervalSince(started) * 1000,
                     timings: Timings(
                         prepMs: r.timings.ms(.prep), detectMs: r.timings.ms(.detect),
