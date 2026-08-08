@@ -38,6 +38,30 @@ extension SpendRecord {
     enum PhotoState: Equatable { case present, cleared, unavailable }
 
     var isExported: Bool { exportedAt != nil }
+
+    /// What a row's status dot says. One state per receipt, not one per target:
+    /// *which* target it reached is detail-view material (`exportedTargets`),
+    /// while the list only ever has to answer "is this filed yet".
+    ///
+    /// Two states, and `isExcluded` is deliberately not a third. Exclusion is
+    /// budget-scoped — see `SpendRecord.isExcluded`, which leaves the stored
+    /// parse and everything an export ships untouched — so an excluded receipt
+    /// is still in the backlog and still goes out with it. A grey "excluded"
+    /// dot would sit on a row that the export bar below is about to file, and
+    /// under a chip counting it as unexported. The exclusion is said in words
+    /// in the row's subtitle instead, where it can't be mistaken for status.
+    enum ExportStatus: Equatable {
+        case exported, notExported
+
+        var label: String {
+            switch self {
+            case .exported: return "Exported"
+            case .notExported: return "Not exported"
+            }
+        }
+    }
+
+    var exportStatus: ExportStatus { isExported ? .exported : .notExported }
 }
 
 /// Every receipt ever scanned, kept indefinitely until the user removes it —
@@ -218,6 +242,29 @@ final class SpendStore {
     /// Records that haven't reached any export target yet — the fast path for
     /// "back up everything I haven't yet".
     var unexportedRecords: [SpendRecord] { records.filter { !$0.isExported } }
+
+    var exportedRecords: [SpendRecord] { records.filter(\.isExported) }
+
+    /// When anything last reached a target, or nil if nothing ever has. What the
+    /// home card's status line dates itself by — "9 filed · last export Mar 11"
+    /// answers "am I up to date" in a way a bare count can't.
+    var lastExportedAt: Date? { records.compactMap(\.exportedAt).max() }
+
+    /// Every target anything has reached, in first-seen order — "GitHub",
+    /// "Money Manager", or both. Read rather than assumed: the app really can
+    /// file to more than one place, so the status line names what actually
+    /// happened instead of whatever target happens to be selected now.
+    var reachedTargets: [String] {
+        var seen = Set<String>()
+        var targets: [String] = []
+        for record in records {
+            for target in record.exportedTargets where !seen.contains(target) {
+                seen.insert(target)
+                targets.append(target)
+            }
+        }
+        return targets
+    }
 
     func totalPhotoBytes() -> Int64 {
         records.reduce(Int64(0)) { total, record in

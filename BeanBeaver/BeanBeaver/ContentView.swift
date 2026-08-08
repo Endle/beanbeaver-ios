@@ -57,19 +57,6 @@ struct ContentView: View {
         return nil
     }
 
-    /// Pending-count suffix for the import button, mirroring the Export button's
-    /// "Export:…" indicator so a batch left half-done is visible from home
-    /// without inventing a second idiom for it.
-    private var batchBadge: String {
-        batch.isEmpty ? "" : " (\(batch.drafts.count))"
-    }
-
-    /// Same idiom as `batchBadge`, for the "Receipts" home button.
-    private var receiptsBadge: String {
-        let count = SpendStore.shared.records.count
-        return count == 0 ? "" : " (\(count))"
-    }
-
     /// Build the Money Manager `.xlsx` for `results` and present its share sheet.
     /// A failure here is a rare temp-file write error and non-fatal — captured for
     /// support rather than surfaced, matching the ledger exporter's error handling.
@@ -160,6 +147,18 @@ struct ContentView: View {
                             }
                         } label: {
                             Image(systemName: "ellipsis.circle")
+                        }
+                    }
+                } else {
+                    // Settings was a full-width pill in a stack of five, which
+                    // made an app preference look like one of the app's main
+                    // actions. The nav bar is where iOS users look for it, and
+                    // it costs the home screen no vertical space.
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Label("Settings", systemImage: "gearshape")
                         }
                     }
                 }
@@ -370,13 +369,20 @@ struct ContentView: View {
             }
 
             spendCard
+            receiptsCard
 
-            VStack(spacing: 12) {
+            // Scan and Import side by side: same OCR job, two sources, so they
+            // belong in one row rather than stacked as equals with Receipts and
+            // Settings. Scan is the only filled button on the screen now, which
+            // is what it should always have been — five same-size pills made
+            // everything equally important, and "Export: GitHub" was a status
+            // readout wearing a button.
+            HStack(spacing: 10) {
                 if VNDocumentCameraViewController.isSupported {
                     Button {
                         showScanner = true
                     } label: {
-                        Label("Scan a Receipt", systemImage: "camera.viewfinder")
+                        Label("Scan", systemImage: "camera.viewfinder")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
@@ -388,54 +394,33 @@ struct ContentView: View {
 
                 // A workspace rather than a picker: importing from the library
                 // means working through a pile, which wants somewhere to come
-                // back to. The camera button above stays the one-receipt path.
-                // Driven through `navigationDestination` rather than a
+                // back to. The camera button beside it stays the one-receipt
+                // path. Driven through `navigationDestination` rather than a
                 // NavigationLink so the `-showBatchImport` DEBUG deep-link can
                 // open it headlessly for screenshots.
                 Button {
                     showBatchImport = true
                 } label: {
-                    Label("Import from Photos\(batchBadge)", systemImage: "photo.on.rectangle")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
+                    VStack(spacing: 2) {
+                        Label("Import", systemImage: "photo.on.rectangle")
+                            .font(.headline)
+                        if !batch.isEmpty {
+                            Text("\(batch.drafts.count) waiting")
+                                .font(.caption)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
                 }
                 .buttonStyle(.bordered)
                 .tint(.bbAccent)
                 .controlSize(.large)
-
-                Button {
-                    showReceipts = true
-                } label: {
-                    Label("Receipts\(receiptsBadge)", systemImage: "clock.arrow.circlepath")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.bordered)
-                .tint(.bbAccent)
-                .controlSize(.large)
-
-                Button {
-                    showLedgerSettings = true
-                } label: {
-                    Label("Export:\(exporter.exportIndicator)", systemImage: "arrow.triangle.2.circlepath")
-                        .font(.headline)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.bordered)
-                .tint(exporter.exportTint)
-                .controlSize(.large)
-
-                Button {
-                    showSettings = true
-                } label: {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                .buttonStyle(BBQuietButtonStyle())
+                // Sized on the *button*, not its label: constraining the label
+                // leaves the bordered background to take whatever share the
+                // HStack proposes, which made the secondary action nearly as
+                // wide as the primary one. Dropped when there's no camera, so
+                // Import isn't a narrow button next to empty space.
+                .frame(maxWidth: VNDocumentCameraViewController.isSupported ? 124 : .infinity)
             }
 
             HStack(spacing: 8) {
@@ -521,6 +506,112 @@ struct ContentView: View {
             .padding()
             .bbCard()
         }
+    }
+
+    /// Receipts, and the state of the backlog — the card that replaced the
+    /// "Receipts (12)" and "Export: GitHub" pills.
+    ///
+    /// Three rows, each earning its place by only appearing when it has
+    /// something to say: how many receipts there are, how many are unfiled (with
+    /// the action to fix that), and what has already been filed. A pill labelled
+    /// "Export: GitHub" was the third row's information wearing a button — it
+    /// looked like the way to export and was actually the way to *configure*
+    /// exporting.
+    ///
+    /// The status row survives an empty store on purpose. It's the only route
+    /// left to the Sync page, and setting up a ledger before scanning anything
+    /// is a real first-run order — one an App Store reviewer takes.
+    @ViewBuilder
+    private var receiptsCard: some View {
+        let store = SpendStore.shared
+        let backlog = store.unexportedRecords.count
+        VStack(spacing: 14) {
+            if !store.records.isEmpty {
+                Button {
+                    showReceipts = true
+                } label: {
+                    HStack {
+                        Text("Receipts").font(.headline)
+                        Spacer()
+                        Text("\(store.records.count)").foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .foregroundStyle(.primary)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if backlog > 0 {
+                HStack(spacing: 8) {
+                    ExportStatusDot(status: .notExported)
+                    Text("\(backlog) not exported")
+                        .font(.subheadline)
+                    Spacer()
+                    Button {
+                        // Straight to the list, filtered — the export itself
+                        // wants the receipts in front of you. Sending a batch
+                        // from a card you can't see the contents of is a lot to
+                        // ask of one tap.
+                        showReceipts = true
+                    } label: {
+                        Text("Export")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(Color.bbAccentSoft, in: Capsule())
+                            .foregroundStyle(Color.bbAccent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Button {
+                showLedgerSettings = true
+            } label: {
+                HStack(spacing: 8) {
+                    // Only once something has actually been filed. Before that
+                    // this row is a setup prompt, not a report, and a second
+                    // amber ring directly under the backlog's own amber ring
+                    // reads as a second backlog.
+                    if store.lastExportedAt != nil {
+                        ExportStatusDot(status: .exported)
+                    }
+                    Text(exportStatusLine)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding()
+        .bbCard()
+    }
+
+    /// What the card's bottom row says. Reports what actually happened when
+    /// anything has — including both targets when a receipt went to both — and
+    /// falls back to the selected target's configured state when nothing has
+    /// been filed yet, which is the readout the old "Export:" pill carried.
+    private var exportStatusLine: String {
+        let store = SpendStore.shared
+        guard let last = store.lastExportedAt else {
+            return exporter.selectedTargetReady
+                ? "Exports to \(exporter.exportIndicator)"
+                : "Set up where your receipts go"
+        }
+        let targets = store.reachedTargets
+        let where_ = targets.isEmpty ? "" : " to \(targets.joined(separator: " and "))"
+        return "\(store.exportedRecords.count) filed\(where_) · last export "
+            + last.formatted(date: .abbreviated, time: .omitted)
     }
 
     // MARK: - Scanning

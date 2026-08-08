@@ -308,24 +308,38 @@ struct BatchImportView: View {
 
 // MARK: - Rows
 
-/// A parsed receipt's row: merchant, needs-attention badge, date/item-count
-/// subtitle, total. Shared by the batch list and `ReceiptsView`, which adds an
-/// optional `caption` line below the subtitle for its export/photo/excluded
-/// state — nil here, so the batch call site is unchanged.
+/// A parsed receipt's row: an optional export-status dot, merchant,
+/// needs-attention badge, date/item-count subtitle, total. Shared by the batch
+/// list and `ReceiptsView`.
+///
+/// Both extras are nil at the batch call site, which is what keeps them honest:
+/// a draft in a batch has no export state to report and nothing to say about a
+/// photo it hasn't settled yet.
+///
+/// `detail` joins the subtitle rather than sitting on its own line. Photo state
+/// used to be a third line in `ReceiptsView`, in the same weight and colour as
+/// the export caption above it — which made a fact about the row ("photo
+/// cleared") look exactly like its status. The dot is status now; anything on
+/// this line is not.
 struct ParsedRow: View {
     let result: ReceiptResult
-    var caption: String?
+    var status: SpendRecord.ExportStatus?
+    var detail: String?
 
     private var subtitle: String {
         var parts: [String] = []
         if let date = ReceiptDateFormat.friendly(result.date) { parts.append(date) }
         let count = result.items.count
         if count > 0 { parts.append("\(count) item\(count == 1 ? "" : "s")") }
+        if let detail, !detail.isEmpty { parts.append(detail) }
         return parts.joined(separator: " · ")
     }
 
     var body: some View {
         HStack(spacing: 12) {
+            if let status {
+                ExportStatusDot(status: status)
+            }
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(result.merchant.capitalized)
@@ -340,11 +354,6 @@ struct ParsedRow: View {
                 if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if let caption, !caption.isEmpty {
-                    Text(caption)
-                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -411,6 +420,16 @@ struct BatchReceiptDetailView: View {
     let result: ReceiptResult
     var wallMs: Double?
     var imageURL: URL?
+    /// When this receipt first reached a target, and which targets it has
+    /// reached. Set from `ReceiptsView`; nil/empty in the batch flow, where a
+    /// draft hasn't been anywhere yet.
+    ///
+    /// This is where "Filed to GitHub" went when the list row traded it for a
+    /// dot. The list only has to answer *whether* a receipt is filed; the answer
+    /// to *where* is worth a line of its own, and it's the one screen with room
+    /// to say a receipt went to both.
+    var exportedAt: Date?
+    var exportedTargets: [String] = []
     /// Present only when opened from `ReceiptsView`, where the photo belongs to
     /// a settled `SpendRecord` the user can choose to clear. Nil in the batch
     /// review flow, where photos aren't yet something the user manages
@@ -431,8 +450,11 @@ struct BatchReceiptDetailView: View {
 
     var body: some View {
         ScrollView {
-            ReceiptCard(result: result, wallMs: wallMs, capturedImageURL: imageURL)
-                .padding()
+            VStack(spacing: 16) {
+                ReceiptCard(result: result, wallMs: wallMs, capturedImageURL: imageURL)
+                exportStatusCard
+            }
+            .padding()
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle(result.merchant.capitalized)
@@ -485,6 +507,49 @@ struct BatchReceiptDetailView: View {
         } message: { outcome in
             Text(outcome.message)
         }
+    }
+
+    /// Where this receipt has got to, in words. Rendered only when the caller
+    /// supplied export state at all (`ReceiptsView`), so the batch flow — where
+    /// a draft has been nowhere by definition — doesn't grow a card telling it
+    /// so.
+    ///
+    /// Says "Shared to" for Money Manager and "Filed to" for a ledger, matching
+    /// `SpendStore.markShared`'s honesty about the difference: a share sheet is
+    /// marked at presentation and may have been cancelled, while a ledger append
+    /// either landed or reported an error.
+    @ViewBuilder
+    private var exportStatusCard: some View {
+        if let exportedAt {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    ExportStatusDot(status: .exported)
+                    Text(exportedTargets.isEmpty
+                         ? "Exported"
+                         : exportedTargets.map(Self.targetPhrase).joined(separator: " · "))
+                        .font(.subheadline.weight(.medium))
+                }
+                Text("First exported \(exportedAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .bbCard()
+        } else if !exportedTargets.isEmpty || onClearPhoto != nil {
+            HStack(spacing: 8) {
+                ExportStatusDot(status: .notExported)
+                Text("Not exported yet")
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+            }
+            .padding()
+            .bbCard()
+        }
+    }
+
+    private static func targetPhrase(_ target: String) -> String {
+        target == "Money Manager" ? "Shared to Money Manager" : "Filed to \(target)"
     }
 
     private var showingSaveOutcome: Binding<Bool> {
