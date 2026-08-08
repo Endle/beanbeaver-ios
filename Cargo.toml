@@ -75,7 +75,16 @@ publish = false
 # by an Expenses:FIXME plug, so a receipt could be entirely mis-paired and still
 # report clean. Expect the warning badge on more receipts — 14 -> 21 of 122 in
 # the corpus, every new one genuinely wrong, two of which parsed zero items.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.8.2" }
+# v0.8.3 is parser-only, no FFI change, and re-aligns prices on Costco scans. Two
+# rows that cannot hold money were claiming it, and a wrong claim is never local
+# here — prices are consumed one-to-one in reading order, so the real amount falls
+# through and every following row inherits its neighbour's. (a) The RIGHT
+# partition is geometric, so it also caught Costco's per-line `H`/`HH`/`E` tax
+# column; a digit-less token there now routes to MIDDLE, still attached to its row
+# but no longer mistakable for its price. (b) `Member <digits>` joins the code
+# stubs typed "never carries an amount". On one 2026-03-05 Costco scan this
+# corrects five item prices that were each off by a row.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.8.3" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
