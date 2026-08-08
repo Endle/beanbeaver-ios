@@ -75,7 +75,7 @@ publish = false
 # by an Expenses:FIXME plug, so a receipt could be entirely mis-paired and still
 # report clean. Expect the warning badge on more receipts — 14 -> 21 of 122 in
 # the corpus, every new one genuinely wrong, two of which parsed zero items.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.8.1" }
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.8.2" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
