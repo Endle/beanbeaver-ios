@@ -402,7 +402,11 @@ struct ContentView: View {
                     showBatchImport = true
                 } label: {
                     VStack(spacing: 2) {
-                        Label("Import", systemImage: "photo.on.rectangle")
+                        // Text, not a Label: the icon plus the word didn't fit
+                        // the fixed width below and wrapped "Import" onto two
+                        // lines. Scan keeps its icon — it's the primary action
+                        // and has the room.
+                        Text("Import")
                             .font(.headline)
                         if !batch.isEmpty {
                             Text("\(batch.drafts.count) waiting")
@@ -568,30 +572,52 @@ struct ContentView: View {
                 }
             }
 
-            Button {
-                showLedgerSettings = true
-            } label: {
-                HStack(spacing: 8) {
-                    // Only once something has actually been filed. Before that
-                    // this row is a setup prompt, not a report, and a second
-                    // amber ring directly under the backlog's own amber ring
-                    // reads as a second backlog.
-                    if store.lastExportedAt != nil {
-                        ExportStatusDot(status: .exported)
-                    }
+            // The way to *pick* an exporter has to look like a control. A grey
+            // caption with a chevron reads as a status line, and the one route
+            // to the Sync page went unnoticed. The pill carries the action —
+            // same shape as the backlog row's "Export" — and the text beside it
+            // goes back to being what it always was: a report.
+            //
+            // Two sibling buttons rather than a pill nested in a row-wide
+            // Button: nesting loses the pill's hit test to its parent, the same
+            // trap `spendCard` documents.
+            HStack(spacing: 8) {
+                // Only once something has actually been filed. Before that
+                // this row is a setup prompt, not a report, and a second
+                // amber ring directly under the backlog's own amber ring
+                // reads as a second backlog.
+                if store.lastExportedAt != nil {
+                    ExportStatusDot(status: .exported)
+                }
+                Button {
+                    showLedgerSettings = true
+                } label: {
                     Text(exportStatusLine)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .contentShape(.rect)
                 }
-                .contentShape(.rect)
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    showLedgerSettings = true
+                } label: {
+                    Text(exporter.selectedTargetReady ? "Change" : "Set Up")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Color.bbAccentSoft, in: Capsule())
+                        .foregroundStyle(Color.bbAccent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(exporter.selectedTargetReady
+                                    ? "Change where receipts are exported"
+                                    : "Set up where receipts are exported")
             }
-            .buttonStyle(.plain)
         }
         .padding()
         .bbCard()
@@ -604,9 +630,12 @@ struct ContentView: View {
     private var exportStatusLine: String {
         let store = SpendStore.shared
         guard let last = store.lastExportedAt else {
+            // Not "Set up where your receipts go" any more — the pill beside it
+            // now says that, and an instruction repeated twice in one row reads
+            // as two different things to do.
             return exporter.selectedTargetReady
                 ? "Exports to \(exporter.exportIndicator)"
-                : "Set up where your receipts go"
+                : "No export destination yet"
         }
         let targets = store.reachedTargets
         let where_ = targets.isEmpty ? "" : " to \(targets.joined(separator: " and "))"
