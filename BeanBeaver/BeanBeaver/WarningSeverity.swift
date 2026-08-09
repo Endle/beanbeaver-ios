@@ -53,6 +53,15 @@ extension ReceiptWarningKind {
         case .possibleMissedItem, .droppedImplausiblePrice:
             return .notice
 
+        // The payment block and the TOTAL row disagree, so one of the two is
+        // definitely misread — worth a look before filing. Not `.attention`
+        // though: the core cannot tell which side is wrong from the arithmetic
+        // alone, so it repairs nothing and the formatter falls back to a single
+        // payment posting. The entry still balances; what is unreliable is the
+        // breakdown of *how* it was paid.
+        case .tenderMismatch:
+            return .notice
+
         // The parser repaired a mangled price and reconciled it against the
         // summary. Nothing to do — the note exists so the repair is auditable.
         case .priceAutoCorrected:

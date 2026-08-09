@@ -196,6 +196,7 @@ private struct StoredWarning: Codable {
         case .priceAutoCorrected: return "priceAutoCorrected"
         case .droppedImplausiblePrice: return "droppedImplausiblePrice"
         case .uncategorizedItem: return "uncategorizedItem"
+        case .tenderMismatch: return "tenderMismatch"
         @unknown default: return "possibleMissedItem"
         }
     }
@@ -210,6 +211,7 @@ private struct StoredWarning: Codable {
         case "priceAutoCorrected": return .priceAutoCorrected
         case "droppedImplausiblePrice": return .droppedImplausiblePrice
         case "uncategorizedItem": return .uncategorizedItem
+        case "tenderMismatch": return .tenderMismatch
         default: return .possibleMissedItem
         }
     }
