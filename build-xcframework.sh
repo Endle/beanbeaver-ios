@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 #
-# Assemble BBReceiptFFI.xcframework from the bb-receipt-ffi crate, for use by the
+# Assemble BBReceiptFFI.xcframework from the bb-mobile-ffi crate, for use by the
 # SwiftUI app. Produces, under target/ios/:
 #   - BBReceiptFFI.xcframework   (device + simulator static slices)
-#   - bb_receipt_ffi.swift       (generated Swift glue; add to the app's sources)
+#   - bb_mobile_ffi.swift        (generated Swift glue — spend arithmetic)
+#   - bb_receipt_ffi.swift       (generated Swift glue — parse core)
+#
+# ONE library, TWO UniFFI namespaces. bb-mobile-ffi depends on bb-receipt-ffi so
+# both crates' scaffolding lands in the same artifact, which is why one bindgen
+# run emits two .swift files and two modulemaps. Both are compiled into the same
+# Swift module, which is why every type mobile-ffi exports is prefixed `Spend` —
+# a name shared with the parse core would be a redeclaration. See
+# beanbeaver-mobile-util's CLAUDE.md.
 #
 # Each xcframework slice is the Rust staticlib libtool-merged with the prebuilt
 # libonnxruntime.a that `ort` downloads (the Rust .a only *references* ORT
@@ -18,8 +26,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 export CARGO_TARGET_DIR="$REPO_ROOT/target"
 
-CRATE=bb-receipt-ffi
-LIB=libbb_receipt_ffi.a
+CRATE=bb-mobile-ffi
+LIB=libbb_mobile_ffi.a
 PROFILE="${PROFILE:-release}"
 # Output into the committed local SPM package (the xcframework + generated glue
 # themselves are git-ignored and rebuilt by this script).
@@ -93,18 +101,32 @@ fi
 # --- generate Swift bindings (platform-agnostic; from a host build) --------
 echo ">> generating Swift bindings"
 cargo build --lib -p "$CRATE" >/dev/null
-HOST_DYLIB="$REPO_ROOT/target/debug/libbb_receipt_ffi.dylib"
+HOST_DYLIB="$REPO_ROOT/target/debug/libbb_mobile_ffi.dylib"
 GEN="$WORK/gen"; mkdir -p "$GEN"
-# Run the bindgen bin hosted by this shim package (bb-receipt-ffi is a git dep,
-# so `cargo run -p bb-receipt-ffi` can't reach its copy — see the [[bin]] in
-# Cargo.toml, whose source is shared/src/bin/uniffi-bindgen.rs).
+# Run the bindgen bin hosted by this shim package (the crates are git deps, so
+# `cargo run -p <dep>` can't reach their copies — see the [[bin]] in Cargo.toml,
+# whose source is shared/src/bin/uniffi-bindgen.rs).
 cargo run -q -p beanbeaver-ios-ffi-build --bin uniffi-bindgen -- \
   generate --library "$HOST_DYLIB" --language swift --out-dir "$GEN"
 
-# Headers dir for the xcframework: C header + modulemap (named module.modulemap).
+# Fail loudly here rather than at link time in Xcode. If bb-mobile-ffi ever
+# stops referencing bb-receipt-ffi, the dependency is dropped from the cdylib
+# and this generates only half the API — silently, with a successful build. See
+# `use bb_receipt_ffi as _;` in beanbeaver-mobile-util.
+for ns in bb_mobile_ffi bb_receipt_ffi; do
+  [ -f "$GEN/$ns.swift" ] || {
+    echo "error: bindgen emitted no $ns.swift — the $ns namespace is missing" >&2
+    echo "       from $HOST_DYLIB. Check 'use bb_receipt_ffi as _;' in" >&2
+    echo "       beanbeaver-mobile-util's crates/mobile-ffi/src/lib.rs." >&2
+    ls -la "$GEN" >&2; exit 1; }
+done
+
+# Headers dir for the xcframework: one C header per namespace, and ONE
+# module.modulemap declaring both modules (a modulemap file may hold several).
 HDR="$WORK/headers"; mkdir -p "$HDR"
-cp "$GEN/bb_receipt_ffiFFI.h" "$HDR/"
-cp "$GEN/bb_receipt_ffiFFI.modulemap" "$HDR/module.modulemap"
+cp "$GEN"/*FFI.h "$HDR/"
+cat "$GEN"/*FFI.modulemap > "$HDR/module.modulemap"
+printf '\n' >> "$HDR/module.modulemap"
 
 # --- assemble the xcframework ---------------------------------------------
 echo ">> creating BBReceiptFFI.xcframework"
@@ -116,8 +138,11 @@ xcodebuild -create-xcframework \
   -output "$FRAMEWORKS/BBReceiptFFI.xcframework" >/dev/null
 
 # The Swift glue is a *source* file the package target compiles (git-ignored).
-GENERATED="$PKG/Sources/BBReceiptKit/Generated"; mkdir -p "$GENERATED"
-cp "$GEN/bb_receipt_ffi.swift" "$GENERATED/"
+# Wiped rather than overwritten: the directory is SPM-globbed, so a stale file
+# left by an earlier layout would still be compiled into the package.
+GENERATED="$PKG/Sources/BBReceiptKit/Generated"
+rm -rf "$GENERATED"; mkdir -p "$GENERATED"
+cp "$GEN"/*.swift "$GENERATED/"
 
 # --- generated beanbeaver-core version constant ---------------------------
 # Surface the exact bb-receipt-ffi pin (git tag + resolved short SHA) the app
@@ -155,6 +180,7 @@ cat <<EOF
 
 ✅ Done. Wrote into BBReceiptKit/ (git-ignored, rebuildable):
    Frameworks/BBReceiptFFI.xcframework
-   Sources/BBReceiptKit/Generated/bb_receipt_ffi.swift
-   Sources/BBReceiptKit/Generated/CoreVersion.swift   (core ${core_version})
+   Sources/BBReceiptKit/Generated/bb_mobile_ffi.swift   (spend arithmetic)
+   Sources/BBReceiptKit/Generated/bb_receipt_ffi.swift  (parse core)
+   Sources/BBReceiptKit/Generated/CoreVersion.swift     (core ${core_version})
 EOF

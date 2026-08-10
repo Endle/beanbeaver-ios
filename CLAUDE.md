@@ -6,8 +6,8 @@ license split and core-tag pinning live in `../CLAUDE.md` — not repeated here.
 | Path | Role |
 |---|---|
 | `BeanBeaver/BeanBeaver/` | The SwiftUI app (Xcode project `BeanBeaver/BeanBeaver.xcodeproj`). All app code. |
-| `BBReceiptKit/` | Local Swift package over the Rust core. `Sources/BBReceiptKit/ReceiptScanner.swift` = thin Swift API; `Sources/.../Generated/` (uniffi bindings + `CoreVersion.swift`) and `Frameworks/*.xcframework` are git-ignored, produced by `build-xcframework.sh`. |
-| `src/` + `Cargo.toml` | Root Rust crate `beanbeaver-ios-ffi-build`: **build-only**; `lib.rs` is empty. Pins the `bb-receipt-ffi` tag → the real core, and hosts two bins — `uniffi-bindgen` (codegen) and `batch_e2e` (host harness) — whose **sources live in `shared/`**, compiled here via `[[bin]] path`. |
+| `BBReceiptKit/` | Local Swift package over the Rust core. `Sources/BBReceiptKit/ReceiptScanner.swift` = thin Swift API; `Sources/.../Generated/` (uniffi bindings for **both** namespaces + `CoreVersion.swift`) and `Frameworks/*.xcframework` are git-ignored, produced by `build-xcframework.sh`. |
+| `src/` + `Cargo.toml` | Root Rust crate `beanbeaver-ios-ffi-build`: **build-only**; `lib.rs` is empty. Pins **`bb-mobile-ffi`** (the library that ships — it carries the parse core inside it) *and* `bb-receipt-ffi` (for `batch_e2e.rs`) — **the two must agree on the core version**. Hosts two bins — `uniffi-bindgen` (codegen) and `batch_e2e` (host harness) — whose **sources live in `shared/`**, compiled here via `[[bin]] path`. |
 | `shared/` | **Git submodule** — [`beanbeaver-mobile-util`](https://github.com/Endle/beanbeaver-mobile-util), the assets iOS and Android genuinely share: `scripts/compare-e2e.py`, `scripts/fetch-models.sh`, `src/bin/uniffi-bindgen.rs`, `src/bin/batch_e2e.rs`. See "The `shared/` submodule" below. |
 | `build-xcframework.sh` | Builds core → xcframework + regenerates the Swift glue & `CoreVersion.swift`. Rerun after bumping the tag. |
 | `models/` | PP-OCRv5 ONNX (det/rec + textline orientation). |
@@ -51,6 +51,54 @@ git add shared && git commit -m "chore(shared): bump beanbeaver-mobile-util"
 what `scripts/host-e2e.sh` drives, and CI type-checks it (`cargo check --bin
 batch_e2e`) so a core bump here can't silently break Android's CI, which actually
 runs it.
+
+## Spending is computed in shared Rust
+
+`SpendSummary.swift` no longer contains the arithmetic. It lives in
+`spend-core` (beanbeaver-mobile-util), reached through the **`bb_mobile_ffi`**
+UniFFI namespace, so this app and `beanbeaver-android` compute spending from one
+implementation instead of two hand-synced ports. Its public Swift surface is
+unchanged, so no view moved.
+
+What stays here is genuinely this platform's:
+
+- **the projection** — `SpendRecord` → `SpendInput` (`SpendRecord.spendInput`),
+  including resolving `scannedAt` to a local calendar date. That needs a
+  timezone database *and* the offset in force at that instant; `Calendar.current`
+  has both and gets DST right, which is why Rust takes a resolved date rather
+  than an epoch timestamp.
+- **re-attachment** — Rust identifies a receipt by id (`UUID.uuidString`) and an
+  item by index; the views want the app's own `SpendRecord` / `ReceiptItem`
+  objects back (`SpendItemEntry.reattached(in:)`).
+
+`BudgetPrefs` keeps its `UserDefaults` storage; only the resolution rule moved.
+
+**Don't re-add arithmetic here** — a second implementation's opinion is the thing
+that was just deleted. This app has no XCTest target, so `spend-core`'s 28 Rust
+tests are the first automated coverage this logic has ever had on the iOS side;
+before, it was checkable only by hand through `-dumpSpending`.
+
+### Two pinned tags, and the pair matters
+
+`Cargo.toml` pins `bb-mobile-ffi` (**what ships**) and `bb-receipt-ffi` (only for
+`shared/src/bin/batch_e2e.rs`, which uses the core's Rust API). **They must agree
+on the core version** — `bb-mobile-ffi` pins the core itself, and a mismatch
+makes cargo resolve two copies, with the xcframework linking the wrong one.
+`Cargo.lock` is committed, so a duplicate `bb-receipt-ffi` entry there is the
+tell. `CoreVersion.swift` still reports the *core* tag, which is what governs
+parse behaviour.
+
+### One library, two namespaces
+
+`build-xcframework.sh` builds `bb-mobile-ffi` into `libbb_mobile_ffi.a`, which
+carries both crates' UniFFI scaffolding, so one bindgen run emits **two** Swift
+files and **two** modulemaps — concatenated into a single `module.modulemap`,
+since a modulemap file may declare several modules. Both `.swift` files compile
+into the *same* Swift module, which is why every type `mobile-ffi` exports is
+prefixed `Spend`: a name shared with the parse core (`ItemTag`, `ReceiptItem`,
+`Phase`, …) would be a redeclaration. The script hard-fails if bindgen emits
+only one namespace — see `use bb_receipt_ffi as _;` in beanbeaver-mobile-util,
+which is load-bearing and silent when removed.
 
 ## Working notes
 

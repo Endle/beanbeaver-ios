@@ -1,9 +1,14 @@
 # BeanBeaver iOS
 
 On-device receipt scanner: pick a photo → PP-OCRv5 OCR + parse + categorize →
-beancount, all in Rust via a UniFFI seam. The Rust core (`bb-receipt-ffi` and
-friends) lives in [`beanbeaver-core`](https://github.com/Endle/beanbeaver-core),
-consumed here via a pinned git dependency (see `Cargo.toml`). Background on the
+beancount, all in Rust via a UniFFI seam. The app links **one** Rust library,
+`bb-mobile-ffi` from
+[`beanbeaver-mobile-util`](https://github.com/Endle/beanbeaver-mobile-util),
+which carries two things inside it: the parse core (`bb-receipt-ffi` and
+friends, from [`beanbeaver-core`](https://github.com/Endle/beanbeaver-core)) and
+`spend-core`, the spend/budget arithmetic shared with
+[`beanbeaver-android`](https://github.com/Endle/beanbeaver-android). Both are
+pinned git dependencies (see `Cargo.toml`). Background on the
 original port plan is in `docs/ios_port.md` in the `beanbeaver` (desktop) repo.
 
 Licensed MIT (`LICENSE`); third-party components are credited in
