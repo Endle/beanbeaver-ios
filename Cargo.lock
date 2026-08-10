@@ -268,7 +268,7 @@ dependencies = [
 [[package]]
 name = "bb-mobile-ffi"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.0#1b8490be684873eb7af8cb671df6d442f3893a9e"
+source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.1#82a9f656cf53b1d03d28ffdbc2feb89a7df75911"
 dependencies = [
  "bb-receipt-ffi",
  "spend-core",
@@ -277,12 +277,12 @@ dependencies = [
 
 [[package]]
 name = "bb-receipt-ffi"
-version = "0.8.4"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.8.4#feaf0e4df39bb4ed0d2858630d1392052167d09f"
+version = "0.9.0"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.9.0#82c266d61c66d8f9b4eb62719bd36a72e857ce3f"
 dependencies = [
  "image",
- "ocr-paddle",
  "receipt-core",
+ "scan",
  "sha2",
  "uniffi",
 ]
@@ -1400,14 +1400,13 @@ dependencies = [
 
 [[package]]
 name = "ocr-paddle"
-version = "0.8.4"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.8.4#feaf0e4df39bb4ed0d2858630d1392052167d09f"
+version = "0.9.0"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.9.0#82c266d61c66d8f9b4eb62719bd36a72e857ce3f"
 dependencies = [
  "geo",
  "image",
  "imageproc",
  "ort",
- "receipt-core",
  "receipt-image",
 ]
 
@@ -1798,8 +1797,8 @@ dependencies = [
 
 [[package]]
 name = "receipt-core"
-version = "0.8.4"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.8.4#feaf0e4df39bb4ed0d2858630d1392052167d09f"
+version = "0.9.0"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.9.0#82c266d61c66d8f9b4eb62719bd36a72e857ce3f"
 dependencies = [
  "regex",
  "serde",
@@ -1808,8 +1807,8 @@ dependencies = [
 
 [[package]]
 name = "receipt-image"
-version = "0.8.4"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.8.4#feaf0e4df39bb4ed0d2858630d1392052167d09f"
+version = "0.9.0"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.9.0#82c266d61c66d8f9b4eb62719bd36a72e857ce3f"
 dependencies = [
  "image",
  "thiserror 2.0.18",
@@ -1902,6 +1901,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96b02de82ddbe1b636e6170c21be622223aea188ef2e139be0a5b219ec215323"
 dependencies = [
  "bytemuck",
+]
+
+[[package]]
+name = "scan"
+version = "0.9.0"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.9.0#82c266d61c66d8f9b4eb62719bd36a72e857ce3f"
+dependencies = [
+ "image",
+ "ocr-paddle",
+ "receipt-core",
 ]
 
 [[package]]
@@ -2113,7 +2122,7 @@ dependencies = [
 [[package]]
 name = "spend-core"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.0#1b8490be684873eb7af8cb671df6d442f3893a9e"
+source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.1#82a9f656cf53b1d03d28ffdbc2feb89a7df75911"
 
 [[package]]
 name = "stable_deref_trait"
