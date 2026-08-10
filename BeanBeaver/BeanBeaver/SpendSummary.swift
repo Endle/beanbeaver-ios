@@ -16,36 +16,31 @@ enum BudgetPrefs {
 
     /// Fallback when nothing is declared and nothing is stored — the app's most
     /// common use case names it directly rather than falling back to an
-    /// arbitrary first tag.
-    static let fallbackRoot = "grocery"
+    /// arbitrary first tag. Defined by the shared crate so Android cannot
+    /// disagree.
+    static let fallbackRoot = spendFallbackBudgetRoot()
 
     /// Root tags the current rule corpus actually declares, first-path-segment
     /// only, in the order `RuleBook.tags()` returns them, de-duplicated. What
     /// the root picker offers — never a hardcoded category list.
     static func declaredRoots() -> [String] {
-        var seen = Set<String>()
-        var roots: [String] = []
-        for tag in ItemRuleStore.shared.book?.tags() ?? [] {
-            guard let root = tag.path.split(separator: "/").first.map(String.init),
-                  !seen.contains(root) else { continue }
-            seen.insert(root)
-            roots.append(root)
-        }
-        return roots
+        spendDeclaredRoots(tags: (ItemRuleStore.shared.book?.tags() ?? []).map(\.spendTag))
     }
 
     /// The target's root tag: the user's stored choice if the corpus still
     /// declares it, else `fallbackRoot` if that's declared, else whatever the
     /// corpus declares first. Never empty as long as the corpus declares
     /// anything.
+    ///
+    /// The *rule* lives in the shared Rust crate (`spend_resolve_budget_root`)
+    /// so Android resolves it identically; only the storage is this platform's.
+    /// The "still declares it" clause is the one that matters — a stored root
+    /// can outlive the rule that produced it, and a target pointing at a
+    /// category the corpus no longer has would silently draw against nothing.
     static var root: String {
         get {
-            let roots = declaredRoots()
-            if let stored = UserDefaults.standard.string(forKey: rootKey), roots.contains(stored) {
-                return stored
-            }
-            if roots.contains(fallbackRoot) { return fallbackRoot }
-            return roots.first ?? fallbackRoot
+            spendResolveBudgetRoot(stored: UserDefaults.standard.string(forKey: rootKey),
+                                   declared: declaredRoots())
         }
         set { UserDefaults.standard.set(newValue, forKey: rootKey) }
     }
@@ -68,16 +63,32 @@ enum BudgetPrefs {
     }
 }
 
-/// Pure arithmetic over `SpendRecord`s — what a month of scanned receipts adds
-/// up to, grouped the way the items were classified. Computed fresh rather than
-/// cached, since the substrate (a few thousand records at most) is cheap to
-/// re-scan. No view code and no `UserDefaults` reads, so this is checkable by
-/// hand from `-dumpSpending`.
+/// What a month of scanned receipts adds up to, grouped the way the items were
+/// classified.
+///
+/// **The arithmetic itself is no longer here.** It lives in the shared Rust
+/// crate `spend-core` (beanbeaver-mobile-util), reached through the
+/// `bb_mobile_ffi` UniFFI namespace, so this app and `beanbeaver-android`
+/// compute spending from one implementation instead of two hand-synced ports.
+/// What remains is the part that is genuinely this platform's:
+///
+/// - **the projection** — `SpendRecord` down to the slim `SpendInput` Rust
+///   reads, including resolving `scannedAt` to a local calendar date, which
+///   needs a timezone database Rust deliberately does not carry;
+/// - **re-attachment** — Rust identifies a receipt by id and an item by index,
+///   so the types below hand back the app's own `SpendRecord` / `ReceiptItem`
+///   objects the views draw from.
+///
+/// The public surface is unchanged, so no view had to move. Computed fresh
+/// rather than cached, as before.
 ///
 /// **Every figure comes from `result.items`, not `result.total`.** A bank feed
 /// already knows a Costco run was $148.73; only this app knows it was $54.45
 /// grocery, $24.99 household and $58.40 gas. `receiptTotal` is carried along
 /// solely to reconcile against, never to spend from.
+///
+/// The behaviour is pinned by `spend-core`'s 28 Rust tests — the first
+/// automated coverage this file's logic has ever had on the iOS side.
 enum SpendSummary {
     /// One leaf category — the most specific label the classifier reached.
     struct Leaf: Identifiable {
@@ -93,9 +104,7 @@ enum SpendSummary {
         /// The raw root tag (`"grocery"`) — matches `BudgetPrefs.root`, which is
         /// how the one group carrying a target is found.
         let id: String
-        /// The authored display label (`"Grocery"`), taken from the tag
-        /// vocabulary when it's available rather than capitalized here — the
-        /// same reason `CategoryDisplay.tagDisplay` uses `display` verbatim.
+        /// The authored display label (`"Grocery"`), from the tag vocabulary.
         let label: String
         let amount: Double
         let itemCount: Int
@@ -117,87 +126,39 @@ enum SpendSummary {
         let receiptCount: Int
         let excludedCount: Int
         let unreadablePriceCount: Int
+        /// Includes excluded rows: the Receipts list still shows them.
         let records: [SpendRecord]
-
-        /// The group for `root`, or nil when the month has no spend under it —
-        /// how the spending screen finds the one group a target applies to.
-        func group(_ root: String) -> RootGroup? {
-            roots.first { $0.id == root }
-        }
-
         /// The largest single leaf anywhere in the month, so every category bar
-        /// on screen shares one scale and is actually comparable. Scaling per
-        /// group would put each root on its own invisible scale.
-        var maxLeafAmount: Double {
-            roots.flatMap(\.leaves).map(\.amount).max() ?? 0
-        }
-
+        /// on screen shares one scale and is actually comparable.
+        let maxLeafAmount: Double
         /// How far `tracked` sits from what the receipts themselves totalled, or
         /// nil when they agree. Non-nil is normal rather than alarming: a scan
-        /// that reads every item but misses a `-5.00` discount line lands here,
-        /// as does one whose `total` didn't parse. The screen names it instead
-        /// of leaving the reader to subtract two numbers.
-        var unaccounted: Double? {
-            let gap = tracked - receiptTotal
-            return abs(gap) >= 0.01 ? gap : nil
+        /// that reads every item but misses a `-5.00` discount line lands here.
+        let unaccounted: Double?
+
+        /// The group for `root`, or nil when the month has no spend under it.
+        func group(_ root: String) -> RootGroup? {
+            roots.first { $0.id == root }
         }
     }
 
     // MARK: - Month bucketing
 
-    private static let isoParser: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    private static let monthIdFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM"
-        return f
-    }()
-
-    private static let monthLabelFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "MMMM yyyy"
-        return f
-    }()
-
-    /// The current calendar month's id — what a screen shows before anything has
-    /// been scanned into it.
+    /// The current calendar month's id.
     static func currentMonthId(_ now: Date = Date()) -> String {
-        monthIdFormatter.string(from: now)
+        spendCurrentMonthId(today: now.spendDate)
     }
 
     /// The calendar month a record belongs to: `result.date` unless it's missing
-    /// or a placeholder, in which case the row's own `scannedAt` steps in —
-    /// mirroring `MoneyManagerExport.dateString`'s fallback, but with the row's
-    /// own scan time instead of "today", so a bucket can't drift with the clock
-    /// on a later run.
+    /// or a placeholder, in which case the row's own `scannedAt` steps in — so a
+    /// bucket can't drift with the clock on a later run.
     static func monthId(for record: SpendRecord) -> String {
-        let date: Date
-        if !record.result.dateIsPlaceholder, let iso = record.result.date,
-           let parsed = isoParser.date(from: iso) {
-            date = parsed
-        } else {
-            date = record.scannedAt
-        }
-        return monthIdFormatter.string(from: date)
+        spendMonthId(record: record.spendInput)
     }
 
     /// Every month with at least one record, newest first.
     static func monthIds(from records: [SpendRecord]) -> [String] {
-        var seen = Set<String>()
-        var ids: [String] = []
-        for record in records {
-            let id = monthId(for: record)
-            guard !seen.contains(id) else { continue }
-            seen.insert(id)
-            ids.append(id)
-        }
-        return ids.sorted(by: >)
+        spendMonthIds(records: records.map(\.spendInput))
     }
 
     /// The month a screen opens on: the newest one with receipts in it, falling
@@ -205,65 +166,38 @@ enum SpendSummary {
     ///
     /// Deliberately *not* "the current month": scanning happens in bursts, and a
     /// screen that opens on a $0.00 October because the last receipt was in
-    /// September shows nothing and looks broken. Both the home card and
-    /// `SpendingView` route through this, so the number on the card is the month
-    /// tapping it lands on.
+    /// September shows nothing and looks broken.
     static func defaultMonthId(from records: [SpendRecord]) -> String {
-        monthIds(from: records).first ?? currentMonthId()
+        spendDefaultMonthId(records: records.map(\.spendInput), today: Date().spendDate)
     }
 
-    /// "2026-07" -> "July 2026", or `id` unchanged if it isn't a month id.
+    /// `"2026-07"` -> `"July 2026"`, or `id` unchanged if it isn't a month id.
     static func monthLabel(for id: String) -> String {
-        guard let date = monthIdFormatter.date(from: id) else { return id }
-        return monthLabelFormatter.string(from: date)
+        spendMonthLabel(id: id)
     }
 
     // MARK: - Classification
 
-    /// Sentinel root for items the classifier left untagged. Kept as a real
-    /// group rather than dropped, so the breakdown always reconciles against
-    /// what was actually scanned — same intent as `MoneyManagerExport.rows(for:)`.
-    static let uncategorizedRoot = "uncategorized"
+    /// Sentinel root for items the classifier left untagged.
+    static let uncategorizedRoot = spendUncategorizedRoot()
 
-    /// The item's top-level category. The classifier emits tags broad→specific
-    /// (`["grocery", "meat", "chicken"]` — `CategoryDisplay.tagDisplay` reads
-    /// `.last` for the most specific on the same assumption), so the *first* tag
-    /// carries the root. A path may itself be nested (`"grocery/meat"`), hence
-    /// the split.
-    private static func root(of item: ReceiptItem) -> String {
-        guard let first = item.tags.first,
-              let segment = first.path.split(separator: "/").first
-        else { return uncategorizedRoot }
-        return String(segment)
-    }
-
-    /// The authored label for a root, when this item's tag list carries the root
-    /// tag itself — the vocabulary's own wording beats capitalizing a raw path
-    /// segment (`"personalcare"` -> `"Personal Care"`, not `"Personalcare"`).
-    private static func rootLabel(of item: ReceiptItem, root: String) -> String? {
-        item.tags.first { $0.path == root && !$0.display.isEmpty }?.display
-    }
-
-    /// The item's display leaf — the app's existing label
-    /// (`CategoryDisplay.tagDisplay(for:)`), so spending, the result card and the
-    /// Money Manager export agree by construction.
+    /// The item's display leaf.
     ///
-    /// Not private: `CategoryItemsView` groups by the same label the totals were
-    /// accumulated under, so a drill-down can't disagree with the figure that
-    /// was tapped to reach it.
+    /// **Twin of `CategoryDisplay.tagDisplay`'s `primary`, and they must not
+    /// drift** — the spending screen groups by this while the result card labels
+    /// by `tagDisplay`, so a divergence shows one item under two names. The rule
+    /// now lives in Rust (`spend_core::leaf_label`); this delegates rather than
+    /// reimplementing so there is only one place to change.
     static func leafLabel(of item: ReceiptItem) -> String {
-        CategoryDisplay.tagDisplay(for: item.tags).primary ?? "Uncategorized"
+        spendLeafLabel(tags: item.tags.map(\.spendTag))
     }
 
     // MARK: - Drill-down
 
     /// One line item, with the receipt it came from. What a category total is
-    /// actually made of — tapping "Dairy $19.38" asks *which items*, and a
-    /// receipt list would answer with whole-receipt totals that have nothing to
-    /// do with the number tapped.
+    /// actually made of — tapping "Dairy $19.38" asks *which items*.
     struct ItemEntry: Identifiable {
         /// Stable within a month: a record's id plus the item's index in it.
-        /// Two identical lines on one receipt stay distinct rows.
         let id: String
         let item: ReceiptItem
         let record: SpendRecord
@@ -272,169 +206,139 @@ enum SpendSummary {
 
     /// One receipt's contribution to a category: the items of it that landed
     /// under the tapped category, and the receipt they were printed on.
-    ///
-    /// The unit the drill-down lists, because a category total is spread over
-    /// *purchases* — "$8.42 of this Costco run was dairy" is the shape of the
-    /// answer, and repeating the merchant on every item row buries it.
-    ///
-    /// Derived from `items(_:from:)` rather than accumulated separately: one
-    /// matching predicate means a group can't disagree with the flat list, or
-    /// with the figure that was tapped to reach it.
     struct ReceiptGroup: Identifiable {
         var id: UUID { record.id }
         let record: SpendRecord
         /// The matching items, in the order they were printed.
         let entries: [ItemEntry]
-        /// What those items add up to — this receipt's share of the category
-        /// total. `entries` sums to this, and every group sums to the category.
+        /// This receipt's share of the category total.
         let amount: Double
-        /// The whole receipt's total, or nil when `result.total` didn't parse.
-        /// Carried as context only — never spent from, per this type's header.
+        /// The whole receipt's total, or nil when it didn't parse. Context only.
         let receiptTotal: Double?
     }
 
     /// What a category is selected by — a whole top-level group, or one leaf
-    /// inside it. The two cases exist because tapping a card's header and
-    /// tapping a row in it are different questions.
-    ///
-    /// A root is selected by its **raw tag id**, not its display label: the
-    /// group's label is whatever authored wording any of its items supplied
-    /// (`"personalcare"` -> `"Personal Care"`), so matching on the label would
-    /// drop every item in the group that didn't carry the root tag itself. A
-    /// leaf carries no such id — `leafLabel` is the only thing it was ever
-    /// accumulated under — so it matches on the label it was grouped by.
+    /// inside it. A root is selected by its **raw tag id**, not its display
+    /// label: matching on the label would drop every item in the group that
+    /// didn't itself carry the root tag.
     enum Category: Equatable {
         case root(String)
         case leaf(String)
-    }
 
-    /// Every item in `records` under `category`, newest receipt first, and
-    /// within a receipt in the order the items were printed.
-    ///
-    /// Recomputed from `Month.records` rather than stored during accumulation:
-    /// the substrate is small, and deriving it here means the list and the total
-    /// can't drift apart. Excluded receipts are left out, matching every other
-    /// figure on the spending screen.
-    static func items(_ category: Category, from records: [SpendRecord]) -> [ItemEntry] {
-        var entries: [ItemEntry] = []
-        for record in records where !record.isExcluded {
-            for (index, item) in record.result.items.enumerated() {
-                let matches: Bool
-                switch category {
-                case .root(let id): matches = root(of: item) == id
-                case .leaf(let label): matches = leafLabel(of: item) == label
-                }
-                guard matches else { continue }
-                entries.append(ItemEntry(id: "\(record.id.uuidString)-\(index)",
-                                         item: item, record: record,
-                                         amount: PriceFormat.value(item.price) ?? 0))
+        var ffi: SpendCategory {
+            switch self {
+            case .root(let id): return .root(id: id)
+            case .leaf(let label): return .leaf(label: label)
             }
         }
-        return entries
+    }
+
+    /// Every item in `records` under `category`, in store order (newest receipt
+    /// first) and within a receipt in the order the items were printed.
+    /// Excluded receipts are left out, matching every other figure.
+    static func items(_ category: Category, from records: [SpendRecord]) -> [ItemEntry] {
+        let byId = Dictionary(records.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { a, _ in a })
+        return spendItems(category: category.ffi, records: records.map(\.spendInput))
+            .compactMap { $0.reattached(in: byId) }
     }
 
     /// `items(_:from:)`, grouped by the receipt each item was printed on.
-    ///
-    /// Newest receipt first, and within a receipt the printed order — both
-    /// inherited rather than re-sorted: `items` walks `records` in store order
-    /// (newest-first) and each receipt's items in `enumerated()` order, so
-    /// accumulating in first-seen order preserves both.
     static func receipts(_ category: Category, from records: [SpendRecord]) -> [ReceiptGroup] {
-        var order: [UUID] = []
-        var grouped: [UUID: (record: SpendRecord, entries: [ItemEntry], amount: Double)] = [:]
-        for entry in items(category, from: records) {
-            let id = entry.record.id
-            if grouped[id] == nil {
-                order.append(id)
-                grouped[id] = (record: entry.record, entries: [], amount: 0)
+        let byId = Dictionary(records.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { a, _ in a })
+        return spendReceiptGroups(category: category.ffi, records: records.map(\.spendInput))
+            .compactMap { group in
+                guard let record = byId[group.recordId] else { return nil }
+                return ReceiptGroup(record: record,
+                                    entries: group.entries.compactMap { $0.reattached(in: byId) },
+                                    amount: group.amount,
+                                    receiptTotal: group.receiptTotal)
             }
-            grouped[id]!.entries.append(entry)
-            grouped[id]!.amount += entry.amount
-        }
-        return order.compactMap { id in
-            guard let group = grouped[id] else { return nil }
-            return ReceiptGroup(record: group.record, entries: group.entries, amount: group.amount,
-                                receiptTotal: PriceFormat.value(group.record.result.total))
-        }
     }
 
     // MARK: - Arithmetic
 
-    /// Insertion-ordered accumulation so ties in amount keep a stable order
-    /// through the largest-first sorts.
-    private struct RootAccumulator {
-        var label: String
-        var amount = 0.0
-        var itemCount = 0
-        var leaves: [(label: String, amount: Double, count: Int)] = []
-
-        mutating func add(leaf: String, _ amount: Double) {
-            self.amount += amount
-            itemCount += 1
-            if let index = leaves.firstIndex(where: { $0.label == leaf }) {
-                leaves[index].amount += amount
-                leaves[index].count += 1
-            } else {
-                leaves.append((label: leaf, amount: amount, count: 1))
-            }
-        }
-    }
-
     static func month(_ id: String, from records: [SpendRecord]) -> Month {
-        let monthRecords = records.filter { monthId(for: $0) == id }
-        let excludedCount = monthRecords.filter { $0.isExcluded }.count
-        let tracked = monthRecords.filter { !$0.isExcluded }
+        let byId = Dictionary(records.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { a, _ in a })
+        let m = spendMonth(id: id, records: records.map(\.spendInput))
+        return Month(
+            id: m.id,
+            label: m.label,
+            tracked: m.tracked,
+            itemsTotal: m.itemsTotal,
+            roots: m.roots.map { root in
+                RootGroup(id: root.id, label: root.label, amount: root.amount,
+                          itemCount: Int(root.itemCount),
+                          leaves: root.leaves.map {
+                              Leaf(id: $0.label, label: $0.label, amount: $0.amount,
+                                   itemCount: Int($0.itemCount))
+                          })
+            },
+            tax: m.tax,
+            receiptTotal: m.receiptTotal,
+            receiptCount: Int(m.receiptCount),
+            excludedCount: Int(m.excludedCount),
+            unreadablePriceCount: Int(m.unreadablePriceCount),
+            records: m.recordIds.compactMap { byId[$0] },
+            maxLeafAmount: m.maxLeafAmount,
+            unaccounted: m.unaccounted
+        )
+    }
+}
 
-        var itemsTotal = 0.0
-        var tax = 0.0
-        var receiptTotal = 0.0
-        var unreadablePriceCount = 0
-        var rootOrder: [String] = []
-        var rootTotals: [String: RootAccumulator] = [:]
+// MARK: - Projection and re-attachment
+//
+// The seam's own code, and this file's real risk now that the arithmetic is
+// shared.
 
-        for record in tracked {
-            let result = record.result
-            receiptTotal += PriceFormat.value(result.total) ?? 0
-            if let rawTax = result.tax, let value = PriceFormat.value(rawTax) {
-                tax += value
-            }
-            for item in result.items {
-                // An unreadable price is counted and carried at zero rather than
-                // dropped: the item still happened, and the footer says how many
-                // couldn't be read.
-                let parsed = PriceFormat.value(item.price)
-                if parsed == nil { unreadablePriceCount += 1 }
-                let amount = parsed ?? 0
-                itemsTotal += amount
+extension Date {
+    /// Resolved here rather than in Rust: turning an instant into a calendar
+    /// date needs a timezone database *and* the offset in force at that instant,
+    /// which `Calendar.current` already has and gets right across DST.
+    var spendDate: SpendDate {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: self)
+        return SpendDate(year: Int32(c.year ?? 1970),
+                         month: UInt32(c.month ?? 1),
+                         day: UInt32(c.day ?? 1))
+    }
+}
 
-                let rootId = root(of: item)
-                if rootTotals[rootId] == nil {
-                    rootOrder.append(rootId)
-                    rootTotals[rootId] = RootAccumulator(
-                        label: rootId == uncategorizedRoot ? "Uncategorized" : rootId.capitalized)
-                }
-                if let authored = rootLabel(of: item, root: rootId) {
-                    rootTotals[rootId]!.label = authored
-                }
-                rootTotals[rootId]!.add(leaf: leafLabel(of: item), amount)
-            }
-        }
+extension ItemTag {
+    var spendTag: SpendTag { SpendTag(path: path, display: display) }
+}
 
-        let roots = rootOrder
-            .compactMap { rootId -> RootGroup? in
-                guard let acc = rootTotals[rootId] else { return nil }
-                let leaves = acc.leaves
-                    .sorted { $0.amount > $1.amount }
-                    .map { Leaf(id: $0.label, label: $0.label, amount: $0.amount, itemCount: $0.count) }
-                return RootGroup(id: rootId, label: acc.label, amount: acc.amount,
-                                 itemCount: acc.itemCount, leaves: leaves)
-            }
-            .sorted { $0.amount > $1.amount }
+extension SpendRecord {
+    /// This record as the shared crate reads it. Drops `rawText`, `beancount`,
+    /// the photo state and the export state — none of which the arithmetic
+    /// touches, and the first two of which are large strings that would
+    /// otherwise be copied across the FFI on every render.
+    var spendInput: SpendInput {
+        SpendInput(id: id.uuidString,
+                   dateIso: result.date,
+                   dateIsPlaceholder: result.dateIsPlaceholder,
+                   scannedOn: scannedAt.spendDate,
+                   isExcluded: isExcluded,
+                   total: result.total,
+                   tax: result.tax,
+                   items: result.items.map {
+                       SpendItem(description: $0.description,
+                                 price: $0.price,
+                                 tags: $0.tags.map(\.spendTag))
+                   })
+    }
+}
 
-        return Month(id: id, label: monthLabel(for: id),
-                     tracked: itemsTotal + tax, itemsTotal: itemsTotal, roots: roots,
-                     tax: tax, receiptTotal: receiptTotal, receiptCount: tracked.count,
-                     excludedCount: excludedCount, unreadablePriceCount: unreadablePriceCount,
-                     records: monthRecords)
+extension SpendItemEntry {
+    /// Put the app's own objects back on an entry Rust identified by id and
+    /// index.
+    ///
+    /// Nil — and so dropped — if either lookup misses. That cannot happen for a
+    /// list Rust derived from the very records passed in, and silently skipping
+    /// beats an index trap on a spending screen if it ever does.
+    func reattached(in byId: [String: SpendRecord]) -> SpendSummary.ItemEntry? {
+        guard let record = byId[recordId] else { return nil }
+        let index = Int(itemIndex)
+        guard record.result.items.indices.contains(index) else { return nil }
+        return SpendSummary.ItemEntry(id: id, item: record.result.items[index],
+                                      record: record, amount: amount)
     }
 }

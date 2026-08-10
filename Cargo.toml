@@ -101,6 +101,17 @@ path = "shared/src/bin/batch_e2e.rs"
 # stubs typed "never carries an amount". On one 2026-03-05 Costco scan this
 # corrects five item prices that were each off by a row.
 bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.8.4" }
+# The library the app actually links. It carries bb-receipt-ffi's UniFFI
+# scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
+# build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
+# spend/budget arithmetic shared with beanbeaver-android.
+#
+# THE TWO PINS MUST AGREE ON THE CORE TAG. bb-mobile-ffi pins bb-receipt-ffi
+# itself; if this file pins a different one, cargo resolves two copies of the
+# core and the xcframework links the wrong one. The direct bb-receipt-ffi dep
+# above is only for shared/src/bin/batch_e2e.rs, which uses the core's Rust API.
+# Cargo.lock is committed — a duplicate bb-receipt-ffi entry there is the tell.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.0" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
