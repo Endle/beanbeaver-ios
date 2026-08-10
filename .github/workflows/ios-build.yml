@@ -19,6 +19,12 @@ jobs:
       RUST_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@v4
+        with:
+          # shared/ (beanbeaver-mobile-util) holds the uniffi-bindgen and
+          # batch_e2e sources the Cargo.toml [[bin]] paths point at, plus
+          # compare-e2e.py. Without this the cargo build fails on a
+          # missing bin path.
+          submodules: true
 
       # Pin an Xcode so the available iOS SDK is predictable. Adjust the version
       # to whatever the runner image provides (see the "Xcode" line in the job's
@@ -60,6 +66,15 @@ jobs:
       - name: Build BBReceiptFFI.xcframework
         run: PROFILE=debug ./build-xcframework.sh
 
+      # batch_e2e's source is shared with Android (shared/src/bin/), and nothing
+      # in the *app* build compiles it — a host target isn't in the xcframework's
+      # path. It has silently rotted before on the Android side (against v0.6.x's
+      # scan() arity) precisely because no job built it. Compile it here so this
+      # repo can't bump the core tag and break the other app's CI.
+      # Uses the same target/ + ORT cache entry as the step above, by design.
+      - name: Type-check the shared host harness
+        run: cargo check --bin batch_e2e
+
       # ARCHS=arm64: the generic simulator destination otherwise builds every
       # valid arch (arm64 + x86_64), but the xcframework ships only the arm64
       # simulator slice (the runner is Apple Silicon), so drop x86_64.
@@ -94,6 +109,12 @@ jobs:
       LIVE_SIM_MAX: "2"
     steps:
       - uses: actions/checkout@v4
+        with:
+          # shared/ (beanbeaver-mobile-util) holds the uniffi-bindgen and
+          # batch_e2e sources the Cargo.toml [[bin]] paths point at, plus
+          # compare-e2e.py. Without this the cargo build fails on a
+          # missing bin path.
+          submodules: true
 
       - name: Select Xcode
         run: sudo xcode-select -switch /Applications/Xcode.app
@@ -220,4 +241,4 @@ jobs:
           print("grading:", list(m))
           PY
           [ -f manifest.json ] || exit 0
-          python3 scripts/compare-e2e.py --results batch_out.json --manifest manifest.json
+          python3 shared/scripts/compare-e2e.py --results batch_out.json --manifest manifest.json

@@ -8,16 +8,37 @@ cached `.ocr.json` snapshots can't reproduce actually show up.
 
 | Script | What it drives | Use for |
 |---|---|---|
+| `host-e2e.sh [dir]` | **this Mac** — no sim, no Xcode, no app | fast parser check after a core bump |
 | `sim-e2e.sh <dir> [pilot\|--all]` | booted **simulator**, live OCR, diff vs `expected.json` | correctness / parse quality |
 | `sim-e2e-private.sh [dir] [mode]` | `sim-e2e.sh` pointed at the **private** corpus | correctness on PII cases (manual) |
 | `device-e2e.sh <dir> [--all]` | a connected **iPhone** (`devicectl`) | performance (perf doesn't transfer sim→phone) |
-| `compare-e2e.py` | diffs `batch_out.json` vs `expected.json` | shared by the above; same asserts as the desktop pytest |
+| `../shared/scripts/compare-e2e.py` | diffs `batch_out.json` vs `expected.json` | shared by all of the above, **and by Android** — it lives in the `shared/` submodule |
 | `launch-timing.sh`, `device-latency.py` | launch / per-stage timings | perf profiling |
 
-A case is any `<stem>.jpg` with a sibling `<stem>.expected.json`. The harness
-copies selected images into the app container's `Documents/batch_in/`, launches
-`-autoRunBatch` (see `BatchRunner` in `ReceiptPipeline.swift`), waits for
-`Documents/batch_out.json`, then runs `compare-e2e.py`.
+A case is any `<stem>.jpg` with a sibling `<stem>.expected.json`. The on-device
+harnesses copy selected images into the app container's `Documents/batch_in/`,
+launch `-autoRunBatch` (see `BatchRunner` in `ReceiptPipeline.swift`), wait for
+`Documents/batch_out.json`, then run `compare-e2e.py`.
+
+## `host-e2e.sh` — and what it can't tell you
+
+`host-e2e.sh` runs the same fixtures through the same core and the same grader
+with **no simulator in the loop**: `batch_e2e` (a Rust bin whose source is shared
+with Android, in `shared/src/bin/`) scans the images directly. It's seconds
+rather than minutes, so it's the right first check after bumping the core tag.
+
+What it does **not** exercise is everything above the Rust: the UniFFI Swift
+bindings, `ReceiptScanner.swift`, `BatchRunner`, the app's ledger defaults. A
+green `host-e2e.sh` and a broken app are entirely compatible — see the note in
+`../CLAUDE.md` about Xcode not relinking after `build-xcframework.sh`. Use
+`sim-e2e.sh` before you believe the app works.
+
+It accepts any directory, so the private corpus works too:
+
+```sh
+PRIVATE_RULES=../beanbeaver-private-test/private_rules.toml \
+  scripts/host-e2e.sh ../beanbeaver-private-test/receipts_e2e
+```
 
 ## Private corpus (manual, macOS-only)
 
@@ -43,7 +64,8 @@ The desktop suite resolves item categories from beanbeaver's **public** rules
 the public rules and can't inject private ones at runtime, so any expected
 category that comes from `private_rules.toml` can't reproduce on-device.
 
-`sim-e2e-private.sh` passes that file to `compare-e2e.py --private-rules`, which
+`sim-e2e-private.sh` (and `host-e2e.sh`, via `PRIVATE_RULES`) passes that file to
+`compare-e2e.py --private-rules`, which
 **tolerates** exactly those items' category assertions (their expected
 description contains a private keyword). Everything else stays enforced —
 description, price, and every public-rule category — so a genuine public-rule

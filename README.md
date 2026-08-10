@@ -24,6 +24,10 @@ BeanBeaver/                the SwiftUI app
   BeanBeaver.xcodeproj
   BeanBeaver/              App / ContentView / ReceiptPipeline
 models/                        PP-OCRv5 .onnx weights, bundled as app resources
+shared/                        submodule: Endle/beanbeaver-mobile-util
+  scripts/compare-e2e.py       ← shared with beanbeaver-android
+  src/bin/batch_e2e.rs
+  src/bin/uniffi-bindgen.rs
 ```
 
 ⚙️ = produced by `build-xcframework.sh`; not committed.
@@ -31,6 +35,9 @@ models/                        PP-OCRv5 .onnx weights, bundled as app resources
 ## Build steps
 
 ```bash
+# 0. Clone with --recurse-submodules, or: git submodule update --init
+#    Without shared/, step 1 fails on a missing [[bin]] path.
+
 # 1. Build the Rust core into the SPM package (xcframework + Swift glue).
 #    models/ is already populated in this repo.
 ./build-xcframework.sh                     # PROFILE=debug for faster iteration

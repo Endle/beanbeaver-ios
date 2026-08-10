@@ -96,7 +96,8 @@ cargo build --lib -p "$CRATE" >/dev/null
 HOST_DYLIB="$REPO_ROOT/target/debug/libbb_receipt_ffi.dylib"
 GEN="$WORK/gen"; mkdir -p "$GEN"
 # Run the bindgen bin hosted by this shim package (bb-receipt-ffi is a git dep,
-# so `cargo run -p bb-receipt-ffi` can't reach its copy — see src/bin/uniffi-bindgen.rs).
+# so `cargo run -p bb-receipt-ffi` can't reach its copy — see the [[bin]] in
+# Cargo.toml, whose source is shared/src/bin/uniffi-bindgen.rs).
 cargo run -q -p beanbeaver-ios-ffi-build --bin uniffi-bindgen -- \
   generate --library "$HOST_DYLIB" --language swift --out-dir "$GEN"
 

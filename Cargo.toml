@@ -3,6 +3,22 @@ name = "beanbeaver-ios-ffi-build"
 version = "0.0.0"
 edition = "2021"
 publish = false
+default-run = "uniffi-bindgen"
+
+# Both bins live in the `shared/` submodule (beanbeaver-mobile-util) — Android
+# builds the same two files from the same commit. They are compiled *here*
+# rather than depended on as a crate so each app builds them against its own
+# pinned bb-receipt-ffi tag: batch_e2e.rs uses OcrSession/Phase/ScanTimings/
+# ReceiptWarningKind, so a breaking FFI bump changes it. `git submodule update
+# --init` if `shared/` is empty.
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "shared/src/bin/uniffi-bindgen.rs"
+
+[[bin]]
+name = "batch_e2e"
+path = "shared/src/bin/batch_e2e.rs"
 
 [dependencies]
 # v0.3.0 adds per-item semantic tags: ReceiptItem now carries `tags: [String]`

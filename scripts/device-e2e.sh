@@ -110,5 +110,5 @@ python3 "$HERE/device-latency.py" "$OUT"
 
 if [ -s "$WORK/manifest.json" ]; then
   echo "── quality compare ──"
-  python3 "$HERE/compare-e2e.py" --results "$OUT" --manifest "$WORK/manifest.json" || true
+  python3 "$HERE/../shared/scripts/compare-e2e.py" --results "$OUT" --manifest "$WORK/manifest.json" || true
 fi

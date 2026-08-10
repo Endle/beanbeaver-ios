@@ -7,7 +7,8 @@ license split and core-tag pinning live in `../CLAUDE.md` — not repeated here.
 |---|---|
 | `BeanBeaver/BeanBeaver/` | The SwiftUI app (Xcode project `BeanBeaver/BeanBeaver.xcodeproj`). All app code. |
 | `BBReceiptKit/` | Local Swift package over the Rust core. `Sources/BBReceiptKit/ReceiptScanner.swift` = thin Swift API; `Sources/.../Generated/` (uniffi bindings + `CoreVersion.swift`) and `Frameworks/*.xcframework` are git-ignored, produced by `build-xcframework.sh`. |
-| `src/` + `Cargo.toml` | Root Rust crate `beanbeaver-ios-ffi-build`: **build-only**. `src/bin/uniffi-bindgen.rs` runs codegen; `lib.rs` is empty. Pins the `bb-receipt-ffi` tag → the real core. |
+| `src/` + `Cargo.toml` | Root Rust crate `beanbeaver-ios-ffi-build`: **build-only**; `lib.rs` is empty. Pins the `bb-receipt-ffi` tag → the real core, and hosts two bins — `uniffi-bindgen` (codegen) and `batch_e2e` (host harness) — whose **sources live in `shared/`**, compiled here via `[[bin]] path`. |
+| `shared/` | **Git submodule** — [`beanbeaver-mobile-util`](https://github.com/Endle/beanbeaver-mobile-util), the assets iOS and Android genuinely share: `scripts/compare-e2e.py`, `scripts/fetch-models.sh`, `src/bin/uniffi-bindgen.rs`, `src/bin/batch_e2e.rs`. See "The `shared/` submodule" below. |
 | `build-xcframework.sh` | Builds core → xcframework + regenerates the Swift glue & `CoreVersion.swift`. Rerun after bumping the tag. |
 | `models/` | PP-OCRv5 ONNX (det/rec + textline orientation). |
 | `scripts/` | E2E / perf harnesses — see `scripts/README.md`. |
@@ -19,6 +20,37 @@ App code under `BeanBeaver/BeanBeaver/`, by concern (open the file for detail):
 - **Scan pipeline** — `ReceiptPipeline.swift` (`BatchRunner`, `-autoRunBatch`), `ReceiptCaptureStore.swift`, `ReceiptBatch.swift`, `DocumentScanner.swift`, `BatchImportView.swift`.
 - **Export / sync** — `LedgerExport.swift` (exporter seam), `LedgerSettingsView.swift` (the "Sync" page), backends `GitHubLedger.swift` / `GitHubDeviceFlow.swift` / `FilesLedgerInbox.swift`, and `MoneyManagerExport.swift` / `MoneyManagerWorkbook.swift`.
 - **Support** — `Entitlements.swift` (`isPremium` seam); `DebugInfoStore.swift` (+`DebugInfoListView`) and `DataDump.swift` (+`DataDumpView`) = in-app debug capture; others self-named (`Keychain`, `Theme`, `ZoomableImageView`, `PhotoSaver`, `LaunchTiming`).
+
+## The `shared/` submodule
+
+Four build/test assets used to exist twice across this repo and
+`beanbeaver-android` (or once, and should have existed twice). They now live in
+[`beanbeaver-mobile-util`](https://github.com/Endle/beanbeaver-mobile-util) and
+both apps consume them as a submodule at `shared/`.
+
+**Clone with `--recurse-submodules`**, or run `git submodule update --init`. An
+empty `shared/` is not a soft failure: the `[[bin]]` paths in `Cargo.toml` point
+into it, so cargo dies on a missing manifest path and `build-xcframework.sh`
+never reaches codegen. CI checks out with `submodules: true`.
+
+The two `.rs` files are **source assets compiled into this package**, not a crate
+dependency — deliberately. `batch_e2e.rs` imports `OcrSession`, `Phase`,
+`ScanTimings` and `ReceiptWarningKind` from `bb-receipt-ffi`, so it builds
+against *this* repo's pinned core tag and Android can sit on a different one.
+Same reasoning for `uniffi-bindgen.rs` and the `uniffi` 0.28 pin.
+
+So a breaking core FFI bump can require a change in `beanbeaver-mobile-util`.
+Fix it there, push, then move this repo's pointer:
+
+```bash
+cd shared && git pull origin main && cd ..
+git add shared && git commit -m "chore(shared): bump beanbeaver-mobile-util"
+```
+
+**This repo gained `batch_e2e` in the move** — a host harness it never had. It is
+what `scripts/host-e2e.sh` drives, and CI type-checks it (`cargo check --bin
+batch_e2e`) so a core bump here can't silently break Android's CI, which actually
+runs it.
 
 ## Working notes
 

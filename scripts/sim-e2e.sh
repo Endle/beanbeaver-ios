@@ -80,5 +80,5 @@ echo "── compare ──"
 # PRIVATE_RULES (optional): when set, categories the private suite gets from
 # private_rules.toml are tolerated — the app runs public rules only. Unset in CI
 # (public fixtures), so the comparison is unchanged there.
-python3 "$HERE/compare-e2e.py" --results "$WORK/batch_out.json" --manifest "$WORK/manifest.json" \
+python3 "$HERE/../shared/scripts/compare-e2e.py" --results "$WORK/batch_out.json" --manifest "$WORK/manifest.json" \
   ${PRIVATE_RULES:+--private-rules "$PRIVATE_RULES"}
