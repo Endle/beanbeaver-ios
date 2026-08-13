@@ -100,7 +100,21 @@ path = "shared/src/bin/batch_e2e.rs"
 # but no longer mistakable for its price. (b) `Member <digits>` joins the code
 # stubs typed "never carries an amount". On one 2026-03-05 Costco scan this
 # corrects five item prices that were each off by a row.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.9.1" }
+# v0.9.2 ADDS one FFI enum variant and is not breaking:
+# `ReceiptWarningKind::implausibleSummary` (core #64) — a summary block that
+# cannot be right (no total found while items parsed, or subtotal == tax) is
+# reported instead of silently reading 0.00. Kinds are open by contract, so
+# `WarningSeverity.swift`'s `@unknown default` and `ReceiptBatch.swift`'s two
+# name/kind switches already absorb it; ranking it explicitly is a follow-up,
+# not a blocker. The parse content is core #67, the same family of fix as v0.8.3
+# above: Loblaw department headers (`21-GROCERY`, `22-DAIRY`, …) print at the
+# left margin, so the indent yield read them as banners and let them keep an
+# amount belonging to a neighbouring row. Typed "never carries an amount" they
+# stop, and the rows below stop inheriting the shift. Measured on the 123-receipt
+# private corpus: 885/1008 -> 893/1008 critical items, three receipts better,
+# none worse. Note that number is a CPU-EP measurement (device_sim) and so
+# tracks Android; this app runs CoreML, which device_sim cannot reproduce.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.9.2" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -111,7 +125,7 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.9
 # core and the xcframework links the wrong one. The direct bb-receipt-ffi dep
 # above is only for shared/src/bin/batch_e2e.rs, which uses the core's Rust API.
 # Cargo.lock is committed — a duplicate bb-receipt-ffi entry there is the tell.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.2" }
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.4" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
