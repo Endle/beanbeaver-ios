@@ -20,6 +20,28 @@ path = "shared/src/bin/uniffi-bindgen.rs"
 name = "batch_e2e"
 path = "shared/src/bin/batch_e2e.rs"
 
+# The profile the shipped static library is built with. Cargo honours
+# `[profile.*]` only in the workspace root, and this package is that root for
+# everything below it -- so these two lines reach bb-mobile-ffi, bb-receipt-ffi
+# and every crate they pull in. Without them cargo's defaults (no LTO, 16
+# codegen units) applied, and nothing here had ever set them.
+#
+# Measured on the linked Release binary for iphoneos (BeanBeaver.app/BeanBeaver):
+#   38,692,152 -> 36,857,200 bytes  (-1.75 MiB, -4.7%)
+#
+# Only the Rust in the library responds to this. The rest of the binary is ONNX
+# Runtime, ONNX, Eigen and protobuf, which arrive as prebuilt C++ and are
+# untouched by any cargo profile setting.
+#
+# `panic = "abort"` is deliberately NOT set. It is worth ~0.36 MB (measured on
+# the Android twin), but UniFFI's scaffolding wraps every call in `catch_unwind`
+# to turn a Rust panic into a Swift-visible error; aborting would turn a panic
+# on one odd photo into a process kill. Not a trade worth 0.36 MB in an app that
+# parses arbitrary user photos.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
 [dependencies]
 # v0.3.0 adds per-item semantic tags: ReceiptItem now carries `tags: [String]`
 # (the beanbeaver-internal multi-tag classification the app's category display
