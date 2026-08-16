@@ -140,6 +140,22 @@ codegen-units = 1
 # -- wrong since 3c580a6, 2026-07-01, which dropped CoreML because CPU won on
 # both speed and accuracy. build-xcframework.sh does not enable the feature.)
 #
+# v0.10.0 changes the MODELS, which is why it is a minor bump and why this PR
+# also moves a file under models/. The textline-orientation classifier is now
+# PP-LCNet_x0_25 (1.01 MB) instead of PP-LCNet_x1_0 (6.77 MB) -- upstream's own
+# smaller variant, converted from the official PaddlePaddle release. Core looks
+# these files up by exact name (`scan::model_files`), so the bundled file must be
+# renamed in the same commit as this pin or session load fails on a missing file.
+# Measured equivalent before shipping: device_sim over the 123-receipt private
+# corpus gave identical merchant/date/total/crit-item totals with ZERO
+# per-receipt divergence, and sim-e2e-private.sh --all gave 80/127 with all 127
+# cases identical -- while classify fell 205ms -> 77ms and a simulator scan fell
+# 1389ms -> 1267ms. The trade: upstream rates x0_25 at 98.85% top-1 vs 99.42%,
+# and it is weaker on 180deg-rotated text. Every corpus receipt is upright, so
+# this costs nothing there; an upside-down capture is where it would show.
+# Accepted deliberately. No FFI surface change -- the diff under crates/ffi/ is
+# private constants moving out plus a doc comment.
+#
 # v0.9.4 changes no code this app calls either — it is four item-classification
 # rule fixes found on a device scan (core #73), so the only visible effect is
 # that some receipt lines book to different accounts: Shodoshima (a vermicelli
@@ -159,7 +175,7 @@ codegen-units = 1
 # on purpose, because the FFI seam sniffs the format of bytes it did not
 # produce. The only behavioural change in the v0.9.2..v0.9.3 range is unrelated
 # -- core #70 files SALT as a seasoning rather than a staple.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.9.4" }
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.10.0" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -170,7 +186,7 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.9
 # core and the xcframework links the wrong one. The direct bb-receipt-ffi dep
 # above is only for shared/src/bin/batch_e2e.rs, which uses the core's Rust API.
 # Cargo.lock is committed — a duplicate bb-receipt-ffi entry there is the tell.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.6" }
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.7" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
