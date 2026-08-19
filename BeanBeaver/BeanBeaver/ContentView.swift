@@ -198,7 +198,7 @@ struct ContentView: View {
                 ActivityView(items: [share.url])
             }
             .sheet(isPresented: $showSettings) {
-                SettingsView {
+                SettingsView(exporter: exporter) {
                     Task { await pipeline.scanBundledSample(named: sampleName) }
                 }
             }
@@ -899,6 +899,8 @@ struct SettingsView: View {
         }
         return codes.map { (label: $0, value: $0) }
     }
+    /// Only so the promoted Sync group can show its state and push its page.
+    var exporter: LedgerExporter
     var onRunSample: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var spendStore = SpendStore.shared
@@ -910,6 +912,34 @@ struct SettingsView: View {
         NavigationStack {
             ScrollViewReader { proxy in
             List {
+                // First, above every section header. Where receipts go is the
+                // one setting here with a *state* worth reporting, and it used
+                // to be reachable only from the home screen's export card —
+                // which no longer exists. Its own group rather than a row under
+                // "Ledger": it spans beancount and the Money Manager workbook
+                // both, and tracking works with none of it configured.
+                Section {
+                    NavigationLink {
+                        LedgerSettingsView(exporter: exporter)
+                    } label: {
+                        HStack(spacing: 10) {
+                            if exporter.selectedTargetReady {
+                                ExportStatusDot(status: .exported)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Sync")
+                                Text(syncSubtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } footer: {
+                    Text("Where receipts go when you export them: a beancount destination, or the Money Manager workbook. Tracking works with nothing set up here.")
+                }
+
+                trackingSection
+
                 Section {
                     PresetOrCustomPicker(
                         title: "Currency",
@@ -924,34 +954,14 @@ struct SettingsView: View {
                         customPlaceholder: "Tax account (e.g. Expenses:Tax:GST)",
                         value: $ledgerTaxAccount
                     )
+                    Toggle("Save details file", isOn: $includeDetailsJSON)
                 } header: {
                     Text("Ledger")
                 } footer: {
-                    Text("The currency and tax account used in every beancount entry BeanBeaver generates. Currency defaults to your region.")
+                    Text("The currency and tax account used in every beancount entry BeanBeaver generates. Currency defaults to your region.\n\nSave details file stores a .json alongside each exported receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
                 }
 
-                // Sits under Ledger rather than at the top of the page: it's the
-                // same kind of setting — what an export writes — and it's a
-                // narrow one, so it shouldn't be the first thing Settings opens
-                // on. Still its own section, not folded into Ledger, because it
-                // spans every file backend rather than the beancount format.
-                Section {
-                    Toggle("Save details file", isOn: $includeDetailsJSON)
-                } footer: {
-                    Text("Store a .json alongside each exported receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
-                }
 
-                Section {
-                    NavigationLink {
-                        ItemRulesView(store: ItemRuleStore.shared)
-                    } label: {
-                        Label("Categories & Tags", systemImage: "tag")
-                    }
-                } footer: {
-                    Text("See how items are sorted into accounts, check why a particular item was categorized the way it was, and bring in your own rules.")
-                }
-
-                trackingSection
                 receiptsSection
 
                 Section {
@@ -1083,6 +1093,16 @@ struct SettingsView: View {
                      urlString: "https://matrix.to/#/#beanbeaver:matrix.org"),
     ]
 
+    /// The Sync row's state line: what is configured, and how much has actually
+    /// gone out through it.
+    private var syncSubtitle: String {
+        guard exporter.selectedTargetReady else { return "Not set up" }
+        let filed = spendStore.exportedRecords.count
+        return filed == 0
+            ? exporter.exportIndicator
+            : "\(exporter.exportIndicator) · \(filed) filed"
+    }
+
     /// The tracker's own preferences.
     ///
     /// This was the Budget section. The monthly target went with the feature —
@@ -1091,10 +1111,15 @@ struct SettingsView: View {
     private var trackingSection: some View {
         Section {
             Toggle("Hide amounts", isOn: $amountPrivacy.hideAmounts)
+            NavigationLink {
+                ItemRulesView(store: ItemRuleStore.shared)
+            } label: {
+                Label("Categories & Tags", systemImage: "tag")
+            }
         } header: {
             Text("Tracking")
         } footer: {
-            Text("Hide amounts covers every figure on the home card and the spending screens — and the trend charts, whose shape gives away a month on its own — so a glance at your phone doesn't read your spending. On by default. The eye on the home card and on the Spending screen is this same switch, so flipping it anywhere changes it everywhere. Your receipts and exports are unchanged either way.")
+            Text("How items are sorted into categories, and whether the figures are shown.\n\nHide amounts covers every figure on the home card and the spending screens — and the trend charts, whose shape gives away a month on its own — so a glance at your phone doesn't read your spending. On by default; the eye on the home card and on the Spending screen is this same switch.")
         }
     }
 

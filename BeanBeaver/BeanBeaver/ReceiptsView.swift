@@ -13,26 +13,41 @@ struct ReceiptsView: View {
     var onConfigure: () -> Void
 
     @State private var store = SpendStore.shared
+    /// The same single state the home card's eye and the Settings toggle write,
+    /// so the row subtitles mask with everything else.
+    @State private var amountPrivacy = AmountPrivacy.shared
     @State private var editMode: EditMode = .inactive
     @State private var selection = Set<UUID>()
     @State private var confirmDeleteAll = false
     @State private var confirmDeleteSelected = false
     @State private var confirmClearAllPhotos = false
     @State private var moneyManagerShare: ShareFile?
-    @State private var filter: Filter = .all
+    /// Nil means "whatever `defaultFilter` says" — the newest month, which is
+    /// what the list should open on and which isn't knowable at init.
+    @State private var filter: Filter?
 
-    /// Which slice of the month the list is showing. Not persisted: it's a
-    /// question you ask on the way to doing something ("what haven't I filed?"),
-    /// not a preference — and a filter that survived a relaunch would hide
-    /// receipts from someone who'd forgotten they set it.
+    /// Which slice the list is showing. Not persisted: it's a question you ask
+    /// on the way to doing something ("what haven't I filed?"), not a preference
+    /// — and a filter that survived a relaunch would hide receipts from someone
+    /// who'd forgotten they set it.
+    ///
+    /// **Time and place lead now, and ledger state is one chip of several.** The
+    /// row used to be `All / Not exported / Exported`, which organised browsing
+    /// entirely around export — a chore, not a reason to open the list. `Exported`
+    /// is gone: it answered the inverse of a question nobody asks, and every
+    /// receipt it held is reachable through its month.
     private enum Filter: Hashable {
-        case all, notExported, exported
+        case all
+        case month(String)
+        case unfiled
+        case merchant(String)
 
         func matches(_ record: SpendRecord) -> Bool {
             switch self {
             case .all: return true
-            case .notExported: return !record.isExported
-            case .exported: return record.isExported
+            case .month(let id): return SpendSummary.monthId(for: record) == id
+            case .unfiled: return !record.isExported
+            case .merchant(let name): return record.result.merchant == name
             }
         }
     }
@@ -45,7 +60,17 @@ struct ReceiptsView: View {
         return store.records.filter { SpendSummary.monthId(for: $0) == monthFilter }
     }
 
-    private var records: [SpendRecord] { scopedRecords.filter(filter.matches) }
+    /// Opens on the newest month rather than everything: the list is for
+    /// browsing what you've been buying, and "everything, ever" is the wrong
+    /// first answer once there is more than a month of it. Every receipt stays
+    /// one chip away.
+    private var defaultFilter: Filter {
+        guard monthFilter == nil, let newest = monthChips.first else { return .all }
+        return .month(newest.id)
+    }
+    private var activeFilter: Filter { filter ?? defaultFilter }
+
+    private var records: [SpendRecord] { scopedRecords.filter(activeFilter.matches) }
 
     /// The backlog the footer bar acts on — scoped to the month being shown, but
     /// deliberately *not* to the chips: the bar means "file everything here that
@@ -154,13 +179,12 @@ struct ReceiptsView: View {
 
             Group {
                 if records.isEmpty {
+                    // Only `Unfiled` can empty the list now — a month or a
+                    // merchant chip only exists because it has receipts in it.
                     ContentUnavailableView {
-                        Label(filter == .exported ? "Nothing Exported Yet" : "Nothing to Export",
-                              systemImage: filter == .exported ? "tray" : "checkmark.circle")
+                        Label("Nothing to Export", systemImage: "checkmark.circle")
                     } description: {
-                        Text(filter == .exported
-                             ? "Receipts you've filed to your ledger show up here."
-                             : "Every receipt here has reached your ledger.")
+                        Text("Every receipt here has reached your ledger.")
                     }
                 } else {
                     List(selection: $selection) {
@@ -181,17 +205,63 @@ struct ReceiptsView: View {
         .background(Color(.systemGroupedBackground))
     }
 
-    /// The same `isExported` split the dots draw, as a way to narrow the list —
-    /// so "what haven't I filed?" is answerable without reading every dot, and
-    /// the counts state the backlog even when the answer is "none".
+    /// Months present in the list, newest first, each with its receipt count.
+    private var monthChips: [(id: String, label: String, count: Int)] {
+        // Already narrowed to one month by the caller — a month chip row would
+        // be one chip that changes nothing.
+        guard monthFilter == nil else { return [] }
+        let thisYear = String(SpendSummary.currentMonthId().prefix(4))
+        return SpendSummary.monthIds(from: scopedRecords).map { id in
+            // "March", not "March 2026" — a chip is a word wide, and the year
+            // only earns its space once the list reaches back past this one.
+            let full = SpendSummary.monthLabel(for: id)
+            let label = id.hasPrefix(thisYear)
+                ? full.split(separator: " ").first.map(String.init) ?? full
+                : full
+            return (id, label,
+                    scopedRecords.filter { SpendSummary.monthId(for: $0) == id }.count)
+        }
+    }
+
+    /// Merchants worth a chip: the recurring ones, busiest first. A merchant
+    /// seen once is a row in the list, not a way to narrow it.
+    private var merchantChips: [(name: String, count: Int)] {
+        Dictionary(grouping: scopedRecords, by: { $0.result.merchant })
+            .map { ($0.key, $0.value.count) }
+            .filter { $0.1 > 1 }
+            .sorted { ($0.1, $1.0) > ($1.1, $0.0) }
+            .prefix(4)
+            .map { (name: $0.0, count: $0.1) }
+    }
+
+    /// Time and place first, with the one retained export filter second.
+    ///
+    /// `Unfiled` sits in position two deliberately: it is the chip with an
+    /// action behind it, and last in a scrolling row is where a chip gets
+    /// clipped by the fade and goes unseen.
     private var filterChips: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                chip(.all, label: "All", count: scopedRecords.count, status: nil)
-                chip(.notExported, label: "Not exported", count: backlog.count,
+                if monthFilter != nil {
+                    chip(.all, label: "All", count: scopedRecords.count, status: nil)
+                }
+                if let newest = monthChips.first {
+                    chip(.month(newest.id), label: newest.label, count: newest.count,
+                         status: nil)
+                }
+                chip(.unfiled, label: "Unfiled", count: backlog.count,
                      status: .notExported)
-                chip(.exported, label: "Exported",
-                     count: scopedRecords.count - backlog.count, status: .exported)
+                ForEach(monthChips.dropFirst(), id: \.id) { month in
+                    chip(.month(month.id), label: month.label, count: month.count,
+                         status: nil)
+                }
+                ForEach(merchantChips, id: \.name) { merchant in
+                    // `.capitalized` to match `ParsedRow` — the chip and the
+                    // rows it selects have to be the same word, and the parse
+                    // carries the merchant as printed (`COSTCO`).
+                    chip(.merchant(merchant.name), label: merchant.name.capitalized,
+                         count: merchant.count, status: nil)
+                }
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
@@ -202,7 +272,7 @@ struct ReceiptsView: View {
 
     private func chip(_ value: Filter, label: String, count: Int,
                       status: SpendRecord.ExportStatus?) -> some View {
-        let selected = filter == value
+        let selected = activeFilter == value
         return Button {
             filter = value
         } label: {
@@ -267,14 +337,39 @@ struct ReceiptsView: View {
     ///
     /// Lowercased: these join the date/item-count subtitle now rather than
     /// heading their own line.
+    /// The dominant category across the receipts on screen, and what each
+    /// receipt spent in it.
+    ///
+    /// One FFI call for the whole list rather than a rollup per row — and the
+    /// category comes from the data rather than a hardcoded `"grocery"`, so the
+    /// share stays meaningful for someone whose scanning is mostly hardware.
+    private var categoryShare: (label: String, byRecord: [String: Double])? {
+        let ids = Set(scopedRecords.map(\.id.uuidString))
+        let month = SpendSummary.month(SpendSummary.defaultMonthId(from: scopedRecords),
+                                       from: scopedRecords)
+        guard let root = month.roots.first else { return nil }
+        let groups = SpendSummary.receipts(.root(root.id), from: scopedRecords)
+        let byRecord = Dictionary(
+            groups.filter { ids.contains($0.record.id.uuidString) }
+                .map { ($0.record.id.uuidString, $0.amount) },
+            uniquingKeysWith: { a, _ in a })
+        return (root.label.lowercased(), byRecord)
+    }
+
     private func detail(for record: SpendRecord) -> String? {
         var parts: [String] = []
+        if let share = categoryShare,
+           let amount = share.byRecord[record.id.uuidString], amount > 0 {
+            parts.append("\(amountPrivacy.text(PriceFormat.currency(amount))) \(share.label)")
+        }
         switch store.photoState(for: record) {
         case .present: break
         case .cleared: parts.append("photo cleared")
         case .unavailable: parts.append("photo unavailable")
         }
-        if record.isExcluded { parts.append("excluded from budgets") }
+        // "budgets" was the old feature's word; the exclusion always meant
+        // "kept out of the totals", which is now all there is.
+        if record.isExcluded { parts.append("excluded from totals") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -287,7 +382,10 @@ struct ReceiptsView: View {
         } label: {
             ExportButtonLabel(idleLabel: backlogLabel, exporter: exporter)
         }
-        .buttonStyle(.borderedProminent)
+        // Tinted, not filled. Filing to a ledger is still one tap and still
+        // always here, but it is no longer the loudest thing on a screen whose
+        // job is browsing what you bought. `Scan` on home keeps that role.
+        .buttonStyle(.bordered)
         .tint(.bbAccent)
         .controlSize(.large)
         .allowsHitTesting(exporter.runningKind == nil)
