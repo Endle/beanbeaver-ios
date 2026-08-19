@@ -27,6 +27,17 @@ extension Color {
     })
 }
 
+extension Color {
+    /// The floor a trend line is read against. The design names
+    /// `rgba(60,60,67,0.14)`, which is what `.separator` resolves to in light
+    /// mode — taken as the system colour rather than the literal so the charts
+    /// don't turn invisible in dark, which is out of scope for this pass but
+    /// still shipping.
+    static let bbChartBaseline = Color(.separator)
+    /// The dashed mean line, a step quieter than the baseline.
+    static let bbChartMean = Color(.separator).opacity(0.7)
+}
+
 /// One receipt's export state as a single glyph — filled green for filed, a
 /// hollow amber ring for a backlog.
 ///
