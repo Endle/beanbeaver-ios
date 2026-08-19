@@ -903,9 +903,6 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var spendStore = SpendStore.shared
     @State private var amountPrivacy = AmountPrivacy.shared
-    @State private var budgetRoot: String = BudgetPrefs.root
-    @State private var budgetAmountText: String =
-        BudgetPrefs.monthlyAmount.map { String(format: "%.2f", $0) } ?? ""
     @State private var confirmClearAllPhotos = false
     @State private var confirmDeleteAllReceipts = false
 
@@ -954,7 +951,7 @@ struct SettingsView: View {
                     Text("See how items are sorted into accounts, check why a particular item was categorized the way it was, and bring in your own rules.")
                 }
 
-                budgetSection
+                trackingSection
                 receiptsSection
 
                 Section {
@@ -1086,27 +1083,18 @@ struct SettingsView: View {
                      urlString: "https://matrix.to/#/#beanbeaver:matrix.org"),
     ]
 
-    /// Root-tag picker + monthly target — the only two things `SpendingView`
-    /// itself doesn't already let the user set inline (it has its own amount
-    /// sheet, sharing this same `BudgetPrefs` storage, so the two can't drift).
-    private var budgetSection: some View {
+    /// The tracker's own preferences.
+    ///
+    /// This was the Budget section. The monthly target went with the feature —
+    /// see `SpendingView` — leaving the masking switch, which was only ever
+    /// filed here because a budget is the other thing that reads as private.
+    private var trackingSection: some View {
         Section {
             Toggle("Hide amounts", isOn: $amountPrivacy.hideAmounts)
-            Picker("Budget category", selection: $budgetRoot) {
-                ForEach(BudgetPrefs.declaredRoots(), id: \.self) { root in
-                    Text(root.capitalized).tag(root)
-                }
-            }
-            .onChange(of: budgetRoot) { _, newValue in BudgetPrefs.root = newValue }
-            TextField("Monthly amount", text: $budgetAmountText)
-                .keyboardType(.decimalPad)
-                .onChange(of: budgetAmountText) { _, newValue in
-                    BudgetPrefs.monthlyAmount = Double(newValue)
-                }
         } header: {
-            Text("Budget")
+            Text("Tracking")
         } footer: {
-            Text("Which tracked category gets a monthly target on the Spending screen — computed from your scanned receipts' items, not the receipt totals. Leave the amount blank to track spend with no target.\n\nHide amounts covers every figure on the home card and the spending screens, so a glance at your phone doesn't read your month. On by default. The eye on the home card and on the Spending screen is this same switch, so flipping it anywhere changes it everywhere. Your receipts and exports are unchanged either way.")
+            Text("Hide amounts covers every figure on the home card and the spending screens — and the trend charts, whose shape gives away a month on its own — so a glance at your phone doesn't read your spending. On by default. The eye on the home card and on the Spending screen is this same switch, so flipping it anywhere changes it everywhere. Your receipts and exports are unchanged either way.")
         }
     }
 
