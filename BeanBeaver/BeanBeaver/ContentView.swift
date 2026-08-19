@@ -359,15 +359,10 @@ struct ContentView: View {
     // MARK: - Home
 
     private var homeView: some View {
-        VStack(spacing: 28) {
-            VStack(spacing: 10) {
-                Text("What happens in your wallet, stays in your wallet.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-            }
-
+        VStack(spacing: 20) {
+            // The tagline is gone: the trend chart now occupies that vertical
+            // space, and the privacy footnote at the bottom says the same thing
+            // in the place a footnote belongs.
             spendCard
             receiptsCard
 
@@ -427,16 +422,18 @@ struct ContentView: View {
                 .frame(maxWidth: VNDocumentCameraViewController.isSupported ? 124 : .infinity)
             }
 
+            exportCaptionRow
+
             HStack(spacing: 8) {
                 Image(systemName: "lock.shield")
-                Text("Receipts are scanned and parsed on your device. Nothing leaves it unless you export — and then only to your own ledger.")
+                Text("Scanned and parsed on your device. Nothing leaves it unless you export.")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 12)
         }
-        .padding(.top, 20)
+        .padding(.top, 28)
     }
 
     /// The current month's tracked spend, right on the home screen — the one
@@ -458,190 +455,219 @@ struct ContentView: View {
             // the card's own Button loses the hit test to it, so tapping the eye
             // pushed Spending instead of unmasking. Side by side, each owns its
             // taps outright.
-            HStack(spacing: 0) {
+            let trend = SpendSummary.trend(from: records)
+            VStack(alignment: .leading, spacing: 14) {
+                // Two sibling buttons, not one nested in the other: an eye laid
+                // over the card's own Button loses the hit test to it, so
+                // tapping the eye pushed Spending instead of unmasking. Side by
+                // side, each owns its taps outright.
+                // Top-aligned so the eye sits in the card's top-right corner
+                // rather than floating halfway down beside a 40pt figure.
+                HStack(alignment: .top, spacing: 0) {
+                    Button {
+                        showSpending = true
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(month.label) · \(month.receiptCount) receipt\(month.receiptCount == 1 ? "" : "s")")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            // Grown from 28pt: the app is a spending tracker
+                            // that happens to scan receipts, so this is the
+                            // headline rather than one card among equals. Still
+                            // not accent red — red reads as "alert" on a money
+                            // figure, and the filled Scan button below stays the
+                            // loudest thing on the screen.
+                            Text(amountPrivacy.text(PriceFormat.currency(month.tracked)))
+                                .font(.system(size: 40, weight: .bold))
+                                .foregroundStyle(.primary)
+                                .monospacedDigit()
+
+                            // The rolling figure rides along as a second line
+                            // rather than replacing the month: the month is the
+                            // frame people think in, and 30 days is the truer
+                            // reading early in one.
+                            Text("\(amountPrivacy.text(PriceFormat.currency(trend.rolling))) in the last 30 days")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+
+                    // Always present, not just while masked: it's a toggle now,
+                    // so hiding it after a reveal would strand the user with no
+                    // way back short of Settings.
+                    Button {
+                        amountPrivacy.toggle()
+                    } label: {
+                        Image(systemName: amountPrivacy.hideAmounts ? "eye" : "eye.slash")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(amountPrivacy.hideAmounts ? "Show amounts" : "Hide amounts")
+                }
+
+                // Masking hides the line, not just the numbers: its height
+                // encodes dollars, so a visible line beside a masked figure
+                // would give away exactly what the mask is for.
+                if amountPrivacy.isMasked {
+                    TrendChart.masked()
+                } else {
+                    TrendChart(amounts: trend.amounts,
+                               leadingLabel: "6 wks ago",
+                               trailingLabel: "this week")
+                }
+
+                Divider()
+
                 Button {
                     showSpending = true
                 } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text(month.label)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                        // Deliberately quieter than it was (34pt, accent red): this
-                        // is the only card on the screen, so it doesn't need to
-                        // shout to be found, and at full volume it competed with
-                        // the tagline above over what the app *is*. Accent red also
-                        // reads as "alert" on a money figure, which `tracked spend`
-                        // doesn't mean. The filled "Scan a Receipt" button below
-                        // stays the loudest thing here — it's the primary action.
-                        Text(amountPrivacy.text(PriceFormat.currency(month.tracked)))
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundStyle(.primary)
+                    HStack(spacing: 6) {
+                        Text(trendDeltaText(trend))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(trend.isFlat ? Color.secondary : Color.bbAccent)
                             .monospacedDigit()
-
-                        Text("tracked spend · \(month.receiptCount) receipt\(month.receiptCount == 1 ? "" : "s")")
-                            .font(.caption)
+                        Text(trendDeltaCaption(trend))
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-
-                // Always present, not just while masked: it's a toggle now, so
-                // hiding it after a reveal would strand the user with no way
-                // back short of Settings.
-                Button {
-                    amountPrivacy.toggle()
-                } label: {
-                    Image(systemName: amountPrivacy.hideAmounts ? "eye" : "eye.slash")
-                        .font(.system(size: 18))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(amountPrivacy.hideAmounts ? "Show amounts" : "Hide amounts")
-            }
-            .padding()
-            .bbCard()
-        }
-    }
-
-    /// Receipts, and the state of the backlog — the card that replaced the
-    /// "Receipts (12)" and "Export: GitHub" pills.
-    ///
-    /// Three rows, each earning its place by only appearing when it has
-    /// something to say: how many receipts there are, how many are unfiled (with
-    /// the action to fix that), and what has already been filed. A pill labelled
-    /// "Export: GitHub" was the third row's information wearing a button — it
-    /// looked like the way to export and was actually the way to *configure*
-    /// exporting.
-    ///
-    /// The status row survives an empty store on purpose. It's the only route
-    /// left to the Sync page, and setting up a ledger before scanning anything
-    /// is a real first-run order — one an App Store reviewer takes.
-    @ViewBuilder
-    private var receiptsCard: some View {
-        let store = SpendStore.shared
-        let backlog = store.unexportedRecords.count
-        VStack(spacing: 14) {
-            if !store.records.isEmpty {
-                Button {
-                    showReceipts = true
-                } label: {
-                    HStack {
-                        Text("Receipts").font(.headline)
-                        Spacer()
-                        Text("\(store.records.count)").foregroundStyle(.secondary)
+                        Spacer(minLength: 4)
                         Image(systemName: "chevron.right")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    .foregroundStyle(.primary)
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 16)
+            .bbCard()
+        }
+    }
 
-            if backlog > 0 {
-                HStack(spacing: 8) {
-                    ExportStatusDot(status: .notExported)
-                    Text("\(backlog) not exported")
-                        .font(.subheadline)
+    /// The delta figure. Rust rounds to cents, so "no change" is an exact test
+    /// rather than an epsilon — and it gets words rather than `↑ $0.00`, which
+    /// is what an unrounded float would otherwise have rendered forever.
+    private func trendDeltaText(_ trend: SpendTrend) -> String {
+        if trend.isFlat { return "No change" }
+        let arrow = trend.delta > 0 ? "↑" : "↓"
+        return "\(arrow) \(amountPrivacy.text(PriceFormat.currency(abs(trend.delta))))"
+    }
+
+    /// What the delta is measured against. Says "so far" because the comparison
+    /// is week-to-date against the same span of last week — a partial week
+    /// against a whole one would read as a fall every Monday.
+    private func trendDeltaCaption(_ trend: SpendTrend) -> String {
+        trend.isFlat ? "vs the same point last week" : "vs last week, so far"
+    }
+
+    /// The way through to the receipt list, and now the only thing this card
+    /// carries.
+    ///
+    /// It used to hold the backlog row and the sync destination too — three rows
+    /// and two pill buttons, which put a ledger chore at the same weight as the
+    /// spending above it. Both moved into `exportCaptionRow`, which is one quiet
+    /// line above the Scan button. Nothing was dropped: the backlog is still
+    /// counted, the export flow is still one tap, and the per-receipt status
+    /// dots in `ReceiptsView` are untouched.
+    @ViewBuilder
+    private var receiptsCard: some View {
+        let store = SpendStore.shared
+        if !store.records.isEmpty {
+            Button {
+                showReceipts = true
+            } label: {
+                HStack {
+                    Text("Receipts").font(.headline)
                     Spacer()
-                    Button {
-                        // Straight to the list, filtered — the export itself
-                        // wants the receipts in front of you. Sending a batch
-                        // from a card you can't see the contents of is a lot to
-                        // ask of one tap.
-                        showReceipts = true
-                    } label: {
-                        Text("Export")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .background(Color.bbAccentSoft, in: Capsule())
-                            .foregroundStyle(Color.bbAccent)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            // The way to *pick* an exporter has to look like a control. A grey
-            // caption with a chevron reads as a status line, and the one route
-            // to the Sync page went unnoticed. The pill carries the action —
-            // same shape as the backlog row's "Export" — and the text beside it
-            // goes back to being what it always was: a report.
-            //
-            // Two sibling buttons rather than a pill nested in a row-wide
-            // Button: nesting loses the pill's hit test to its parent, the same
-            // trap `spendCard` documents.
-            HStack(spacing: 8) {
-                // Only once something has actually been filed. Before that
-                // this row is a setup prompt, not a report, and a second
-                // amber ring directly under the backlog's own amber ring
-                // reads as a second backlog.
-                if store.lastExportedAt != nil {
-                    ExportStatusDot(status: .exported)
-                }
-                Button {
-                    showLedgerSettings = true
-                } label: {
-                    Text(exportStatusLine)
+                    Text("\(store.records.count)").foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .bbCard()
+        }
+    }
+
+    /// The whole export card, demoted to one caption row above the Scan button.
+    ///
+    /// The backlog and the sync destination were three rows and two pill
+    /// buttons, which gave a ledger chore equal billing with the spending the
+    /// app is now about. Nothing is removed: the state is still said, the export
+    /// flow is still one tap, and the per-receipt dots in `ReceiptsView` are
+    /// untouched. It is just quiet.
+    ///
+    /// Three states, because the row has to carry the first-run case too — with
+    /// the card gone this is the only route to Sync from home, and setting up a
+    /// ledger before scanning anything is a real first-run order, one an App
+    /// Store reviewer takes.
+    @ViewBuilder
+    private var exportCaptionRow: some View {
+        let store = SpendStore.shared
+        let backlog = store.unexportedRecords.count
+
+        Button {
+            // A backlog wants the receipts in front of you before a batch goes
+            // out; anything else wants the destination page.
+            if backlog > 0 { showReceipts = true } else { showLedgerSettings = true }
+        } label: {
+            HStack(spacing: 8) {
+                if backlog > 0 {
+                    ExportStatusDot(status: .notExported)
+                } else if store.lastExportedAt != nil {
+                    ExportStatusDot(status: .exported)
+                }
+
+                Text(exportCaptionText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
 
                 Spacer(minLength: 8)
 
-                Button {
-                    showLedgerSettings = true
-                } label: {
-                    Text(exporter.selectedTargetReady ? "Change" : "Set Up")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Color.bbAccentSoft, in: Capsule())
-                        .foregroundStyle(Color.bbAccent)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(exporter.selectedTargetReady
-                                    ? "Change where receipts are exported"
-                                    : "Set up where receipts are exported")
+                Text(backlog > 0 ? "Export" : (exporter.selectedTargetReady ? "Change" : "Set Up"))
+                    .font(.caption)
+                    .foregroundStyle(Color.bbAccent)
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(Color.bbAccent)
             }
+            .padding(.horizontal, 4)
+            .contentShape(.rect)
         }
-        .padding()
-        .bbCard()
+        .buttonStyle(.plain)
     }
 
-    /// What the card's bottom row says. Reports what actually happened when
-    /// anything has — including both targets when a receipt went to both — and
-    /// falls back to the selected target's configured state when nothing has
-    /// been filed yet, which is the readout the old "Export:" pill carried.
-    private var exportStatusLine: String {
+    /// What the caption row says, in the three states it has to cover.
+    private var exportCaptionText: String {
         let store = SpendStore.shared
-        guard let last = store.lastExportedAt else {
-            // Not "Set up where your receipts go" any more — the pill beside it
-            // now says that, and an instruction repeated twice in one row reads
-            // as two different things to do.
-            return exporter.selectedTargetReady
-                ? "Exports to \(exporter.exportIndicator)"
-                : "No export destination yet"
+        let backlog = store.unexportedRecords.count
+        if backlog > 0 {
+            return "\(backlog) receipt\(backlog == 1 ? "" : "s") not yet in your ledger"
         }
-        let targets = store.reachedTargets
-        let where_ = targets.isEmpty ? "" : " to \(targets.joined(separator: " and "))"
-        return "\(store.exportedRecords.count) filed\(where_) · last export "
-            + last.formatted(date: .abbreviated, time: .omitted)
+        if let last = store.lastExportedAt {
+            return "All receipts filed · last export "
+                + last.formatted(date: .abbreviated, time: .omitted)
+        }
+        // Nothing filed and nothing waiting: this is the setup prompt, and the
+        // only one on the screen.
+        return exporter.selectedTargetReady
+            ? "Exports to \(exporter.exportIndicator)"
+            : "No export destination yet"
     }
+
 
     // MARK: - Scanning
 

@@ -283,6 +283,40 @@ enum SpendSummary {
             unaccounted: m.unaccounted
         )
     }
+
+    // MARK: - Trend
+
+    /// How many weeks the charts plot. Six is what the design asks for and what
+    /// fits the card's width at a legible dot spacing.
+    static let trendWeeks: UInt32 = 6
+    /// The second figure beside the month total — "$341.08 in the last 30 days".
+    static let rollingDays: UInt32 = 30
+
+    /// The weekly series for `scope`, or all spending when `scope` is nil.
+    ///
+    /// Everything about *when* a week starts is decided in Rust; the two things
+    /// passed in are the two the platform genuinely owns — today as a local
+    /// calendar date, and the locale's first weekday. `Calendar.firstWeekday` is
+    /// already ICU's numbering (1 = Sunday), which is what the crate expects.
+    static func trend(_ scope: Category? = nil,
+                      from records: [SpendRecord],
+                      today: Date = Date()) -> SpendTrend {
+        spendTrend(records: records.map(\.spendInput),
+                   scope: scope?.ffi,
+                   today: today.spendDate,
+                   firstWeekday: UInt32(Calendar.current.firstWeekday),
+                   weeks: trendWeeks,
+                   rollingDays: rollingDays)
+    }
+}
+
+extension SpendTrend {
+    /// Whether the delta is worth calling a change. The crate rounds to cents,
+    /// so this is an exact test rather than an epsilon — see `Trend`'s docs.
+    var isFlat: Bool { delta == 0 }
+
+    /// The series as plain numbers, oldest first, for drawing.
+    var amounts: [Double] { points.map(\.amount) }
 }
 
 // MARK: - Projection and re-attachment

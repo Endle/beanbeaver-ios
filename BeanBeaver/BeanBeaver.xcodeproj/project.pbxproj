@@ -45,6 +45,7 @@
 		1C0000000000000000000024 /* SpendStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000024 /* SpendStore.swift */; };
 		1C0000000000000000000025 /* SpendSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000025 /* SpendSummary.swift */; };
 		1C0000000000000000000026 /* SpendingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000026 /* SpendingView.swift */; };
+		1C0000000000000000000093 /* TrendChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000093 /* TrendChart.swift */; };
 		1C0000000000000000000027 /* ReceiptsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000027 /* ReceiptsView.swift */; };
 		1C0000000000000000000028 /* CategoryItemsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000028 /* CategoryItemsView.swift */; };
 		1C0000000000000000000090 /* ItemRuleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000090 /* ItemRuleStore.swift */; };
@@ -91,6 +92,7 @@
 		1B0000000000000000000024 /* SpendStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendStore.swift; sourceTree = "<group>"; };
 		1B0000000000000000000025 /* SpendSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendSummary.swift; sourceTree = "<group>"; };
 		1B0000000000000000000026 /* SpendingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendingView.swift; sourceTree = "<group>"; };
+		1B0000000000000000000093 /* TrendChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendChart.swift; sourceTree = "<group>"; };
 		1B0000000000000000000027 /* ReceiptsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptsView.swift; sourceTree = "<group>"; };
 		1B0000000000000000000028 /* CategoryItemsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryItemsView.swift; sourceTree = "<group>"; };
 		1B0000000000000000000090 /* ItemRuleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemRuleStore.swift; sourceTree = "<group>"; };
@@ -151,6 +153,7 @@
 				1B0000000000000000000024 /* SpendStore.swift */,
 				1B0000000000000000000025 /* SpendSummary.swift */,
 				1B0000000000000000000026 /* SpendingView.swift */,
+				1B0000000000000000000093 /* TrendChart.swift */,
 				1B0000000000000000000028 /* CategoryItemsView.swift */,
 				1B0000000000000000000027 /* ReceiptsView.swift */,
 				1B000000000000000000001E /* BatchImportView.swift */,
@@ -297,6 +300,7 @@
 				1C0000000000000000000024 /* SpendStore.swift in Sources */,
 				1C0000000000000000000025 /* SpendSummary.swift in Sources */,
 				1C0000000000000000000026 /* SpendingView.swift in Sources */,
+				1C0000000000000000000093 /* TrendChart.swift in Sources */,
 				1C0000000000000000000028 /* CategoryItemsView.swift in Sources */,
 				1C0000000000000000000027 /* ReceiptsView.swift in Sources */,
 			);
