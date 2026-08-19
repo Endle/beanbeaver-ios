@@ -140,7 +140,7 @@ struct ReceiptsView: View {
             Button("Clear Photos", role: .destructive) { store.clearAllPhotos() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Frees the space used by every receipt photo. Every receipt's parsed data and every budget figure stay exactly as they are.")
+            Text("Frees the space used by every receipt photo. Every receipt's parsed data and every spending figure stay exactly as they are.")
         }
         .alert(selectedRecords.count == 1 ? "Delete this receipt?" : "Delete \(selectedRecords.count) receipts?",
                isPresented: $confirmDeleteSelected) {
@@ -331,7 +331,7 @@ struct ReceiptsView: View {
 
     /// Facts about the row that aren't its export status — everything the dot
     /// doesn't already say. Which target a receipt reached moved to the detail
-    /// view with the dot; what's left is the photo and the budget exclusion,
+    /// view with the dot; what's left is the category share, the photo and the
     /// which is a fact about the row rather than a state of its export (see
     /// `SpendRecord.ExportStatus` for why the dot deliberately doesn't carry it).
     ///
