@@ -36,6 +36,22 @@ extension Color {
     static let bbChartBaseline = Color(.separator)
     /// The dashed mean line, a step quieter than the baseline.
     static let bbChartMean = Color(.separator).opacity(0.7)
+
+    /// The scan-result impact chip: "this is what the scan did to your month".
+    ///
+    /// Green because it is a confirmation, but deliberately **not**
+    /// `bbExported`, which means "reached your ledger" and nothing else — a
+    /// receipt can land in your month without going anywhere near a ledger.
+    static let bbImpactText = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.42, green: 0.82, blue: 0.52, alpha: 1)
+            : UIColor(red: 0.09, green: 0.42, blue: 0.17, alpha: 1)   // #166B2C
+    })
+    static let bbImpactSoft = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.14, green: 0.54, blue: 0.24, alpha: 0.22)
+            : UIColor(red: 0.14, green: 0.54, blue: 0.24, alpha: 0.10)
+    })
 }
 
 /// One receipt's export state as a single glyph — filled green for filed, a
