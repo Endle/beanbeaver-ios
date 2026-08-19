@@ -91,7 +91,9 @@ struct ContentView: View {
                                               capturedImageURL: pipeline.capturedImageURL,
                                               exporter: exporter,
                                               onConfigure: { showLedgerSettings = true },
-                                              onExportMoneyManager: { presentMoneyManager(for: [result]) })
+                                              onExportMoneyManager: { presentMoneyManager(for: [result]) },
+                                              onScanAnother: VNDocumentCameraViewController.isSupported
+                                                  ? { showScanner = true } : nil)
                         }
                     }
                     .padding()
@@ -1176,6 +1178,12 @@ struct ReceiptCard: View {
     let result: ReceiptResult
     var wallMs: Double?
     var capturedImageURL: URL?
+    /// Optional banner between the header and the items — the scan-result
+    /// screen's "what this did to your month" chip. Sits *inside* the card and
+    /// above the line items on purpose: it answers the question the app is for,
+    /// and the items are the supporting detail. `BatchReceiptDetailView` passes
+    /// nothing, since a receipt opened from the list was not just added.
+    var impact: AnyView?
     @State private var expandAccounting = false
 
     private var friendlyDate: String? { ReceiptDateFormat.friendly(result.date) }
@@ -1184,6 +1192,9 @@ struct ReceiptCard: View {
         VStack(spacing: 16) {
             VStack(spacing: 16) {
                 header
+                if let impact {
+                    impact
+                }
                 if !result.items.isEmpty {
                     Divider()
                     itemsList
@@ -1197,6 +1208,20 @@ struct ReceiptCard: View {
 
             DisclosureGroup(isExpanded: $expandAccounting) {
                 VStack(alignment: .leading, spacing: 12) {
+                    if result.subtotal != nil || result.tax != nil {
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let subtotal = result.subtotal {
+                                subtotalRow("Subtotal", subtotal)
+                            }
+                            if let tax = result.tax {
+                                subtotalRow("Tax", tax)
+                            }
+                            subtotalRow("Total", result.total)
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+
                     Text(result.beancount)
                         .font(.system(.footnote, design: .monospaced))
                         .textSelection(.enabled)
@@ -1236,8 +1261,17 @@ struct ReceiptCard: View {
         }
     }
 
+    /// Merchant, when and how many, and the total — one row, so the question
+    /// "what did this cost?" is answered without scanning down the card.
+    ///
+    /// The total is 28pt label colour rather than 32pt accent red. Red is the
+    /// tap-me colour here and a receipt total is not an action; and this figure
+    /// now shares the eye-line with the impact chip below, which is the one that
+    /// says what the scan did to the month. Subtotal and tax moved into
+    /// "Accounting details" — they reconcile the parse, which is what that
+    /// section is for.
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(result.merchant.capitalized).font(.title2.bold())
                 // A `Suggested` match isn't trusted enough to replace the OCR'd
@@ -1249,41 +1283,28 @@ struct ReceiptCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if let friendlyDate {
-                    HStack(spacing: 4) {
-                        Text(friendlyDate)
-                        if result.dateIsPlaceholder {
-                            Text("(estimated)")
-                        }
-                    }
+                Text(subheadline)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                }
             }
-
-            if result.subtotal != nil || result.tax != nil {
-                VStack(alignment: .leading, spacing: 2) {
-                    if let subtotal = result.subtotal {
-                        subtotalRow("Subtotal", subtotal)
-                    }
-                    if let tax = result.tax {
-                        subtotalRow("Tax", tax)
-                    }
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                Text("Total")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(PriceFormat.display(result.total).text)
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(Color.bbAccent)
-            }
+            Spacer(minLength: 8)
+            Text(PriceFormat.display(result.total).text)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(.primary)
+                .monospacedDigit()
         }
+    }
+
+    /// "Mar 1, 2026 · 14 items", dropping either half when there isn't one.
+    private var subheadline: String {
+        var parts: [String] = []
+        if let friendlyDate {
+            parts.append(friendlyDate + (result.dateIsPlaceholder ? " (estimated)" : ""))
+        }
+        if !result.items.isEmpty {
+            parts.append("\(result.items.count) item\(result.items.count == 1 ? "" : "s")")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func subtotalRow(_ label: String, _ value: String) -> some View {
@@ -1391,19 +1412,55 @@ struct ReceiptResultView: View {
     var exporter: LedgerExporter
     var onConfigure: () -> Void = {}
     var onExportMoneyManager: () -> Void = {}
+    /// Straight back to the camera. The filled button on this screen now, since
+    /// the answer to "I just scanned one" is usually "here's the next one".
+    var onScanAnother: (() -> Void)?
     @State private var showJSONPreview = false
+    @State private var spendStore = SpendStore.shared
+    @State private var amountPrivacy = AmountPrivacy.shared
 
     var body: some View {
         VStack(spacing: 16) {
-            ReceiptCard(result: result, wallMs: wallMs, capturedImageURL: capturedImageURL)
+            ReceiptCard(result: result, wallMs: wallMs,
+                        capturedImageURL: capturedImageURL,
+                        impact: AnyView(impactChip))
 
             VStack(spacing: 8) {
-                Button {
-                    Task { await primaryExport() }
-                } label: {
-                    ExportButtonLabel(idleLabel: "Export:\(exporter.exportIndicator)", exporter: exporter)
+                if let onScanAnother {
+                    Button(action: onScanAnother) {
+                        Label("Scan Another", systemImage: "camera.viewfinder")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.bbAccent)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
+
+                // Tinted when Scan Another is the filled action, so the screen
+                // has one primary rather than two. Filled when there is no
+                // scanner to go back to (an imported receipt), where export is
+                // the only thing left to do.
+                Group {
+                    if onScanAnother == nil {
+                        Button {
+                            Task { await primaryExport() }
+                        } label: {
+                            ExportButtonLabel(idleLabel: "Export:\(exporter.exportIndicator)",
+                                              exporter: exporter)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button {
+                            Task { await primaryExport() }
+                        } label: {
+                            ExportButtonLabel(idleLabel: "Export:\(exporter.exportIndicator)",
+                                              exporter: exporter)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
                 .tint(exporter.exportTint)
                 .controlSize(.large)
                 // See the batch page's export button: staying enabled keeps the
@@ -1432,6 +1489,46 @@ struct ReceiptResultView: View {
         .sheet(isPresented: $showJSONPreview) {
             ReceiptJSONView(result: result, wallMs: wallMs)
         }
+    }
+
+    /// What this scan did to the month, in one line — the answer to the
+    /// question the app is now *for*, placed above the ledger actions rather
+    /// than below them.
+    ///
+    /// Reads the month *after* the record was stored, so it states the new
+    /// total rather than predicting it. Absent when the receipt isn't in the
+    /// store yet (a preview, or a parse that wasn't recorded), rather than
+    /// guessing at a figure.
+    @ViewBuilder
+    private var impactChip: some View {
+        if let record = storedRecord {
+            let records = spendStore.records
+            let monthId = SpendSummary.monthId(for: record)
+            let month = SpendSummary.month(monthId, from: records)
+            let own = SpendSummary.month(monthId, from: [record])
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Added to \(SpendSummary.monthLabel(for: monthId).split(separator: " ").first.map(String.init) ?? month.label) · now \(amountPrivacy.text(PriceFormat.currency(month.tracked)))")
+                    .font(.subheadline.weight(.semibold))
+                if !own.roots.isEmpty {
+                    Text(own.roots
+                        .map { "\(amountPrivacy.text(PriceFormat.currency($0.amount))) \($0.label.lowercased())" }
+                        .joined(separator: ", "))
+                        .font(.caption)
+                }
+            }
+            .foregroundStyle(Color.bbImpactText)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Color.bbImpactSoft,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    /// This receipt as the store holds it, matched on the identity the store
+    /// dedups by.
+    private var storedRecord: SpendRecord? {
+        guard let id = result.beanbeaverId else { return nil }
+        return spendStore.records.first { $0.result.beanbeaverId == id }
     }
 
     /// Sends the receipt to the selected target: an append to its ledger
