@@ -4,11 +4,17 @@ import BBReceiptKit
 /// Where a month's money went, computed from scanned receipts' *items* rather
 /// than their totals (see `SpendSummary`). A spend tracker first: the headline
 /// is everything tracked, and the breakdown is every category the classifier
-/// reached, largest first. A monthly target is an optional overlay — when
-/// `BudgetPrefs.monthlyAmount` is unset, nothing budget-shaped renders at all
-/// and the screen is complete without it.
+/// reached, largest first.
 ///
-/// Read-only over receipts: nothing here edits one, only the target.
+/// The monthly budget that used to overlay one category is **gone** — target
+/// bar, pace line, the "Set a Monthly Budget" row and its editor sheet. A
+/// target answers "am I allowed to spend this?", and the product's question is
+/// now "what am I spending, and is it climbing?", which the week-over-week card
+/// below answers instead. `BudgetPrefs` and the three `spend_*_budget_root`
+/// functions behind it are left in place, unused, until Android drops its own
+/// budget UI — it pins its own tag, so nothing there breaks meanwhile.
+///
+/// Read-only over receipts: nothing here edits one.
 struct SpendingView: View {
     /// Opens the scanner — the empty state's action, since a spending screen
     /// reached with nothing scanned has nothing else useful to offer.
@@ -21,12 +27,12 @@ struct SpendingView: View {
     @State private var store = SpendStore.shared
     @State private var amountPrivacy = AmountPrivacy.shared
     @State private var selectedMonthID: String?
-    @State private var monthlyAmount: Double? = BudgetPrefs.monthlyAmount
-    @State private var showBudgetAmountSheet = false
+    /// Which category the week-over-week chart is trending. Nil is all
+    /// spending. View-local and reset on entry, by design — it is a way of
+    /// looking at the month, not a preference.
+    @State private var trendScope: SpendSummary.Category?
+    @State private var showReconciliation = false
 
-    /// The root a target applies to, if one is set. Only ever used to decorate
-    /// one group — never to decide what the screen counts.
-    private var targetRoot: String { BudgetPrefs.root }
     private var monthIDs: [String] { SpendSummary.monthIds(from: store.records) }
     private var currentMonthID: String { SpendSummary.currentMonthId() }
     private var activeMonthID: String {
@@ -85,11 +91,6 @@ struct SpendingView: View {
             }
         }
         .tint(.bbAccent)
-        .sheet(isPresented: $showBudgetAmountSheet, onDismiss: {
-            monthlyAmount = BudgetPrefs.monthlyAmount
-        }) {
-            BudgetAmountSheet()
-        }
     }
 
     private var content: some View {
@@ -98,15 +99,19 @@ struct SpendingView: View {
                 monthStepper
                 headline
 
+                // Only for the month in progress. The series is six weeks back
+                // from *today*, so beside a March total viewed in August it
+                // would be answering a question nobody asked — the same reason
+                // the old pace line was current-month only.
+                if isCurrentMonth {
+                    weekOverWeekCard
+                }
+
                 ForEach(summary.roots) { group in
                     rootCard(group)
                 }
 
                 footerSection
-
-                if monthlyAmount == nil {
-                    setBudgetRow
-                }
             }
             .padding()
         }
@@ -164,7 +169,8 @@ struct SpendingView: View {
     ///
     /// The figure is label colour, not accent: red on a 44pt money total reads
     /// as an alarm, and "tracked spend" is not an alarm. Accent is reserved for
-    /// things you can tap — the link below it, and the target bar.
+    /// things you can tap — the link below it — and for the trend delta, which
+    /// is the one figure here that *is* a signal.
     private var headline: some View {
         VStack(spacing: 4) {
             Text(amountPrivacy.text(PriceFormat.currency(summary.tracked)))
@@ -174,6 +180,17 @@ struct SpendingView: View {
             Text("tracked spend")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            // The rolling figure beside the month, not instead of it: a month
+            // is the frame people budget in, and 30 days is the truer reading
+            // of "lately" — most of all on the 2nd, when the month total is a
+            // day old. Current month only; for a past month it would be a
+            // figure from a different window entirely.
+            if isCurrentMonth {
+                Text("\(amountPrivacy.text(PriceFormat.currency(allSpendingTrend.rolling))) in the last 30 days")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             NavigationLink {
                 ReceiptsView(monthFilter: activeMonthID, exporter: exporter, onConfigure: onConfigure)
@@ -195,6 +212,122 @@ struct SpendingView: View {
         .padding(.vertical, 8)
     }
 
+    // MARK: - Week over week
+
+    /// The unscoped series, which the hero's rolling figure reads. Kept separate
+    /// from the card's own scoped series so changing a chip can't move the
+    /// headline above it.
+    private var allSpendingTrend: SpendTrend {
+        SpendSummary.trend(from: store.records)
+    }
+
+    /// Every scope the chips offer: all spending, then each root with its own
+    /// leaves under it.
+    ///
+    /// Derived from the month on screen rather than from a fixed list, so a
+    /// category that only appears once you scan a hardware store appears here
+    /// the same day. Nil is "All spending".
+    private var trendScopes: [(label: String, scope: SpendSummary.Category?)] {
+        var out: [(String, SpendSummary.Category?)] = [("All spending", nil)]
+        for root in summary.roots {
+            out.append((root.label, .root(root.id)))
+            for leaf in root.leaves {
+                out.append((leaf.label, .leaf(leaf.label)))
+            }
+        }
+        return out
+    }
+
+    private func isSelected(_ scope: SpendSummary.Category?) -> Bool {
+        switch (scope, trendScope) {
+        case (nil, nil): return true
+        case let (lhs?, rhs?): return lhs == rhs
+        default: return false
+        }
+    }
+
+    /// Six weeks of spending, scoped to whichever chip is selected — the card
+    /// that replaced "Set a Monthly Budget".
+    ///
+    /// Scoping is the point rather than a refinement: "am I spending more?" is
+    /// a different question for meat than for the total, and a household run
+    /// that lands in one week hides a grocery trend inside an all-categories
+    /// line. The delta, the mean line and the caption all re-scope with it.
+    private var weekOverWeekCard: some View {
+        let trend = SpendSummary.trend(trendScope, from: store.records)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Week over week")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(deltaText(trend))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(trend.isFlat ? Color.secondary : Color.bbAccent)
+                    .monospacedDigit()
+            }
+
+            // Mirrors `ReceiptsView`'s chip row — same metrics, same scroll
+            // behaviour — so the two read as one control the app uses twice.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(Array(trendScopes.enumerated()), id: \.offset) { _, entry in
+                        let selected = isSelected(entry.scope)
+                        Button {
+                            trendScope = entry.scope
+                        } label: {
+                            Text(entry.label)
+                                .font(.footnote.weight(.medium))
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 5)
+                                .background(selected ? Color.bbAccent : Color(.tertiarySystemFill),
+                                            in: Capsule())
+                                .foregroundStyle(selected ? Color.white : Color.primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 1)
+            }
+
+            if amountPrivacy.isMasked {
+                TrendChart.masked(height: 96)
+            } else {
+                TrendChart(amounts: trend.amounts,
+                           height: 96,
+                           mean: trend.mean,
+                           leadingLabel: weekStartLabel(trend),
+                           trailingLabel: "this week",
+                           meanLabel: "avg \(PriceFormat.currency(trend.mean))")
+            }
+
+            Text("Pick any category to trend on its own — Meat alone, or Dairy, not just the total.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .bbCard()
+    }
+
+    /// The oldest week's start date, as the chart's leading axis label.
+    private func weekStartLabel(_ trend: SpendTrend) -> String {
+        guard let first = trend.points.first else { return "" }
+        var components = DateComponents()
+        components.year = Int(first.range.start.year)
+        components.month = Int(first.range.start.month)
+        components.day = Int(first.range.start.day)
+        guard let date = Calendar.current.date(from: components) else { return "" }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    /// Rust rounds to cents, so "no change" is an exact test rather than an
+    /// epsilon — and it gets words, since `↑ $0.00` is what an unrounded float
+    /// would otherwise have rendered forever.
+    private func deltaText(_ trend: SpendTrend) -> String {
+        if trend.isFlat { return "No change" }
+        let arrow = trend.delta > 0 ? "↑" : "↓"
+        return "\(arrow) \(amountPrivacy.text(PriceFormat.currency(abs(trend.delta))))"
+    }
+
     // MARK: - Category breakdown
 
     /// One top-level category: its total, then the leaves beneath it. The group
@@ -202,8 +335,7 @@ struct SpendingView: View {
     /// bar and pace line, so a budget reads as an annotation on the spending
     /// rather than as the point of the screen.
     private func rootCard(_ group: SpendSummary.RootGroup) -> some View {
-        let hasTarget = group.id == targetRoot && monthlyAmount != nil
-        return VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             // Header and leaves both drill into the items behind the figure —
             // the question a tapped total actually raises. Selected by raw tag
             // id for a root, by display label for a leaf; see
@@ -234,10 +366,6 @@ struct SpendingView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-
-            if hasTarget, let target = monthlyAmount {
-                targetBar(spent: group.amount, target: target)
-            }
 
             if !group.leaves.isEmpty {
                 // No spacing of its own: each row carries its gap as padding
@@ -305,78 +433,6 @@ struct SpendingView: View {
         .contentShape(.rect)
     }
 
-    // MARK: - The optional target
-
-    private func targetBar(spent: Double, target: Double) -> some View {
-        let remaining = target - spent
-        let fraction = target > 0 ? spent / target : 0
-        return VStack(alignment: .leading, spacing: 6) {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.quaternary)
-                    Capsule()
-                        .fill(fraction > 1 ? Color.red : Color.bbAccent)
-                        .frame(width: geo.size.width * min(max(fraction, 0), 1))
-                }
-            }
-            .frame(height: 10)
-            HStack {
-                Text(remaining >= 0
-                     ? "\(amountPrivacy.text(PriceFormat.currency(remaining))) left"
-                     : "\(amountPrivacy.text(PriceFormat.currency(-remaining))) over")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Button {
-                    showBudgetAmountSheet = true
-                } label: {
-                    Text("of \(amountPrivacy.text(PriceFormat.currency(target)))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if isCurrentMonth {
-                paceLine(spent: spent, target: target)
-            }
-        }
-    }
-
-    /// Spend-to-date against day-of-month — what makes a target actionable
-    /// rather than retrospective. Current month only; for a past month the
-    /// month's own total is the whole answer.
-    private func paceLine(spent: Double, target: Double) -> some View {
-        let calendar = Calendar.current
-        let now = Date()
-        let day = calendar.component(.day, from: now)
-        let daysInMonth = calendar.range(of: .day, in: .month, for: now)?.count ?? 30
-        let expectedByNow = target * Double(day) / Double(daysInMonth)
-        let delta = expectedByNow - spent
-        let text = delta >= 0
-            ? "day \(day) of \(daysInMonth) · \(amountPrivacy.text(PriceFormat.currency(delta))) ahead of pace"
-            : "day \(day) of \(daysInMonth) · \(amountPrivacy.text(PriceFormat.currency(-delta))) behind pace"
-        return Text(text)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-    }
-
-    /// Offered once, quietly, at the bottom — a target is opt-in and the screen
-    /// is complete without one.
-    private var setBudgetRow: some View {
-        Button {
-            showBudgetAmountSheet = true
-        } label: {
-            HStack {
-                Label("Set a Monthly Budget", systemImage: "target")
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
-            }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .padding()
-        }
-        .buttonStyle(.plain)
-        .bbCard()
-    }
-
     // MARK: - Reconciliation
 
     /// How the headline relates to what was actually printed on the receipts.
@@ -386,6 +442,48 @@ struct SpendingView: View {
     /// look like arithmetic the app got wrong.
     private var footerSection: some View {
         VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.snappy) { showReconciliation.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(reconciliationSummary)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .rotationEffect(.degrees(showReconciliation ? 90 : 0))
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+
+            if showReconciliation {
+                reconciliationDetail
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding()
+        .bbCard()
+    }
+
+    /// The one line the card shows closed. Says the same three figures the full
+    /// breakdown leads with, so opening it is a request for the *rest* rather
+    /// than the only way to learn there is a gap at all.
+    private var reconciliationSummary: String {
+        var parts = ["Items \(amountPrivacy.text(PriceFormat.currency(summary.itemsTotal)))"]
+        if summary.tax > 0 {
+            parts.append("tax \(amountPrivacy.text(PriceFormat.currency(summary.tax)))")
+        }
+        if let gap = summary.unaccounted {
+            parts.append("\(amountPrivacy.text(PriceFormat.currency(gap))) unaccounted")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var reconciliationDetail: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
             footerRow("Items", amountPrivacy.text(PriceFormat.currency(summary.itemsTotal)))
             if summary.tax > 0 {
                 footerRow("Tax", amountPrivacy.text(PriceFormat.currency(summary.tax)))
@@ -404,50 +502,12 @@ struct SpendingView: View {
                 footerRow("Unreadable prices", "\(summary.unreadablePriceCount)")
             }
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding()
-        .bbCard()
     }
 
     private func footerRow(_ label: String, _ value: String) -> some View {
         HStack { Text(label); Spacer(); Text(value).monospacedDigit() }
     }
 
-}
-
-/// Editor for `BudgetPrefs.monthlyAmount` — the one budget thing `SpendingView`
-/// itself changes; which root the target applies to stays a Settings concern
-/// (`BudgetPrefs.root`), same store, so the two can't drift.
-private struct BudgetAmountSheet: View {
-    @State private var text: String = BudgetPrefs.monthlyAmount.map { String(format: "%.2f", $0) } ?? ""
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("Amount", text: $text)
-                        .keyboardType(.decimalPad)
-                } footer: {
-                    Text("A monthly target for tracked \(BudgetPrefs.root.capitalized) spend, computed from your scanned receipts' items. Leave blank to track spend with no target.")
-                }
-            }
-            .navigationTitle("Monthly Budget")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        BudgetPrefs.monthlyAmount = Double(text)
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
 }
 
 #if DEBUG
