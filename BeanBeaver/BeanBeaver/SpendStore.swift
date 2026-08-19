@@ -4,8 +4,8 @@ import BBReceiptKit
 
 /// One scanned receipt's persisted record: its parsed data, the state of its
 /// photo, and whether it's reached an export target yet. This — not the
-/// receipt total — is what a monthly budget is computed from (`Budget.swift`),
-/// and what `ReceiptsView` lists. See `SpendStore` for the store that owns
+/// receipt total — is what every spending figure is computed from (via
+/// `SpendSummary`), and what `ReceiptsView` lists. See `SpendStore` for the store that owns
 /// these.
 struct SpendRecord: Identifiable, Codable {
     let id: UUID
@@ -15,7 +15,7 @@ struct SpendRecord: Identifiable, Codable {
     /// paths go stale across updates. Nil when the capture write itself failed.
     let captureFilename: String?
     var wallMs: Double?
-    /// Kept out of every budget total — returned, business, not mine. Budget-scoped
+    /// Kept out of every spending total — returned, business, not mine. Totals-scoped
     /// only; the stored parse and what an export ships are untouched.
     var isExcluded = false
 
@@ -67,7 +67,7 @@ extension SpendRecord {
 /// Every receipt ever scanned, kept indefinitely until the user removes it —
 /// the substrate the budget and the Receipts screen are both views over. Owns
 /// the lifetime of each receipt's captured photo: deleting a record deletes its
-/// photo, and clearing a photo leaves the record (and every budget figure it
+/// photo, and clearing a photo leaves the record (and every spending figure it
 /// contributes to) untouched. This is what let `ReceiptCaptureStore.clearOld`
 /// go away — nothing here ages out on its own.
 @Observable
@@ -204,7 +204,7 @@ final class SpendStore {
     }
 
     /// Delete every photo, keeping every row — the honest successor to the old
-    /// `Clear Old Receipts`: same relief, no heuristic, and every budget figure
+    /// `Clear Old Receipts`: same relief, no heuristic, and every spending figure
     /// stays intact.
     func clearAllPhotos() {
         for index in records.indices where records[index].photoClearedAt == nil {

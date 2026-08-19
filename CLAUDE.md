@@ -71,7 +71,28 @@ What stays here is genuinely this platform's:
   item by index; the views want the app's own `SpendRecord` / `ReceiptItem`
   objects back (`SpendItemEntry.reattached(in:)`).
 
-`BudgetPrefs` keeps its `UserDefaults` storage; only the resolution rule moved.
+`BudgetPrefs` keeps its `UserDefaults` storage, but **nothing reads it any
+more** — the monthly budget was removed from this app with the tracker shift
+(see `SpendingView`). It and the three `spend_*_budget_root` functions behind it
+are deliberately left in place until `beanbeaver-android` drops its own budget
+UI; android pins its own `bb-mobile-ffi` tag, so nothing there breaks meanwhile,
+and whoever does that catch-up removes both sides together.
+
+**The weekly trend is `spend_trend`**, one call per screen returning the six
+weekly points, the mean, the week-over-week delta and the rolling 30-day figure,
+for all spending or one category. Two things about it are easy to get wrong:
+
+- `firstWeekday` is ICU numbering (`1 = Sunday`), which
+  `Calendar.current.firstWeekday` gives directly. Kotlin's `DayOfWeek` is
+  `MONDAY = 1` and must be converted — silent when wrong.
+- The delta is **week-to-date against the same span last week**, not the newest
+  bucket minus the one before. The newest bucket is a partial week six days out
+  of seven, so the naive comparison reads as a steep fall every Monday.
+
+**Masking hides the charts, not just the figures.** `hideAmounts` is on by
+default and a line whose height encodes dollars leaks the shape of a month even
+with every figure replaced by `$•••`. `TrendChart.masked()` is the placeholder
+that keeps the card from jumping when the eye is tapped.
 
 **Don't re-add arithmetic here** — a second implementation's opinion is the thing
 that was just deleted. This app has no XCTest target, so `spend-core`'s 28 Rust

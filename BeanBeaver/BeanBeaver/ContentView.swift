@@ -1148,13 +1148,13 @@ struct SettingsView: View {
         } header: {
             Text("Receipts")
         } footer: {
-            Text("Clear All Photos frees the space used by every receipt photo — every receipt's parsed data and every budget figure stay exactly as they are. Delete All Receipts removes the parsed data and the photos for every scanned receipt on this device; anything already exported to your ledger is untouched, and originals stay in your photo library.")
+            Text("Clear All Photos frees the space used by every receipt photo — every receipt's parsed data and every spending figure stay exactly as they are. Delete All Receipts removes the parsed data and the photos for every scanned receipt on this device; anything already exported to your ledger is untouched, and originals stay in your photo library.")
         }
         .alert("Clear all photos?", isPresented: $confirmClearAllPhotos) {
             Button("Clear Photos", role: .destructive) { spendStore.clearAllPhotos() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Frees the space used by every receipt photo. Every receipt's parsed data and every budget figure stay exactly as they are.")
+            Text("Frees the space used by every receipt photo. Every receipt's parsed data and every spending figure stay exactly as they are.")
         }
         .alert("Delete all receipts?", isPresented: $confirmDeleteAllReceipts) {
             Button("Delete \(spendStore.records.count) Receipt\(spendStore.records.count == 1 ? "" : "s")",

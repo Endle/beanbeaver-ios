@@ -1,6 +1,10 @@
 import Foundation
 import BBReceiptKit
 
+/// **Unused since the monthly budget was removed** — see `SpendingView`. Kept
+/// only until `beanbeaver-android` drops its own budget UI, since both read the
+/// same shared Rust and android pins its own tag.
+///
 /// Stored budget configuration: which tracked root carries a monthly target, and
 /// what that target is. Mirrors `LedgerFormatPrefs` — a couple of
 /// `UserDefaults`-backed settings read at compute time, so a change in Settings
