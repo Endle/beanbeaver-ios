@@ -337,12 +337,16 @@ struct ReceiptsView: View {
     ///
     /// Lowercased: these join the date/item-count subtitle now rather than
     /// heading their own line.
-    /// The dominant category across the receipts on screen, and what each
-    /// receipt spent in it.
+    /// The leading category across the receipts on screen, and what each receipt
+    /// spent in it.
     ///
-    /// One FFI call for the whole list rather than a rollup per row — and the
-    /// category comes from the data rather than a hardcoded `"grocery"`, so the
-    /// share stays meaningful for someone whose scanning is mostly hardware.
+    /// `roots.first` follows the same order the Spending screen draws, which
+    /// since mobile-util v0.1.9 puts the primary root (grocery) first whether or
+    /// not it is largest — so this row and that screen agree on what leads. It
+    /// still comes from the data rather than a hardcoded string here, and the
+    /// share is simply omitted for a receipt with none of it.
+    ///
+    /// One FFI call for the whole list rather than a rollup per row.
     private var categoryShare: (label: String, byRecord: [String: Double])? {
         let ids = Set(scopedRecords.map(\.id.uuidString))
         let month = SpendSummary.month(SpendSummary.defaultMonthId(from: scopedRecords),

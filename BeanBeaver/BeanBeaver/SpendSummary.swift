@@ -291,12 +291,15 @@ enum SpendSummary {
 
     // MARK: - Trend
 
-    /// **The weekly trend surfaces are off.** Turned off 2026-08-19 after the
-    /// charts were seen against real receipts on a device and did not read the
-    /// way they should. A chart that looks wrong is worse than no chart — it
-    /// invites the user to draw a conclusion from it — so the home line, its
-    /// delta row, and the Spending screen's whole week-over-week card are
-    /// withheld rather than shipped.
+    /// **The weekly trend surfaces are off, and not because they are broken.**
+    ///
+    /// Turned off 2026-08-19 after the charts were seen against real receipts on
+    /// a device: they draw what they claim to draw, but six weekly totals turned
+    /// out not to be the information worth a third of the home card. That is a
+    /// product answer, not a defect — **don't go looking for a bug here.** The
+    /// surface is meant to evolve before it reaches anyone, so the home line,
+    /// its delta row, and the Spending screen's whole week-over-week card are
+    /// withheld in the meantime.
     ///
     /// The code stays: `spend_trend` and its 29 Rust tests are unaffected, and
     /// `TrendChart` is still built and still masks correctly. Flipping this to
@@ -317,17 +320,41 @@ enum SpendSummary {
     ///
     /// Everything about *when* a week starts is decided in Rust; the two things
     /// passed in are the two the platform genuinely owns — today as a local
-    /// calendar date, and the locale's first weekday. `Calendar.firstWeekday` is
-    /// already ICU's numbering (1 = Sunday), which is what the crate expects.
+    /// calendar date, and the locale's first weekday.
     static func trend(_ scope: Category? = nil,
                       from records: [SpendRecord],
                       today: Date = Date()) -> SpendTrend {
         spendTrend(records: records.map(\.spendInput),
                    scope: scope?.ffi,
                    today: today.spendDate,
-                   firstWeekday: UInt32(Calendar.current.firstWeekday),
+                   firstWeekday: Calendar.current.spendFirstWeekday,
                    weeks: trendWeeks,
                    rollingDays: rollingDays)
+    }
+}
+
+extension Calendar {
+    /// This calendar's first weekday, named.
+    ///
+    /// `Calendar.firstWeekday` is ICU-numbered (1 = Sunday … 7 = Saturday), and
+    /// it used to be handed to Rust as that raw integer — one convention away
+    /// from Kotlin's `DayOfWeek`, where `MONDAY = 1`. The seam takes a
+    /// `SpendWeekday` now, so the conversion happens here, once, as a switch
+    /// that names every day it means.
+    ///
+    /// `Calendar` guarantees the 1...7 range, so the default is unreachable
+    /// rather than a fallback with an opinion.
+    var spendFirstWeekday: SpendWeekday {
+        switch firstWeekday {
+        case 1: return .sunday
+        case 2: return .monday
+        case 3: return .tuesday
+        case 4: return .wednesday
+        case 5: return .thursday
+        case 6: return .friday
+        case 7: return .saturday
+        default: return .sunday
+        }
     }
 }
 
