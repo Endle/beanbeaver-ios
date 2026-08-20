@@ -291,6 +291,22 @@ enum SpendSummary {
 
     // MARK: - Trend
 
+    /// **The weekly trend surfaces are off.** Turned off 2026-08-19 after the
+    /// charts were seen against real receipts on a device and did not read the
+    /// way they should. A chart that looks wrong is worse than no chart — it
+    /// invites the user to draw a conclusion from it — so the home line, its
+    /// delta row, and the Spending screen's whole week-over-week card are
+    /// withheld rather than shipped.
+    ///
+    /// The code stays: `spend_trend` and its 29 Rust tests are unaffected, and
+    /// `TrendChart` is still built and still masks correctly. Flipping this to
+    /// `true` brings all three back at once, which is the point of it being one
+    /// flag rather than three comment blocks.
+    ///
+    /// The **rolling 30-day figure is not gated** — it comes from the same call
+    /// but is a plain sum over a window, and nothing about it looked wrong.
+    static let showWeeklyTrend = false
+
     /// How many weeks the charts plot. Six is what the design asks for and what
     /// fits the card's width at a legible dot spacing.
     static let trendWeeks: UInt32 = 6

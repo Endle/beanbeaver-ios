@@ -470,9 +470,18 @@ struct ContentView: View {
                         showSpending = true
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(month.label) · \(month.receiptCount) receipt\(month.receiptCount == 1 ? "" : "s")")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            // The chevron rides the caption while the trend is
+                            // withheld: the delta row below used to carry the
+                            // only visible "this pushes Spending" affordance,
+                            // and without it the card looks inert.
+                            HStack(spacing: 4) {
+                                Text("\(month.label) · \(month.receiptCount) receipt\(month.receiptCount == 1 ? "" : "s")")
+                                if !SpendSummary.showWeeklyTrend {
+                                    Image(systemName: "chevron.right").font(.caption2)
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
 
                             // Grown from 28pt: the app is a spending tracker
                             // that happens to scan receipts, so this is the
@@ -517,35 +526,37 @@ struct ContentView: View {
                 // Masking hides the line, not just the numbers: its height
                 // encodes dollars, so a visible line beside a masked figure
                 // would give away exactly what the mask is for.
-                if amountPrivacy.isMasked {
-                    TrendChart.masked()
-                } else {
-                    TrendChart(amounts: trend.amounts,
-                               leadingLabel: "6 wks ago",
-                               trailingLabel: "this week")
-                }
-
-                Divider()
-
-                Button {
-                    showSpending = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(trendDeltaText(trend))
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(trend.isFlat ? Color.secondary : Color.bbAccent)
-                            .monospacedDigit()
-                        Text(trendDeltaCaption(trend))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 4)
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                if SpendSummary.showWeeklyTrend {
+                    if amountPrivacy.isMasked {
+                        TrendChart.masked()
+                    } else {
+                        TrendChart(amounts: trend.amounts,
+                                   leadingLabel: "6 wks ago",
+                                   trailingLabel: "this week")
                     }
-                    .contentShape(.rect)
+
+                    Divider()
+
+                    Button {
+                        showSpending = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(trendDeltaText(trend))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(trend.isFlat ? Color.secondary : Color.bbAccent)
+                                .monospacedDigit()
+                            Text(trendDeltaCaption(trend))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 4)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.top, 18)

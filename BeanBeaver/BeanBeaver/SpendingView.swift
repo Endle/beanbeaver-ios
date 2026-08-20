@@ -103,7 +103,9 @@ struct SpendingView: View {
                 // from *today*, so beside a March total viewed in August it
                 // would be answering a question nobody asked — the same reason
                 // the old pace line was current-month only.
-                if isCurrentMonth {
+                //
+                // Withheld entirely for now — see `SpendSummary.showWeeklyTrend`.
+                if SpendSummary.showWeeklyTrend, isCurrentMonth {
                     weekOverWeekCard
                 }
 
