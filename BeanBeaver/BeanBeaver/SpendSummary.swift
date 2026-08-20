@@ -105,8 +105,9 @@ enum SpendSummary {
     /// One top-level category and the leaves beneath it. The unit the spending
     /// screen lists, so a month reads as "where the money went", largest first.
     struct RootGroup: Identifiable {
-        /// The raw root tag (`"grocery"`) — matches `BudgetPrefs.root`, which is
-        /// how the one group carrying a target is found.
+        /// The raw root tag (`"grocery"`), not the display label — what a
+        /// `SpendSummary.Category.root` is selected by, and what the Spending
+        /// screen's trend chips carry.
         let id: String
         /// The authored display label (`"Grocery"`), from the tag vocabulary.
         let label: String
