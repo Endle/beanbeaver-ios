@@ -239,12 +239,17 @@ struct ReceiptsView: View {
     /// `Unfiled` sits in position two deliberately: it is the chip with an
     /// action behind it, and last in a scrolling row is where a chip gets
     /// clipped by the fade and goes unseen.
+    ///
+    /// **`All` leads, and is shown even when nothing is scoped** — it is the way
+    /// back out of every other chip. The unscoped list opens on the newest month
+    /// (`defaultFilter`), so without it there is no chip that means "stop
+    /// narrowing", and the older receipts a month chip hides are unreachable
+    /// rather than one tap away. Its count is `scopedRecords`, so under a
+    /// month-scoped caller it still means "everything in this month".
     private var filterChips: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                if monthFilter != nil {
-                    chip(.all, label: "All", count: scopedRecords.count, status: nil)
-                }
+                chip(.all, label: "All", count: scopedRecords.count, status: nil)
                 if let newest = monthChips.first {
                     chip(.month(newest.id), label: newest.label, count: newest.count,
                          status: nil)
