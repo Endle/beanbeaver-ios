@@ -947,8 +947,6 @@ struct SettingsView: View {
                             }
                         }
                     }
-                } footer: {
-                    Text("Where receipts go when you export them: a beancount destination, or the Money Manager workbook. Tracking works with nothing set up here.")
                 }
 
                 trackingSection
@@ -971,25 +969,11 @@ struct SettingsView: View {
                 } header: {
                     Text("Ledger")
                 } footer: {
-                    Text("The currency and tax account used in every beancount entry BeanBeaver generates. Currency defaults to your region.\n\nSave details file stores a .json alongside each exported receipt — its items, prices, and category tags — next to the beancount and photo. Applies to both the ledger inbox file and GitHub pull requests.")
+                    Text("Save details file writes a .json of each receipt's items, prices, and tags next to the exported beancount and photo.")
                 }
 
 
                 receiptsSection
-
-                Section {
-                    Button {
-                        // Dismiss first so the home screen's scanning/done
-                        // transition is actually visible, not hidden behind
-                        // this sheet.
-                        dismiss()
-                        onRunSample()
-                    } label: {
-                        Label("Scan a Sample Receipt", systemImage: "doc.text.magnifyingglass")
-                    }
-                } footer: {
-                    Text("Runs the full on-device scan on a receipt bundled with the app — a way to see what BeanBeaver does without a receipt in hand.")
-                }
 
                 Section {
                     NavigationLink("Privacy Policy") {
@@ -1015,10 +999,19 @@ struct SettingsView: View {
                     NavigationLink("Stored Debug Info") {
                         DebugInfoListView()
                     }
+                    Button {
+                        // Dismiss first so the home screen's scanning/done
+                        // transition is actually visible, not hidden behind
+                        // this sheet.
+                        dismiss()
+                        onRunSample()
+                    } label: {
+                        Label("Scan a Sample Receipt", systemImage: "doc.text.magnifyingglass")
+                    }
                 } header: {
                     Text("Debug")
                 } footer: {
-                    Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.")
+                    Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.\n\nScan a Sample Receipt runs the full on-device scan on a receipt bundled with the app — a way to see what BeanBeaver does without a receipt in hand.")
                 }
                 .id("debug")
             }
@@ -1132,14 +1125,15 @@ struct SettingsView: View {
         } header: {
             Text("Tracking")
         } footer: {
-            Text("How items are sorted into categories, and whether the figures are shown.\n\nHide amounts covers every figure on the home card and the spending screens — and the trend charts, whose shape gives away a month on its own — so a glance at your phone doesn't read your spending. On by default; the eye on the home card and on the Spending screen is this same switch.")
+            Text("Hide amounts covers the figures and the trend charts alike, and is the same switch as the eye on the home and Spending screens.")
         }
     }
 
     /// The honest successor to the old "Clear Old Receipts": no heuristic, and
-    /// each action says exactly what it keeps. A scanned receipt itself is now
-    /// kept until the user removes it — see `SpendStore` — so this is the only
-    /// place that storage is freed from.
+    /// each action says exactly what it keeps — in its confirmation alert, which
+    /// is why the section carries no footer repeating it. A scanned receipt
+    /// itself is now kept until the user removes it — see `SpendStore` — so this
+    /// is the only place that storage is freed from.
     private var receiptsSection: some View {
         Section {
             LabeledContent("Receipts recorded", value: "\(spendStore.records.count)")
@@ -1158,8 +1152,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Receipts")
-        } footer: {
-            Text("Clear All Photos frees the space used by every receipt photo — every receipt's parsed data and every spending figure stay exactly as they are. Delete All Receipts removes the parsed data and the photos for every scanned receipt on this device; anything already exported to your ledger is untouched, and originals stay in your photo library.")
         }
         .alert("Clear all photos?", isPresented: $confirmClearAllPhotos) {
             Button("Clear Photos", role: .destructive) { spendStore.clearAllPhotos() }
