@@ -93,8 +93,50 @@ extension Array where Element == ReceiptWarning {
     var worthShowing: [ReceiptWarning] {
         filter { $0.severity >= .notice }
     }
+}
 
+/// One finding shown on a receipt: a parser warning the core reported, or one
+/// this app worked out for itself from the parse.
+///
+/// Not every finding worth a word is a `ReceiptWarning`. A missing date is a
+/// *field* of `ReceiptResult` (`dateIsPlaceholder`), not a warning, and core
+/// stays that way on purpose — what it *does* about an unknown date is a
+/// formatter decision (`; @date: UNKNOWN` and a `FIXME:` line, with today's
+/// date standing in), and what that is *worth* is this file's call, like every
+/// other severity here. This type is where the two kinds meet, so the banner
+/// and the badge read one list instead of two.
+struct ReceiptFinding {
+    let message: String
+    let severity: WarningSeverity
+}
+
+extension Array where Element == ReceiptFinding {
     var highestSeverity: WarningSeverity? {
         map(\.severity).max()
+    }
+}
+
+extension ReceiptResult {
+    /// Everything about this parse worth telling the user, loudest first.
+    ///
+    /// A receipt with no date is `.attention`, on the same footing as a total
+    /// that doesn't add up: core substitutes *today* so the entry is still
+    /// valid beancount, which means an uncorrected one files a February shop
+    /// under August and nothing downstream can tell. That it lights on roughly
+    /// half of a real scan pile is the finding, not a reason to soften it —
+    /// unlike `uncategorizedItem`, whose badge was retired for firing on
+    /// correct parses, every one of these is a receipt whose ledger date is
+    /// wrong.
+    var findings: [ReceiptFinding] {
+        var out: [ReceiptFinding] = []
+        if dateIsPlaceholder {
+            out.append(ReceiptFinding(
+                message: "No date found on this receipt — it will be filed under today's date.",
+                severity: .attention))
+        }
+        out += warnings.worthShowing.map {
+            ReceiptFinding(message: $0.message, severity: $0.severity)
+        }
+        return out
     }
 }
