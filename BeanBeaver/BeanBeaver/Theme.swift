@@ -27,6 +27,72 @@ extension Color {
     })
 }
 
+/// The receipt-paper palette — **light mode only**, by design.
+///
+/// The redesign puts the app's surfaces on warm paper rather than the system's
+/// cool grey: a cream canvas, an off-white card, and a warm near-black ink. It
+/// is the cheapest half of "this app is about receipts" — no illustration, no
+/// texture, just a ground that isn't `systemGroupedBackground`.
+///
+/// **Every one of these is a pair, and the dark half is the system colour.**
+/// Dark mode was not designed, and a warm palette invented for it here would be
+/// a guess that ships. So in dark each token resolves to exactly what the app
+/// used before, which means a dark build is unchanged and a light build is the
+/// redesign. Things derived from these — the torn edge, the hairlines — follow
+/// automatically.
+///
+/// Scoped to the redesigned surfaces (Home, Spending, Receipts, the scan result
+/// and their pushes). `Form`-based pages — Settings, Sync — stay
+/// platform-standard, which is the handoff's own rule: only what was designed
+/// gets restyled.
+extension Color {
+    /// The canvas behind the cards. Replaces `Color(.systemGroupedBackground)`.
+    static let bbCanvas = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? .systemGroupedBackground
+            : UIColor(red: 0.957, green: 0.945, blue: 0.918, alpha: 1)   // #F4F1EA
+    })
+
+    /// The card fill. Replaces `Color(.secondarySystemGroupedBackground)`.
+    static let bbCardFill = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? .secondarySystemGroupedBackground
+            : UIColor(red: 0.988, green: 0.984, blue: 0.973, alpha: 1)   // #FCFBF8
+    })
+
+    /// Warm near-black — the primary label on the redesigned surfaces.
+    static let bbInk = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? .label
+            : UIColor(red: 0.102, green: 0.094, blue: 0.082, alpha: 1)   // #1A1815
+    })
+
+    /// Secondary text. **68% ink is the floor for anything under 18pt** — it
+    /// clears 4.5:1 on the card, and the lighter values the design tried first
+    /// did not. Don't reach for `bbInkTertiary` to quieten a label.
+    static let bbInkSecondary = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? .secondaryLabel
+            : UIColor(red: 0.102, green: 0.094, blue: 0.082, alpha: 0.68)
+    })
+
+    /// **Non-text only** — rules, chevrons, bar fills. It does not clear
+    /// contrast for body copy at any size, which is the whole reason the
+    /// secondary token above stops at 68%.
+    static let bbInkTertiary = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? .tertiaryLabel
+            : UIColor(red: 0.102, green: 0.094, blue: 0.082, alpha: 0.45)
+    })
+
+    /// Row and card dividers — a hair, not a `Divider()`.
+    static let bbHairline = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? .separator
+            : UIColor(red: 0.102, green: 0.094, blue: 0.082, alpha: 0.09)
+    })
+}
+
 extension Color {
     /// The floor a trend line is read against. The design names
     /// `rgba(60,60,67,0.14)`, which is what `.separator` resolves to in light
@@ -52,6 +118,43 @@ extension Color {
             ? UIColor(red: 0.14, green: 0.54, blue: 0.24, alpha: 0.22)
             : UIColor(red: 0.14, green: 0.54, blue: 0.24, alpha: 0.10)
     })
+}
+
+/// Mono for numbers and labels-about-numbers; proportional for prose.
+///
+/// That is the whole rule, and the exception proves it: an earlier round of the
+/// redesign set the row *labels* in mono too, which both slowed reading and
+/// overflowed rows that fit before. So SF Mono carries the money, the counts,
+/// and the micro-labels that name a figure ("WEEKLY SPEND", "Aug 1–21"), and SF
+/// Pro carries everything a person reads as a sentence.
+///
+/// SF Mono is tabular by construction, so a column of these lines up without
+/// `monospacedDigit()`.
+extension Font {
+    static func bbMono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .monospaced)
+    }
+}
+
+/// The micro-label above a figure: mono, uppercase, letter-spaced.
+///
+/// Tracking is in **points**, not em — SwiftUI's `.tracking` is absolute, and
+/// the design's `0.13em` at 11pt is 1.43pt. Passing `0.13` would be a
+/// hairline's worth of spacing and look like a plain small label.
+struct BBEyebrow: ViewModifier {
+    var size: CGFloat = 11
+
+    func body(content: Content) -> some View {
+        content
+            .font(.bbMono(size, .medium))
+            .textCase(.uppercase)
+            .tracking(size * 0.13)
+            .foregroundStyle(Color.bbInkSecondary)
+    }
+}
+
+extension View {
+    func bbEyebrow(size: CGFloat = 11) -> some View { modifier(BBEyebrow(size: size)) }
 }
 
 /// One receipt's export state as a single glyph — filled green for filed, a
@@ -125,18 +228,51 @@ struct BBQuietButtonStyle: ButtonStyle {
     }
 }
 
-/// Card container: system background, rounded corners, soft shadow.
+/// Card container: warm paper, 20pt continuous corners, one soft shadow.
+///
+/// `padding` is a parameter because the redesign has rows that must reach the
+/// card's edge — a divider inset 16pt from the leading edge only, and a
+/// full-bleed rule above a "Show all 14 items" control. Those cards pass
+/// `padding: 0` and pad their own rows. Everything else takes the default and
+/// looks exactly as it did.
 struct BBCard: ViewModifier {
+    var padding: CGFloat = 16
+    /// Which corners are rounded. The header slip rounds only its top two: a
+    /// torn edge is drawn immediately below it and the two have to read as one
+    /// piece of paper.
+    var corners: RectangleCornerRadii = .init(topLeading: 20, bottomLeading: 20,
+                                              bottomTrailing: 20, topTrailing: 20)
+
     func body(content: Content) -> some View {
         content
-            .padding(16)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
+            .padding(padding)
+            .background(Color.bbCardFill,
+                        in: UnevenRoundedRectangle(cornerRadii: corners, style: .continuous))
+            .shadow(color: Color.bbCardShadow, radius: 6, y: 4)
     }
 }
 
+/// One shadow, defined once, because the torn edge has to carry the *same* one
+/// — a strip with its own shadow reads as a second sheet of paper lying under
+/// the first.
+extension Color {
+    static let bbCardShadow = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor.black.withAlphaComponent(0.30)
+            : UIColor(red: 0.102, green: 0.094, blue: 0.082, alpha: 0.07)
+    })
+}
+
 extension View {
-    func bbCard() -> some View { modifier(BBCard()) }
+    func bbCard(padding: CGFloat = 16) -> some View { modifier(BBCard(padding: padding)) }
+
+    /// A card rounded on its top corners only — the header slip, which a torn
+    /// edge continues.
+    func bbSlipCard(padding: CGFloat = 16) -> some View {
+        modifier(BBCard(padding: padding,
+                        corners: .init(topLeading: 20, bottomLeading: 0,
+                                       bottomTrailing: 0, topTrailing: 20)))
+    }
 
     /// The quiet-tier look on a bare view. For an actual control reach for
     /// `.buttonStyle(BBQuietButtonStyle())` instead — same look, plus the press.

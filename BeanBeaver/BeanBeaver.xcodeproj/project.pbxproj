@@ -51,6 +51,9 @@
 		1C0000000000000000000090 /* ItemRuleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000090 /* ItemRuleStore.swift */; };
 		1C0000000000000000000091 /* ItemRulesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000091 /* ItemRulesView.swift */; };
 		1C0000000000000000000092 /* WarningSeverity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000092 /* WarningSeverity.swift */; };
+		1C0000000000000000000094 /* ReceiptSlip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000094 /* ReceiptSlip.swift */; };
+		1C0000000000000000000095 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000095 /* HomeView.swift */; };
+		1C0000000000000000000096 /* RootTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000096 /* RootTab.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -98,6 +101,9 @@
 		1B0000000000000000000090 /* ItemRuleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemRuleStore.swift; sourceTree = "<group>"; };
 		1B0000000000000000000091 /* ItemRulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemRulesView.swift; sourceTree = "<group>"; };
 		1B0000000000000000000092 /* WarningSeverity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarningSeverity.swift; sourceTree = "<group>"; };
+		1B0000000000000000000094 /* ReceiptSlip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptSlip.swift; sourceTree = "<group>"; };
+		1B0000000000000000000095 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		1B0000000000000000000096 /* RootTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTab.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +160,9 @@
 				1B0000000000000000000025 /* SpendSummary.swift */,
 				1B0000000000000000000026 /* SpendingView.swift */,
 				1B0000000000000000000093 /* TrendChart.swift */,
+				1B0000000000000000000096 /* RootTab.swift */,
+				1B0000000000000000000095 /* HomeView.swift */,
+				1B0000000000000000000094 /* ReceiptSlip.swift */,
 				1B0000000000000000000028 /* CategoryItemsView.swift */,
 				1B0000000000000000000027 /* ReceiptsView.swift */,
 				1B000000000000000000001E /* BatchImportView.swift */,
@@ -301,6 +310,9 @@
 				1C0000000000000000000025 /* SpendSummary.swift in Sources */,
 				1C0000000000000000000026 /* SpendingView.swift in Sources */,
 				1C0000000000000000000093 /* TrendChart.swift in Sources */,
+				1C0000000000000000000096 /* RootTab.swift in Sources */,
+				1C0000000000000000000095 /* HomeView.swift in Sources */,
+				1C0000000000000000000094 /* ReceiptSlip.swift in Sources */,
 				1C0000000000000000000028 /* CategoryItemsView.swift in Sources */,
 				1C0000000000000000000027 /* ReceiptsView.swift in Sources */,
 			);

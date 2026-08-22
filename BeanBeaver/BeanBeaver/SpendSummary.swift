@@ -308,13 +308,41 @@ enum SpendSummary {
     ///
     /// The **rolling 30-day figure is not gated** — it comes from the same call
     /// but is a plain sum over a window, and nothing about it looked wrong.
-    static let showWeeklyTrend = false
+    ///
+    /// **Back on, 2026-08-21, and the surface it comes back to is different.**
+    /// What was withheld was a *line* on the home card under a "vs last week"
+    /// row that said the same thing the line did. The redesign draws six
+    /// **bars** — discrete weekly totals, the newest visibly partial — with the
+    /// delta as the card's own header figure and nothing repeating it. That is
+    /// the change that made the surface worth a third of the card. The
+    /// Spending screen's scoped week-over-week card comes back with it, on the
+    /// same flag.
+    static let showWeeklyTrend = true
 
     /// How many weeks the charts plot. Six is what the design asks for and what
     /// fits the card's width at a legible dot spacing.
     static let trendWeeks: UInt32 = 6
     /// The second figure beside the month total — "$341.08 in the last 30 days".
     static let rollingDays: UInt32 = 30
+
+    // MARK: - Month facts
+
+    /// The two figures the home slip prints under a month's total, and the
+    /// windows they cover.
+    ///
+    /// A second call rather than fields on `month`: `spend_month` is pure over
+    /// records and takes no date, and these are clock-relative. See
+    /// `spend_month_facts`'s own docs for why that separation is worth one more
+    /// crossing on the one screen that needs both.
+    ///
+    /// Rust decides where the windows begin and end; this file only resolves
+    /// "today" (the platform's job — see `Date.spendDate`) and the rendering
+    /// formats them.
+    static func facts(_ id: String,
+                      from records: [SpendRecord],
+                      today: Date = Date()) -> SpendMonthFacts {
+        spendMonthFacts(id: id, records: records.map(\.spendInput), today: today.spendDate)
+    }
 
     /// The weekly series for `scope`, or all spending when `scope` is nil.
     ///
@@ -381,6 +409,44 @@ extension Date {
         return SpendDate(year: Int32(c.year ?? 1970),
                          month: UInt32(c.month ?? 1),
                          day: UInt32(c.day ?? 1))
+    }
+}
+
+extension SpendDateRange {
+    /// The range as a `Date`, or nil for a date the calendar can't build. Half
+    /// open, so `end` is the day *after* the last one covered.
+    private var dates: (start: Date, lastDay: Date)? {
+        var c = DateComponents()
+        c.year = Int(start.year); c.month = Int(start.month); c.day = Int(start.day)
+        var e = DateComponents()
+        e.year = Int(end.year); e.month = Int(end.month); e.day = Int(end.day)
+        let calendar = Calendar.current
+        guard let from = calendar.date(from: c),
+              let exclusiveEnd = calendar.date(from: e),
+              let lastDay = calendar.date(byAdding: .day, value: -1, to: exclusiveEnd)
+        else { return nil }
+        return (from, lastDay)
+    }
+
+    /// `"Aug 1–21"`, or `"Aug 28 – Sep 3"` when the span crosses a month.
+    ///
+    /// An en dash, and tight against the numbers within a month — that is how a
+    /// date range is set. Spaced when the two sides are two words each, because
+    /// `Aug 28–Sep 3` reads as one token.
+    ///
+    /// The month name is repeated only when it changes. Both windows this
+    /// renders — a month to date, and the same stretch of the month before —
+    /// sit inside one month in every ordinary case, so the two-month form is
+    /// the defensive branch rather than the common one.
+    var shortLabel: String {
+        guard let (from, lastDay) = dates else { return "" }
+        let calendar = Calendar.current
+        let day = Date.FormatStyle.dateTime.day()
+        let monthDay = Date.FormatStyle.dateTime.month(.abbreviated).day()
+        if calendar.isDate(from, equalTo: lastDay, toGranularity: .month) {
+            return "\(from.formatted(monthDay))–\(lastDay.formatted(day))"
+        }
+        return "\(from.formatted(monthDay)) – \(lastDay.formatted(monthDay))"
     }
 }
 

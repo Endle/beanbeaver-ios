@@ -16,10 +16,18 @@ license split and core-tag pinning live in `../CLAUDE.md` — not repeated here.
 
 App code under `BeanBeaver/BeanBeaver/`, by concern (open the file for detail):
 
-- **Entry / home** — `BeanBeaverApp.swift` (entry); `ContentView.swift` (home screen, and a **grab-bag** that also defines `SettingsView`, `ReceiptResultView`, `ReceiptCard`, `OriginReceiptView`, `ScanTimingsView`).
+- **Entry / shell** — `BeanBeaverApp.swift` (entry); `ContentView.swift` (the tab shell — it owns the app's state, every sheet, the export alert and the DEBUG deep links, and is still a **grab-bag** that also defines `SettingsView`, `ReceiptResultView`, `ReceiptCard`, `AccountingDetailsCard`, `OriginReceiptView`, `ScanTimingsView`); `RootTab.swift` (the three tabs, the raised Scan button, `BBLayout`); `HomeView.swift` (the home screen).
 - **Scan pipeline** — `ReceiptPipeline.swift` (`BatchRunner`, `-autoRunBatch`), `ReceiptCaptureStore.swift`, `ReceiptBatch.swift`, `DocumentScanner.swift`, `BatchImportView.swift`.
 - **Export / sync** — `LedgerExport.swift` (exporter seam), `LedgerSettingsView.swift` (the "Sync" page), backends `GitHubLedger.swift` / `GitHubDeviceFlow.swift` / `FilesLedgerInbox.swift`, and `MoneyManagerExport.swift` / `MoneyManagerWorkbook.swift`.
-- **Support** — `Entitlements.swift` (`isPremium` seam); `DebugInfoStore.swift` (+`DebugInfoListView`) and `DataDump.swift` (+`DataDumpView`) = in-app debug capture; others self-named (`Keychain`, `Theme`, `ZoomableImageView`, `PhotoSaver`, `LaunchTiming`).
+- **Support** — `Entitlements.swift` (`isPremium` seam); `DebugInfoStore.swift` (+`DebugInfoListView`) and `DataDump.swift` (+`DataDumpView`) = in-app debug capture; `ReceiptSlip.swift` (the header slip, `TornEdge`, `AmountPrivacyEye`, `DisplayAmount`); others self-named (`Keychain`, `Theme`, `ZoomableImageView`, `PhotoSaver`, `LaunchTiming`).
+
+**New files must be added to `project.pbxproj` by hand.** The project uses
+explicit file references with a hand-rolled id scheme (`1B…NN` =
+`PBXFileReference`, `1C…NN` = `PBXBuildFile`), not Xcode 16's
+`PBXFileSystemSynchronizedRootGroup`, so a `.swift` file dropped in the folder
+is invisible to the build until it is listed in four places: the two sections
+above, the group listing, and the compile phase. Ids are 24 hex characters —
+a short one parses but Xcode will not open the project.
 
 ## The `shared/` submodule
 
@@ -52,6 +60,52 @@ what `scripts/host-e2e.sh` drives, and CI type-checks it (`cargo check --bin
 batch_e2e`) so a core bump here can't silently break Android's CI, which actually
 runs it.
 
+## The tab shell, and what floats over what
+
+Home · Scan · Settings, in a real `TabView`. Three things about it are not
+obvious from the code:
+
+- **Scan is an action wearing a tab item.** Selecting it opens the document
+  camera and leaves you on the tab you were already on — see
+  `ContentView.tabSelection`. So there is no scan screen to restore, and
+  Spending, Receipts and Import stay pushes *inside* Home rather than becoming
+  tabs of their own.
+- **The raised Scan circle is drawn, not configured.** `UITabBar` has no raised
+  centre item, so `RootTabBarAction` overlays one on the middle slot. The tab
+  item underneath stays live and does the same thing, so a future iOS moving the
+  bar's metrics mispositions a circle over a control that still works. Its
+  offset is tuned against iOS 26's floating capsule bar; check it on a redesign.
+- **The bar floats over content instead of shortening it**, so nothing is inset
+  automatically. Every screen in the Home tab pads its own bottom by
+  `BBLayout.tabBarInset` — scroll views at the end of their content, pinned
+  export footers at the end of their stack. Without it the last row and the
+  footer button land under the glass, and the raised circle covers the button.
+
+**The scan result is a full-screen modal over the whole shell**, bound to "the
+pipeline is not idle" so scanning, failure and result are one presentation
+rather than three. `Done` is withheld while scanning: `ReceiptPipeline.reset()`
+clears the status but does not cancel the running task, so dismissing mid-scan
+would have the finished result present itself again a second later.
+
+## The warm palette is light-mode only, on purpose
+
+`Theme.swift`'s `bbCanvas` / `bbCardFill` / `bbInk` / `bbInkSecondary` /
+`bbInkTertiary` / `bbHairline` are **pairs**, and the dark half of each is the
+system colour the app used before. Dark mode was not designed, and inventing a
+warm dark palette here would be a guess that ships; this way a dark build is
+unchanged and a light build is the redesign. Anything derived from these — the
+torn edge, the hairlines, the bar fills — follows automatically.
+
+Two rules that came from contrast measurement, not taste:
+
+- **`bbInkSecondary` (68%) is the floor for text under 18pt.** It clears 4.5:1
+  on the card and the lighter values tried first did not.
+- **`bbInkTertiary` (45%) is non-text only** — rules, chevrons, bar fills. Don't
+  reach for it to quieten a label.
+
+Scope: the redesigned surfaces (Home, Spending, Receipts, the scan result and
+their pushes). `Form`-based pages — Settings, Sync — stay platform-standard.
+
 ## Spending is computed in shared Rust
 
 `SpendSummary.swift` no longer contains the arithmetic. It lives in
@@ -78,9 +132,19 @@ are deliberately left in place until `beanbeaver-android` drops its own budget
 UI; android pins its own `bb-mobile-ffi` tag, so nothing there breaks meanwhile,
 and whoever does that catch-up removes both sides together.
 
+**The two figures under the slip's total are `spend_month_facts`** — the daily
+average, what the same stretch of last month came to, and the two windows so the
+view can name them ("Aug 1–21", "Jul 1–21") without re-deriving a month boundary
+in Foundation. A separate call rather than fields on `spend_month`, which takes
+no date and is pure over records; the cost is a third FFI crossing on the one
+screen that needs all three.
+
 **The weekly trend is `spend_trend`**, one call per screen returning the six
 weekly points, the mean, the week-over-week delta and the rolling 30-day figure,
-for all spending or one category. Two things about it are easy to get wrong:
+for all spending or one category. Both screens draw it as **bars** (`TrendBars`),
+not the line `TrendChart` still provides: six weekly buckets are discrete totals,
+and a line both implies readable values between them and hides that the newest
+bucket is a partial week. Two things about it are easy to get wrong:
 
 - `firstWeekday` is ICU numbering (`1 = Sunday`), which
   `Calendar.current.firstWeekday` gives directly. Kotlin's `DayOfWeek` is
