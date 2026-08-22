@@ -52,13 +52,20 @@ struct CategoryItemsView: View {
                     } label: {
                         receiptRow(group)
                     }
+                    .listRowBackground(Color.bbCardFill)
                     ForEach(group.entries) { entry in
                         itemRow(entry)
+                            .listRowBackground(Color.bbCardFill)
                     }
                 }
             }
         }
         .listStyle(.insetGrouped)
+        // The warm ground follows the Spending screen this is pushed from —
+        // see `ReceiptsView` for why hiding the scroll background needs the row
+        // repaint beside it.
+        .scrollContentBackground(.hidden)
+        .background(Color.bbCanvas)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
@@ -94,6 +101,7 @@ struct CategoryItemsView: View {
                     .font(.subheadline.weight(.medium))
                 }
                 .padding(.vertical, 2)
+                .listRowBackground(Color.bbCardFill)
             }
         }
     }

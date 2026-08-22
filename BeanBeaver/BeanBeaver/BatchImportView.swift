@@ -146,6 +146,7 @@ struct BatchImportView: View {
                 Section {
                     ForEach(batch.drafts) { draft in
                         row(draft)
+                            .listRowBackground(Color.bbCardFill)
                     }
                     .onDelete { offsets in
                         for index in offsets { batch.remove(batch.drafts[index].id) }
@@ -155,6 +156,11 @@ struct BatchImportView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            // Same two moves as `ReceiptsView`: hide the scroll background so
+            // the warm canvas behind it shows through, and repaint the rows,
+            // whose fill is their own rather than the scroll view's. Without the
+            // pair this screen draws a cool grey list above a cream footer.
+            .scrollContentBackground(.hidden)
 
             exportFooter
         }
