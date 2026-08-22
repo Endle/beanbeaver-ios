@@ -60,32 +60,89 @@ what `scripts/host-e2e.sh` drives, and CI type-checks it (`cargo check --bin
 batch_e2e`) so a core bump here can't silently break Android's CI, which actually
 runs it.
 
-## The tab shell, and what floats over what
+## The app opts out of iOS 26's design language
 
-Home · Scan · Settings, in a real `TabView`. Three things about it are not
-obvious from the code:
+**`UIDesignRequiresCompatibility` is `true`** in `BeanBeaver/BeanBeaver/Info.plist`,
+which makes the whole app render with the pre-iOS-26 look. It is there for one
+reason: the tab bar.
+
+The design calls for a **flat, full-width, opaque bar flush to the screen edge**
+with a raised Scan circle sitting on it. On iOS 26 the system tab bar is a
+floating inset glass capsule, and it is not configurable — this was established
+by screenshot, not by reading documentation:
+
+| Attempt | Result under iOS 26 |
+|---|---|
+| `UITabBarAppearance` + `configureWithOpaqueBackground` + `backgroundColor` | **pixel-identical output**, silently ignored |
+| `UITabBar.appearance().unselectedItemTintColor` | ignored; the unselected item stays near-black instead of the design's grey |
+| the flag | flat full-width bar, outlined icons, grey unselected item, no selection pill |
+
+So there were three options: accept iOS 26's capsule and the four visual
+differences it brings; hand-roll a bar and lose `TabView`'s accessibility,
+selection semantics and safe-area handling; or set the flag. The flag was chosen
+because it keeps the real `TabView` and every platform behaviour with it.
+
+**Two things follow, and both are load-bearing.**
+
+**1. The flag and `TabBarAppearance` are a pair.** The flag restores the flat bar
+*and* restores the appearance proxy's authority over it. The flag alone gives a
+correctly-shaped bar with **no fill at all**, transparent over the canvas with
+nothing separating it from the content — which looks like a bug and is easy to
+misdiagnose as a palette problem. `TabBarAppearance.apply()` (called from
+`BeanBeaverApp.init`, before any window exists) is what paints it.
+
+**2. This flag has an expiry date.** Apple ships it as a transitional aid for
+apps that need a release cycle to adapt, and documents it as going away in a
+future SDK. When it does, the app will silently start rendering with iOS 26's
+design — nothing errors, nothing fails to build. What breaks, in order:
+
+- the tab bar becomes a floating capsule and `RootTabBarAction`'s 15pt offset no
+  longer fits it;
+- `TabBarAppearance` becomes inert, so the bar loses the receipt palette;
+- **`BBLayout.scanButtonClearance` becomes wrong by ~59pt.** The floating bar is
+  *not* in the safe area and covers what is beneath it, so 24pt of clearance
+  leaves the privacy footnote and both pinned export footers underneath the
+  glass. It was 83pt for exactly that reason before the flag.
+
+If a build ever comes back looking like the screenshots in the redesign PR
+(#79) rather than the design, check this flag first.
+
+## The tab shell
+
+Home · Scan · Settings, in a real `TabView`. Three things are not obvious from
+the code:
 
 - **Scan is an action wearing a tab item.** Selecting it opens the document
   camera and leaves you on the tab you were already on — see
   `ContentView.tabSelection`. So there is no scan screen to restore, and
   Spending, Receipts and Import stay pushes *inside* Home rather than becoming
-  tabs of their own.
+  tabs of their own. Its tab item is a **label with no icon**: the raised circle
+  covers that slot, and `camera.viewfinder`'s lower brackets poked out from under
+  it, which reads as a rendering fault.
 - **The raised Scan circle is drawn, not configured.** `UITabBar` has no raised
   centre item, so `RootTabBarAction` overlays one on the middle slot. The tab
-  item underneath stays live and does the same thing, so a future iOS moving the
-  bar's metrics mispositions a circle over a control that still works. Its
-  offset is tuned against iOS 26's floating capsule bar; check it on a redesign.
-- **The bar floats over content instead of shortening it**, so nothing is inset
-  automatically. Every screen in the Home tab pads its own bottom by
-  `BBLayout.tabBarInset` — scroll views at the end of their content, pinned
-  export footers at the end of their stack. Without it the last row and the
-  footer button land under the glass, and the raised circle covers the button.
+  item underneath stays live and does the same thing, so a metrics change
+  mispositions a circle over a control that still works rather than breaking
+  navigation.
+- **Only the raised button needs bottom clearance, not the bar.** The bar is in
+  the safe area, so the platform already stops content above it; the circle,
+  drawn over the bar, is what a pinned export footer collides with. That is all
+  `BBLayout.scanButtonClearance` is for — see the flag section above for what it
+  has to become if the flag goes.
 
 **The scan result is a full-screen modal over the whole shell**, bound to "the
 pipeline is not idle" so scanning, failure and result are one presentation
 rather than three. `Done` is withheld while scanning: `ReceiptPipeline.reset()`
 clears the status but does not cancel the running task, so dismissing mid-scan
 would have the finished result present itself again a second later.
+
+**`Info.plist` is a partial, merged with the generated one.** The target keeps
+`GENERATE_INFOPLIST_FILE = YES`; the checked-in file supplies only the keys the
+`INFOPLIST_KEY_*` mechanism will not accept, and Xcode merges the generated keys
+on top. Verified rather than assumed — the built `Info.plist` carries the flag
+*and* `NSCameraUsageDescription`, `NSPhotoLibraryAddUsageDescription`,
+`UILaunchStoryboardName` and the rest. If that merge ever stopped happening the
+app would lose its camera usage description and die on the first scan.
 
 ## The warm palette is light-mode only, on purpose
 

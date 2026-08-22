@@ -31,7 +31,9 @@ enum RootTab: Hashable {
 ///
 /// So the failure mode is mild by construction. If the bar's own metrics move
 /// under a future iOS, the circle is mispositioned over a tab item that still
-/// works, rather than the navigation being broken.
+/// works, rather than the navigation being broken. **Dropping the compatibility
+/// flag is exactly that kind of move** — iOS 26's own bar is a floating capsule
+/// inset from the edges, and this offset does not fit it.
 struct RootTabBarAction: View {
     var action: () -> Void
 
@@ -57,9 +59,13 @@ struct RootTabBarAction: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Scan a receipt")
-        // Bottom-aligned in the TabView, then lifted clear of the bar. The tab
-        // item's own label stays visible below the circle, which is what keeps
-        // it recognisable as a tab rather than a floating action button.
+        // Bottom-aligned in the TabView, then lifted so roughly a third of the
+        // circle clears the bar's top edge. The tab item's own label stays
+        // visible below it, which is what keeps this recognisable as a tab
+        // rather than a floating action button.
+        //
+        // Measured against the flat bar the compatibility flag restores: the
+        // circle sits 15pt proud of a 49pt bar, against the design's 16pt.
         .padding(.bottom, 15)
         // The tab item underneath handles taps that miss the circle, so nothing
         // here needs to swallow them.
@@ -69,13 +75,49 @@ struct RootTabBarAction: View {
 
 /// Layout facts about the tab shell that the screens inside it need.
 enum BBLayout {
-    /// How far above the bottom edge a screen's content must stop.
+    /// Extra bottom clearance for content inside the Home tab.
     ///
-    /// **The tab bar floats over the content rather than shortening it**, so
-    /// nothing is inset automatically: a scroll view's last element and a
-    /// bottom-pinned footer both land under the glass without this. The figure
-    /// covers the bar *and* the raised Scan button above it, which reaches
-    /// higher than the bar does and is what a pinned export footer actually
-    /// collides with.
-    static let tabBarInset: CGFloat = 83
+    /// **Only the raised button needs clearing, not the bar.** The bar is an
+    /// ordinary opaque tab bar (see `TabBarAppearance` and the compatibility
+    /// flag), so it is part of the safe area and every screen already stops
+    /// above it — the platform does that. What the platform knows nothing about
+    /// is `RootTabBarAction`, which is drawn *over* the bar and reaches ~15pt
+    /// past its top edge. Without this a pinned export footer sits neatly on the
+    /// bar and is then covered by the red circle.
+    ///
+    /// This was 83pt while the app rendered with iOS 26's floating glass bar,
+    /// which is **not** in the safe area and covers whatever is beneath it. If
+    /// the compatibility flag is ever dropped, this has to go back up — see the
+    /// CLAUDE.md section on the flag.
+    static let scanButtonClearance: CGFloat = 24
+}
+
+/// Paints the tab bar in the receipt palette.
+///
+/// # This only works because of `UIDesignRequiresCompatibility`
+///
+/// Under iOS 26's own design language the tab bar is a floating glass capsule
+/// and **every one of these settings is silently ignored** — verified by
+/// screenshot, not by reading docs: an opaque cream background, a custom shadow
+/// colour and `unselectedItemTintColor` all produced a pixel-identical bar. The
+/// compatibility flag restores the flat full-width bar *and* restores the
+/// appearance proxy's authority over it. The two are a pair: the flag alone
+/// gives a correctly-shaped bar with no fill at all, sitting transparent over
+/// the canvas with nothing separating it from the content.
+///
+/// So if the flag ever goes away, this stops having any effect at the same
+/// moment — it does not become wrong, it becomes inert. Which is the good
+/// failure mode, but it does mean this file cannot be used to check whether the
+/// flag is still doing anything.
+enum TabBarAppearance {
+    static func apply() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        // Card, not canvas: the bar reads as a surface laid over the page, the
+        // same way every card on the screen does.
+        appearance.backgroundColor = UIColor(Color.bbCardFill)
+        appearance.shadowColor = UIColor(Color.bbHairline)
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
 }

@@ -251,7 +251,7 @@ struct BatchImportView: View {
         }
         .padding(.horizontal)
         .padding(.top, 12)
-        .padding(.bottom, BBLayout.tabBarInset)
+        .padding(.bottom, BBLayout.scanButtonClearance)
         .background(Color.bbCanvas)
         .overlay(alignment: .top) {
             Rectangle().fill(Color.bbHairline).frame(height: 1)

@@ -116,9 +116,9 @@ struct SpendingView: View {
                 footerSection
             }
             .padding(.horizontal, 16)
-            // Clears the tab bar, which floats over this content rather than
-            // shortening it. Same inset Home uses.
-            .padding(.bottom, BBLayout.tabBarInset)
+            // Same clearance Home uses, and for the same reason: the bar is in
+            // the safe area, the raised button is not.
+            .padding(.bottom, BBLayout.scanButtonClearance)
         }
         .background(Color.bbCanvas)
     }

@@ -57,10 +57,9 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
-                // Clears the tab bar. The bar floats over the content rather
-                // than shortening it, so nothing insets this automatically and
-                // the footnote lands underneath the glass without it.
-                .padding(.bottom, BBLayout.tabBarInset)
+                // The bar itself is in the safe area, so this only has to keep
+                // the footnote out from under the raised Scan button.
+                .padding(.bottom, BBLayout.scanButtonClearance)
                 .frame(minHeight: proxy.size.height, alignment: .top)
             }
             .scrollBounceBehavior(.basedOnSize)
