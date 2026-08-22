@@ -1,0 +1,19 @@
+BeanBeaver turns a photo of a receipt into a Beancount transaction — entirely on your phone.
+
+Snap a receipt with the camera (or pick one from your photo library) and BeanBeaver reads it with on-device text recognition, then works out the merchant, date, line items, and total, sorting each item into an expense category. The result is a plain-text Beancount transaction, ready to copy, share, or sync.
+
+PRIVATE BY DESIGN
+• Scanning, parsing, and categorizing all happen on your device — it works in airplane mode.
+• No account, no analytics, no ads, no server.
+• Nothing leaves your phone unless you explicitly send it somewhere.
+
+MADE FOR PLAIN-TEXT ACCOUNTING
+• Output is standard Beancount syntax, itemized posting by posting.
+• Optional GitHub sync: connect one repository of your choice, and each scan can open a pull request with the transaction, the receipt photo, and a JSON details file. Your ledger stays yours.
+
+OPEN SOURCE
+The app and its parsing engine are MIT-licensed:
+https://github.com/Endle/beanbeaver-ios
+https://github.com/Endle/beanbeaver-core
+
+Privacy policy: https://github.com/Endle/beanbeaver-ios/blob/main/PRIVACY.md

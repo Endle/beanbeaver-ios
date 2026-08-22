@@ -1,8 +1,18 @@
 # BeanBeaver iOS
 
-On-device receipt scanner: pick a photo → PP-OCRv5 OCR + parse + categorize →
-beancount, all in Rust via a UniFFI seam. The app links **one** Rust library,
-`bb-mobile-ffi` from
+BeanBeaver turns a photo of a receipt into a Beancount transaction — entirely on
+your phone. Scanning, parsing and categorizing all run on-device: no account, no
+server, works in airplane mode. The full App Store copy is in
+[`docs/store-description.txt`](docs/store-description.txt).
+
+Licensed MIT (`LICENSE`); third-party components are credited in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Privacy policy:
+[`PRIVACY.md`](PRIVACY.md).
+
+## How it's built
+
+Pick a photo → PP-OCRv5 OCR + parse + categorize → beancount, all in Rust via a
+UniFFI seam. The app links **one** Rust library, `bb-mobile-ffi` from
 [`beanbeaver-mobile-util`](https://github.com/Endle/beanbeaver-mobile-util),
 which carries two things inside it: the parse core (`bb-receipt-ffi` and
 friends, from [`beanbeaver-core`](https://github.com/Endle/beanbeaver-core)) and
@@ -10,10 +20,6 @@ friends, from [`beanbeaver-core`](https://github.com/Endle/beanbeaver-core)) and
 [`beanbeaver-android`](https://github.com/Endle/beanbeaver-android). Both are
 pinned git dependencies (see `Cargo.toml`). Background on the
 original port plan is in `docs/ios_port.md` in the `beanbeaver` (desktop) repo.
-
-Licensed MIT (`LICENSE`); third-party components are credited in
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Privacy policy:
-[`PRIVACY.md`](PRIVACY.md).
 
 ## Layout
 
