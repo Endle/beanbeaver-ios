@@ -184,7 +184,7 @@ struct SpendingView: View {
 
     // MARK: - Header slip
 
-    /// This month's unfiled receipts — the same `isExported` split the Receipts
+    /// This month's un-exported receipts — the same `isExported` split the Receipts
     /// screen's dots and chips draw, scoped to the month on screen.
     private var monthBacklog: Int {
         summary.records.filter { !$0.isExported }.count
@@ -218,9 +218,15 @@ struct SpendingView: View {
     /// One line under the total: what it averages per day, and the month's
     /// backlog if it has one.
     ///
-    /// The backlog half is the tap target rather than inert text — "13 unfiled"
-    /// is the most natural thing to reach for when you want to see which ones,
-    /// and it is the only place on this screen that says so.
+    /// The backlog half is the tap target rather than inert text — "13 not
+    /// exported" is the most natural thing to reach for when you want to see
+    /// which ones, and it is the only place on this screen that says so.
+    ///
+    /// Worded "not exported", as every other surface that names this state
+    /// words it — the row dots (`ExportStatus.label`), the detail card's "Not
+    /// exported yet", the Receipts chip this link leads to. This screen and
+    /// that chip both used to say "unfiled", which read as a second concept
+    /// rather than the same one when the link put them one tap apart.
     @ViewBuilder
     private var metaLine: some View {
         let facts = SpendSummary.facts(activeMonthID, from: store.records)
@@ -238,7 +244,7 @@ struct SpendingView: View {
                 } label: {
                     HStack(spacing: 5) {
                         ExportStatusDot(status: .notExported, size: 7)
-                        Text("\(monthBacklog) unfiled")
+                        Text("\(monthBacklog) not exported")
                         Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
                     }
                     .contentShape(.rect)
