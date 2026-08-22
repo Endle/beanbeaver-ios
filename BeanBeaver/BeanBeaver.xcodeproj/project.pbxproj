@@ -376,6 +376,7 @@
 				DEVELOPMENT_TEAM = VY23WMQ888;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BeanBeaver/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scan receipts with the camera.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save scanned receipts to your photo library.";
@@ -403,6 +404,7 @@
 				DEVELOPMENT_TEAM = VY23WMQ888;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BeanBeaver/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scan receipts with the camera.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save scanned receipts to your photo library.";

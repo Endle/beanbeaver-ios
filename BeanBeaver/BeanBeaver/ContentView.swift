@@ -136,9 +136,15 @@ struct ContentView: View {
             // Never actually shown — `tabSelection` turns a tap here into the
             // camera. It exists so the platform lays out three slots and puts
             // the middle one under the raised button.
+            //
+            // **Label only, no icon.** The raised circle covers this slot's
+            // glyph, and `camera.viewfinder` is wide enough that its lower
+            // brackets poked out from under the circle — which reads as a
+            // rendering fault, not a design. With no image the platform centres
+            // the word under the circle, which is where the design puts it.
             Color.bbCanvas
                 .ignoresSafeArea()
-                .tabItem { Label("Scan", systemImage: "camera.viewfinder") }
+                .tabItem { Text("Scan") }
                 .tag(RootTab.scan)
 
             SettingsView(exporter: exporter, showsDone: false) {
