@@ -39,14 +39,14 @@ struct ReceiptsView: View {
     private enum Filter: Hashable {
         case all
         case month(String)
-        case unfiled
+        case notExported
         case merchant(String)
 
         func matches(_ record: SpendRecord) -> Bool {
             switch self {
             case .all: return true
             case .month(let id): return SpendSummary.monthId(for: record) == id
-            case .unfiled: return !record.isExported
+            case .notExported: return !record.isExported
             case .merchant(let name): return record.result.merchant == name
             }
         }
@@ -179,7 +179,7 @@ struct ReceiptsView: View {
 
             Group {
                 if records.isEmpty {
-                    // Only `Unfiled` can empty the list now — a month or a
+                    // Only `Not exported` can empty the list now — a month or a
                     // merchant chip only exists because it has receipts in it.
                     ContentUnavailableView {
                         Label("Nothing to Export", systemImage: "checkmark.circle")
@@ -244,9 +244,11 @@ struct ReceiptsView: View {
 
     /// Time and place first, with the one retained export filter second.
     ///
-    /// `Unfiled` sits in position two deliberately: it is the chip with an
-    /// action behind it, and last in a scrolling row is where a chip gets
-    /// clipped by the fade and goes unseen.
+    /// `Not exported` sits in position two deliberately: it is the chip with
+    /// an action behind it, and last in a scrolling row is where a chip gets
+    /// clipped by the fade and goes unseen. It is worded exactly as the row
+    /// dots and Spending's meta line word it — one state, one phrase, wherever
+    /// it is named.
     ///
     /// **`All` leads, and is shown even when nothing is scoped** — it is the way
     /// back out of every other chip. The unscoped list opens on the newest month
@@ -262,7 +264,7 @@ struct ReceiptsView: View {
                     chip(.month(newest.id), label: newest.label, count: newest.count,
                          status: nil)
                 }
-                chip(.unfiled, label: "Unfiled", count: backlog.count,
+                chip(.notExported, label: "Not exported", count: backlog.count,
                      status: .notExported)
                 ForEach(monthChips.dropFirst(), id: \.id) { month in
                     chip(.month(month.id), label: month.label, count: month.count,
@@ -395,7 +397,7 @@ struct ReceiptsView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    /// One tap to file everything unfiled. The bar is present whenever there's a
+    /// One tap to export the whole backlog. The bar is present whenever there's a
     /// backlog and absent the moment there isn't, so it doubles as the answer to
     /// "am I up to date?" — a screen with no bar is a screen with nothing owing.
     private var backlogFooter: some View {
