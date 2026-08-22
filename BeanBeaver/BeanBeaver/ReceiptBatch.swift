@@ -295,7 +295,10 @@ extension ReceiptResult {
     ///
     /// Two clauses, both about things that are actually wrong: a finding the
     /// app ranks as `.attention` (see `WarningSeverity`), or a merchant that is
-    /// only a guess. The third clause used to be
+    /// only a guess. `findings` rather than `warnings`, so the app's own
+    /// findings badge too — a receipt with no date is one, and it reaches every
+    /// list that shows this badge without any of them knowing about dates. The
+    /// third clause used to be
     /// `items.contains { $0.tags.isEmpty }` — this app deciding, on its own,
     /// that an unclassified line meant a bad parse. It reported 83 of 124
     /// corpus receipts, including every receipt carrying a *correctly parsed*
@@ -303,7 +306,7 @@ extension ReceiptResult {
     /// badge that lights on two receipts in three is not a badge, so that
     /// judgment now lives in core as `UncategorizedItem` and is ranked `.info`.
     var needsAttention: Bool {
-        if warnings.contains(where: { $0.severity >= .attention }) { return true }
+        if findings.contains(where: { $0.severity >= .attention }) { return true }
         if case .suggested = merchantMatch.status { return true }
         return false
     }

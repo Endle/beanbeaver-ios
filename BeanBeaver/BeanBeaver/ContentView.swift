@@ -1100,7 +1100,7 @@ struct ReceiptCard: View {
                 }
             }
 
-            if !result.warnings.worthShowing.isEmpty {
+            if !result.findings.isEmpty {
                 warningsBanner
             }
 
@@ -1282,17 +1282,21 @@ struct ReceiptCard: View {
     /// possible missed item shouldn't wear the same red as one that cannot
     /// balance. `.info` findings never reach here: an uncategorized line is
     /// already labelled "Uncategorized" on its own row.
+    ///
+    /// `result.findings`, not `result.warnings`: a missing date is the app's
+    /// own finding rather than one of core's, and it is the only thing saying
+    /// so — the header's subheadline simply omits a date it hasn't got.
     private var warningsBanner: some View {
-        let shown = result.warnings.worthShowing
+        let shown = result.findings
         let top = shown.highestSeverity ?? .notice
         return VStack(alignment: .leading, spacing: 6) {
             Label(top == .attention ? "Heads up" : "Worth a look", systemImage: top.symbol)
                 .font(.subheadline.bold())
                 .foregroundStyle(top.tint)
-            ForEach(Array(shown.enumerated()), id: \.offset) { _, warning in
-                Text(warning.message)
+            ForEach(Array(shown.enumerated()), id: \.offset) { _, finding in
+                Text(finding.message)
                     .font(.caption)
-                    .foregroundStyle(warning.severity.tint)
+                    .foregroundStyle(finding.severity.tint)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
