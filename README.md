@@ -1,87 +1,25 @@
-# BeanBeaver iOS
+# BeanBeaver iOS - Scan Receipts, Track Spending
 
-BeanBeaver turns a photo of a receipt into a Beancount transaction — entirely on
-your phone. Scanning, parsing and categorizing all run on-device: no account, no
-server, works in airplane mode. The full App Store copy is in
-[`docs/store-description.txt`](docs/store-description.txt).
+BeanBeaver turns a photo of a receipt into an itemized Beancount transaction — entirely on
+your phone.
 
-Licensed MIT (`LICENSE`); third-party components are credited in
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Privacy policy:
-[`PRIVACY.md`](PRIVACY.md).
 
-## How it's built
+## Parsing Grocery Receipts
+Snap a receipt with the camera (or pick one from your photo library). BeanBeaver reads it with on-device text recognition, then extracts the merchant, date, line items, and total cost. The result is a plain-text transaction, ready to copy, share, or export to Beancount.
 
-Pick a photo → PP-OCRv5 OCR + parse + categorize → beancount, all in Rust via a
-UniFFI seam. The app links **one** Rust library, `bb-mobile-ffi` from
-[`beanbeaver-mobile-util`](https://github.com/Endle/beanbeaver-mobile-util),
-which carries two things inside it: the parse core (`bb-receipt-ffi` and
-friends, from [`beanbeaver-core`](https://github.com/Endle/beanbeaver-core)) and
-`spend-core`, the spend/budget arithmetic shared with
-[`beanbeaver-android`](https://github.com/Endle/beanbeaver-android). Both are
-pinned git dependencies (see `Cargo.toml`). Background on the
-original port plan is in `docs/ios_port.md` in the `beanbeaver` (desktop) repo.
 
-## Layout
+## Spending Tracking
+Your spending breaks down to actual categories (Dairy $30, Meat $50, Drink $40, Fruit $30), instead of one lump sum record (Costco $100, T&T $50). BeanBeaver also provides monthly summary and weekly trends for each category, helps you plan your grocery trips.
 
-```
-BBReceiptKit/                 local SPM package wrapping the Rust core
-  Package.swift               binaryTarget(xcframework) + Swift target
-  Sources/BBReceiptKit/
-    ReceiptScanner.swift      committed conveniences over the FFI
-    Generated/…               ⚙️ generated UniFFI Swift glue (git-ignored)
-  Frameworks/
-    BBReceiptFFI.xcframework  ⚙️ built (device + sim slices, git-ignored)
-BeanBeaver/                the SwiftUI app
-  BeanBeaver.xcodeproj
-  BeanBeaver/              App / ContentView / ReceiptPipeline
-models/                        PP-OCRv5 .onnx weights, bundled as app resources
-shared/                        submodule: Endle/beanbeaver-mobile-util
-  scripts/compare-e2e.py       ← shared with beanbeaver-android
-  src/bin/batch_e2e.rs
-  src/bin/uniffi-bindgen.rs
-```
 
-⚙️ = produced by `build-xcframework.sh`; not committed.
+## Privacy is Top Priority
+BeanBeaver uses an on-device OCR model. Scanning, parsing, and categorizing all happen on your device. There is no account registration, no analytics, no user profiling or fingerprinting, and no cloud server. Everything stays on your phone unless you explicitly export it somewhere.
 
-## Build steps
+## Open Source Project
+The app and its parsing engine are MIT-licensed:
 
-```bash
-# 0. Clone with --recurse-submodules, or: git submodule update --init
-#    Without shared/, step 1 fails on a missing [[bin]] path.
+https://github.com/Endle/beanbeaver-ios
+https://github.com/Endle/beanbeaver-core
 
-# 1. Build the Rust core into the SPM package (xcframework + Swift glue).
-#    models/ is already populated in this repo.
-./build-xcframework.sh                     # PROFILE=debug for faster iteration
-
-# 2. One-time: install the iOS platform/simulator runtime (~7 GB).
-xcodebuild -downloadPlatform iOS
-
-# 3. Build the app for the simulator.
-cd BeanBeaver
-xcodebuild -scheme BeanBeaver -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 16' build
-```
-
-Or just open `BeanBeaver.xcodeproj` in Xcode and run.
-
-## Iterating on the UI
-
-- **In Xcode:** `ContentView.swift` ships `#Preview` blocks (DEBUG-only) for the
-  result view (full / minimal) and the whole screen in every state
-  (idle / scanning / done / failed), backed by mock `ReceiptResult`s — no OCR
-  needed. `ReceiptPipeline.preview(_:)` pins a status; `ContentView(previewPipeline:)`
-  injects it. Edit a view and the canvas updates live.
-- **Headless screenshot:** `sim-shot.sh` builds, installs, launches on the
-  booted simulator, and writes a PNG (add `--sample` for a real on-device OCR
-  run via `-autoRunSample`). Previews render only in Xcode's canvas, so this is
-  the way to capture the running app from the command line.
-
-## Notes
-
-- The 3 `.onnx` models are bundled as app resources (referenced from
-  `../models/`) and loaded via `OcrSession.load(modelsDirectory:)` using
-  `Bundle.main.resourceURL`.
-- The xcframework's simulator slice is **arm64-only** (Apple-Silicon Macs). Set
-  `INCLUDE_X86_SIM=1` on the build script to add an Intel-sim slice.
-- `SWIFT_VERSION = 5.0` deliberately: avoids Swift 6 strict-concurrency errors
-  on the UniFFI object passed across `Task.detached`.
+Third-party open source dependencies are credited in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
