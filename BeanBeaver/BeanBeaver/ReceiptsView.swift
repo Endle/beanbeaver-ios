@@ -190,9 +190,17 @@ struct ReceiptsView: View {
                     List(selection: $selection) {
                         ForEach(records) { record in
                             row(record)
+                                .listRowBackground(Color.bbCardFill)
                         }
                     }
                     .listStyle(.insetGrouped)
+                    // The List keeps its own structure — inset groups, swipe
+                    // actions, edit-mode selection — and only its ground
+                    // changes. Hiding the scroll background lets the warm canvas
+                    // behind it through; the rows are repainted individually
+                    // because a List row's fill is its own, not the scroll
+                    // view's.
+                    .scrollContentBackground(.hidden)
                 }
             }
 
@@ -202,7 +210,7 @@ struct ReceiptsView: View {
                 backlogFooter
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color.bbCanvas)
     }
 
     /// Months present in the list, newest first, each with its receipt count.
@@ -272,7 +280,13 @@ struct ReceiptsView: View {
             .padding(.vertical, 10)
         }
         .scrollIndicators(.hidden)
-        .background(.bar)
+        // The canvas rather than `.bar`: a system material here is a cool grey
+        // band across a warm screen, and the row is part of the page, not a
+        // toolbar over it. The hairline is what separates it from the list.
+        .background(Color.bbCanvas)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.bbHairline).frame(height: 1)
+        }
     }
 
     private func chip(_ value: Filter, label: String, count: Int,
@@ -293,10 +307,9 @@ struct ReceiptsView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .background(selected ? AnyShapeStyle(Color.bbAccent)
-                                 : AnyShapeStyle(.quaternary),
+            .background(selected ? Color.bbAccent : Color.bbInk.opacity(0.07),
                         in: Capsule())
-            .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            .foregroundStyle(selected ? Color.white : Color.bbInk)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
@@ -399,8 +412,12 @@ struct ReceiptsView: View {
         .controlSize(.large)
         .allowsHitTesting(exporter.runningKind == nil)
         .padding(.horizontal)
-        .padding(.vertical, 12)
-        .background(.bar)
+        .padding(.top, 12)
+        .padding(.bottom, BBLayout.tabBarInset)
+        .background(Color.bbCanvas)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.bbHairline).frame(height: 1)
+        }
     }
 
     private var backlogLabel: String {
@@ -446,8 +463,12 @@ struct ReceiptsView: View {
             .allowsHitTesting(exporter.runningKind == nil)
         }
         .padding(.horizontal)
-        .padding(.vertical, 12)
-        .background(.bar)
+        .padding(.top, 12)
+        .padding(.bottom, BBLayout.tabBarInset)
+        .background(Color.bbCanvas)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.bbHairline).frame(height: 1)
+        }
     }
 
     /// Delete the selection, then leave the user somewhere sensible: selection

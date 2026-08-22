@@ -10,6 +10,9 @@ struct ContentView: View {
     /// the home button can show what's still waiting.
     @State private var batch = ReceiptBatch()
     @State private var showScanner = false
+    /// Which tab is showing. `Scan` is never one of these for longer than a tap
+    /// — see `tabSelection`.
+    @State private var tab: RootTab = .home
     /// Also opened by the `-showBatchImport` DEBUG deep-link.
     @State private var showBatchImport = false
     /// Also opened by the `-showSpending` DEBUG deep-link.
@@ -17,7 +20,6 @@ struct ContentView: View {
     /// Also opened by the `-showReceipts` DEBUG deep-link.
     @State private var showReceipts = false
     @State private var showOriginReceipt = false
-    @State private var showSettings = false
     /// Also opened by the `-showLedgerSettings` DEBUG deep-link, so it can be
     /// screenshotted headlessly (previews render only in Xcode).
     @State private var showLedgerSettings = false
@@ -57,6 +59,11 @@ struct ContentView: View {
         return nil
     }
 
+    private var isScanning: Bool {
+        if case .scanning = pipeline.status { return true }
+        return false
+    }
+
     /// Build the Money Manager `.xlsx` for `results` and present its share sheet.
     /// A failure here is a rare temp-file write error and non-fatal — captured for
     /// support rather than surfaced, matching the ledger exporter's error handling.
@@ -74,14 +81,161 @@ struct ContentView: View {
         }
     }
 
+    /// Whether the scan pipeline has anything to show. Drives the result
+    /// modal, which covers the tab bar: a scan result is the outcome of an
+    /// action, not a place you navigate to.
+    private var pipelineIsActive: Bool {
+        if case .idle = pipeline.status { return false }
+        return true
+    }
+
+    /// Tab selection, with `Scan` intercepted.
+    ///
+    /// Scan is an **action wearing a tab item**: tapping it opens the camera and
+    /// leaves you on the tab you were already on, so there is no empty "Scan
+    /// screen" to come back to and no state to restore. The raised button in
+    /// `RootTabBarAction` does the same thing; both go through here so they
+    /// cannot drift.
+    private var tabSelection: Binding<RootTab> {
+        Binding(get: { tab },
+                set: { selected in
+                    if selected == .scan {
+                        showScanner = true
+                    } else {
+                        tab = selected
+                    }
+                })
+    }
+
     var body: some View {
+        TabView(selection: tabSelection) {
+            NavigationStack {
+                HomeView(batch: batch,
+                         exporter: exporter,
+                         onOpenSpending: { showSpending = true },
+                         onOpenReceipts: { showReceipts = true },
+                         onOpenImport: { showBatchImport = true },
+                         onOpenSync: { showLedgerSettings = true },
+                         onScan: VNDocumentCameraViewController.isSupported
+                             ? { showScanner = true } : nil)
+                    .navigationDestination(isPresented: $showBatchImport) {
+                        BatchImportView(batch: batch, exporter: exporter,
+                                        onConfigure: { showLedgerSettings = true })
+                    }
+                    .navigationDestination(isPresented: $showSpending) {
+                        SpendingView(onScan: { showScanner = true }, exporter: exporter,
+                                     onConfigure: { showLedgerSettings = true })
+                    }
+                    .navigationDestination(isPresented: $showReceipts) {
+                        ReceiptsView(exporter: exporter, onConfigure: { showLedgerSettings = true })
+                    }
+            }
+            .tabItem { Label("Home", systemImage: "house") }
+            .tag(RootTab.home)
+
+            // Never actually shown — `tabSelection` turns a tap here into the
+            // camera. It exists so the platform lays out three slots and puts
+            // the middle one under the raised button.
+            Color.bbCanvas
+                .ignoresSafeArea()
+                .tabItem { Label("Scan", systemImage: "camera.viewfinder") }
+                .tag(RootTab.scan)
+
+            SettingsView(exporter: exporter, showsDone: false) {
+                Task { await pipeline.scanBundledSample(named: sampleName) }
+            }
+            .tabItem { Label("Settings", systemImage: "gearshape") }
+            .tag(RootTab.settings)
+        }
+        .tint(.bbAccent)
+        .overlay(alignment: .bottom) {
+            RootTabBarAction { showScanner = true }
+        }
+        .fullScreenCover(isPresented: $showScanner) {
+            ScannerWithHint(
+                onScan: { data in
+                    Task { await pipeline.scan(imageData: data) }
+                },
+                onFinish: { showScanner = false }
+            )
+            .ignoresSafeArea()
+        }
+        // The scan result, over the tab bar. Dismissing it *is* resetting the
+        // pipeline — one piece of state, so a swipe-down and a `Done` tap can't
+        // leave the app showing a result it thinks it has already cleared.
+        .fullScreenCover(isPresented: Binding(
+            get: { pipelineIsActive },
+            set: { if !$0 { pipeline.reset() } }
+        )) {
+            scanOutcome
+                // Same reason the Done button is withheld: an interactive
+                // dismissal mid-scan would leave the finished result to present
+                // itself unbidden.
+                .interactiveDismissDisabled(isScanning)
+        }
+        .sheet(isPresented: $showOriginReceipt) {
+            OriginReceiptView(imageURL: pipeline.capturedImageURL)
+        }
+        .sheet(isPresented: $showLedgerSettings) {
+            NavigationStack { LedgerSettingsView(exporter: exporter) }
+        }
+        .sheet(isPresented: $showJSONPreview) {
+            if let result = doneResult {
+                ReceiptJSONView(result: result, wallMs: pipeline.lastWallMs)
+            }
+        }
+        .sheet(item: $moneyManagerShare) { share in
+            ActivityView(items: [share.url])
+        }
+#if DEBUG
+        .sheet(isPresented: $debugShowDataDump) {
+            NavigationStack { DataDumpView() }
+        }
+        .sheet(isPresented: $debugShowPrivacy) {
+            NavigationStack { PrivacyPolicyView() }
+        }
+        .sheet(isPresented: $debugShowDebugInfoList) {
+            NavigationStack { DebugInfoListView() }
+        }
+        .task { await runDebugDeepLinks() }
+#endif
+        // Headless launch-latency probe (process start → first frame); a no-op
+        // unless launched with `-logLaunchTiming`. Not DEBUG-gated so a Release
+        // build can be measured against Debug on a real device.
+        .task { LaunchTiming.recordFirstFrame() }
+        .alert(exporter.result?.title ?? "", isPresented: Binding(
+            get: { exporter.result != nil },
+            set: { if !$0 { exporter.result = nil } }
+        ), presenting: exporter.result) { result in
+            if let url = result.openURL {
+                Button("Open") { openURL(url) }
+            }
+            Button("OK", role: .cancel) {}
+        } message: { result in
+            Text(result.message)
+        }
+    }
+
+    // MARK: - Scan outcome
+
+    /// Everything the pipeline can be showing, in one full-screen modal: the
+    /// progress while it reads, the failure if it can't, and the result if it
+    /// can.
+    ///
+    /// One presentation rather than three, so the transition from "reading" to
+    /// "read" happens *inside* a screen that is already up. Presenting the
+    /// result separately meant a cover dismissing and another appearing on every
+    /// successful scan.
+    @ViewBuilder
+    private var scanOutcome: some View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 20) {
                         switch pipeline.status {
                         case .idle:
-                            homeView
+                            // Unreachable: the cover is bound to "not idle".
+                            EmptyView()
                         case .scanning:
                             scanningView
                         case .failed(let message):
@@ -114,19 +268,26 @@ struct ContentView: View {
 #endif
                 }
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle(isDone ? "" : "BeanBeaver")
+            .background(Color.bbCanvas)
             .navigationBarTitleDisplayMode(.inline)
             .tint(.bbAccent)
             .toolbar {
-                if isDone {
+                // **Not while scanning.** `reset()` clears the status but does
+                // not cancel the running `scan()` task, so a Done tap mid-scan
+                // dismisses this and then has the finished result present itself
+                // again a second later. Withholding the button keeps the old
+                // behaviour exactly — there was no way out of a scan before
+                // either — rather than inventing a cancel path for a step that
+                // takes about two seconds.
+                if !isScanning {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            pipeline.reset()
-                        } label: {
-                            Image(systemName: "house")
-                        }
+                        // "Done", not a house glyph. With a Home tab underneath,
+                        // an icon that means "go home" is claiming to navigate
+                        // where this only dismisses.
+                        Button("Done") { pipeline.reset() }
                     }
+                }
+                if isDone {
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu {
                             Button {
@@ -151,536 +312,142 @@ struct ContentView: View {
                             Image(systemName: "ellipsis.circle")
                         }
                     }
-                } else {
-                    // Settings was a full-width pill in a stack of five, which
-                    // made an app preference look like one of the app's main
-                    // actions. The nav bar is where iOS users look for it, and
-                    // it costs the home screen no vertical space.
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Label("Settings", systemImage: "gearshape")
-                        }
-                    }
                 }
             }
-            .navigationDestination(isPresented: $showBatchImport) {
-                BatchImportView(batch: batch, exporter: exporter,
-                                onConfigure: { showLedgerSettings = true })
-            }
-            .navigationDestination(isPresented: $showSpending) {
-                SpendingView(onScan: { showScanner = true }, exporter: exporter,
-                             onConfigure: { showLedgerSettings = true })
-            }
-            .navigationDestination(isPresented: $showReceipts) {
-                ReceiptsView(exporter: exporter, onConfigure: { showLedgerSettings = true })
-            }
-            .fullScreenCover(isPresented: $showScanner) {
-                ScannerWithHint(
-                    onScan: { data in
-                        Task { await pipeline.scan(imageData: data) }
-                    },
-                    onFinish: { showScanner = false }
-                )
-                .ignoresSafeArea()
-            }
-            .sheet(isPresented: $showOriginReceipt) {
-                OriginReceiptView(imageURL: pipeline.capturedImageURL)
-            }
-            .sheet(isPresented: $showLedgerSettings) {
-                NavigationStack { LedgerSettingsView(exporter: exporter) }
-            }
-            .sheet(isPresented: $showJSONPreview) {
-                if let result = doneResult {
-                    ReceiptJSONView(result: result, wallMs: pipeline.lastWallMs)
-                }
-            }
-            .sheet(item: $moneyManagerShare) { share in
-                ActivityView(items: [share.url])
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView(exporter: exporter) {
-                    Task { await pipeline.scanBundledSample(named: sampleName) }
-                }
-            }
+        }
+    }
+
 #if DEBUG
-            .sheet(isPresented: $debugShowDataDump) {
-                NavigationStack { DataDumpView() }
-            }
-            .sheet(isPresented: $debugShowPrivacy) {
-                NavigationStack { PrivacyPolicyView() }
-            }
-            .sheet(isPresented: $debugShowDebugInfoList) {
-                NavigationStack { DebugInfoListView() }
-            }
-            .task {
-                // Lets `simctl launch … -autoRunSample` exercise the pipeline
-                // headlessly for screenshots/verification.
-                if ProcessInfo.processInfo.arguments.contains("-autoRunSample") {
-                    await pipeline.scanBundledSample(named: sampleName)
-                }
-                // `-showOriginReceipt` (paired with `-autoRunSample`): open the
-                // zoomable receipt-review sheet so a headless run can screenshot
-                // it — the pinch gesture itself still needs a real finger.
-                if ProcessInfo.processInfo.arguments.contains("-showOriginReceipt") {
-                    showOriginReceipt = true
-                }
-                // `-dumpMoneyManager` (paired with `-autoRunSample`): after the
-                // sample scan, write its Money Manager `.xlsx` to Documents so a
-                // headless `simctl` run can pull and validate the real export end
-                // to end — the share sheet can't be driven from a script.
-                if ProcessInfo.processInfo.arguments.contains("-dumpMoneyManager"),
-                   case .done(let result) = pipeline.status,
-                   let src = try? MoneyManagerExport.makeFile(for: [result]) {
-                    let dest = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                        .appendingPathComponent("moneymanager-dump.xlsx")
-                    try? FileManager.default.removeItem(at: dest)
-                    try? FileManager.default.copyItem(at: src, to: dest)
-                    NSLog("[MoneyManager] dumped export to \(dest.path)")
-                }
-                if ProcessInfo.processInfo.arguments.contains("-showLedgerSettings") {
-                    showLedgerSettings = true
-                }
-                if ProcessInfo.processInfo.arguments.contains("-showSettings") {
-                    showSettings = true
-                }
-                if ProcessInfo.processInfo.arguments.contains("-showBatchImport") {
-                    showBatchImport = true
-                }
-                if ProcessInfo.processInfo.arguments.contains("-showSpending") {
-                    showSpending = true
-                }
-                if ProcessInfo.processInfo.arguments.contains("-showReceipts") {
-                    showReceipts = true
-                }
-                if ProcessInfo.processInfo.arguments.contains("-showDataDump") {
-                    debugShowDataDump = true
-                }
-                if ProcessInfo.processInfo.arguments.contains("-showPrivacy") {
-                    debugShowPrivacy = true
-                }
-                if ProcessInfo.processInfo.arguments.contains("-showDebugInfoList") {
-                    debugShowDebugInfoList = true
-                }
-                // `-dumpSpend`: every SpendRecord, so the two explicit states
-                // (photo, export) and the exclusion flag are greppable rather
-                // than eyeballed on a screenshot.
-                if ProcessInfo.processInfo.arguments.contains("-dumpSpend") {
-                    SpendStore.shared.logState("dump")
-                }
-                // `-dumpSpending`: each month's arithmetic, by hand-checkable
-                // line — the same numbers `SpendingView` renders. `tracked`
-                // should land on `receiptTotal`, and every root and leaf is
-                // listed so a category total can be checked against the receipt
-                // it came from.
-                if ProcessInfo.processInfo.arguments.contains("-dumpSpending") {
-                    let records = SpendStore.shared.records
-                    for id in SpendSummary.monthIds(from: records) {
-                        let month = SpendSummary.month(id, from: records)
-                        dumpLine("[Spending] \(month.label) | tracked=\(month.tracked) items=\(month.itemsTotal) "
-                            + "tax=\(month.tax) receiptTotal=\(month.receiptTotal) "
-                            + "receipts=\(month.receiptCount) excluded=\(month.excludedCount) "
-                            + "unreadable=\(month.unreadablePriceCount)")
-                        for group in month.roots {
-                            dumpLine("[Spending]   root \(group.id) \"\(group.label)\"=\(group.amount) "
-                                + "(\(group.itemCount) items)")
-                            for leaf in group.leaves {
-                                dumpLine("[Spending]     leaf \(leaf.label)=\(leaf.amount) (\(leaf.itemCount) items)")
-                                // The drill-down's own query, not a re-derivation:
-                                // these are the rows `CategoryItemsView` lists, so a
-                                // leaf whose entries don't sum to its total is
-                                // greppable rather than only visible by tapping.
-                                // Grouped by receipt the way the screen groups them,
-                                // and the flat sum kept alongside so a grouping that
-                                // dropped or double-counted an item shows up as the
-                                // two numbers disagreeing.
-                                let entries = SpendSummary.items(.leaf(leaf.label), from: month.records)
-                                let sum = entries.reduce(0) { $0 + $1.amount }
-                                dumpLine("[Spending]       items sum=\(sum) count=\(entries.count)")
-                                for group in SpendSummary.receipts(.leaf(leaf.label), from: month.records) {
-                                    let merchant: String = group.record.result.merchant
-                                    let receiptTotal: String = group.receiptTotal.map { "\($0)" } ?? "unparsed"
-                                    let here: Int = group.entries.count
-                                    let onReceipt: Int = group.record.result.items.count
-                                    dumpLine("[Spending]       receipt \(merchant) share=\(group.amount) "
-                                        + "of \(receiptTotal) (\(here) of \(onReceipt) items)")
-                                    for entry in group.entries {
-                                        let description: String = entry.item.description
-                                        dumpLine("[Spending]         · \(description)=\(entry.amount)")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // `-autoRunBatch`: headless E2E over Documents/batch_in/*.jpg → batch_out.json.
-                if BatchRunner.isRequested {
-                    await BatchRunner.run()
-                }
-                // Photo-import batch, headless: `-dumpBatch` logs what came back
-                // off disk (run it alone on a second launch to check a parsed
-                // batch survived), `-seedPhotoBatch <n>` fills one and parses it.
-                if ProcessInfo.processInfo.arguments.contains("-dumpBatch") {
-                    batch.logState("loaded")
-                }
-                if let count = BatchRunner.argValue("-seedPhotoBatch").flatMap(Int.init) {
-                    await batch.seedFromBundledSample(count: count)
-                }
-                if ProcessInfo.processInfo.arguments.contains("-fakeExportProgress") {
-                    Task { await exporter.simulateProgress() }
-                }
-                if ProcessInfo.processInfo.arguments.contains("-discardBatch") {
-                    batch.discardAll()
-                    batch.logState("after discard")
-                }
-            }
-#endif
-            // Headless launch-latency probe (process start → first frame); a no-op
-            // unless launched with `-logLaunchTiming`. Not DEBUG-gated so a Release
-            // build can be measured against Debug on a real device.
-            .task { LaunchTiming.recordFirstFrame() }
-        }
-        // Outside the NavigationStack on purpose. Attached to the stack's content
-        // it anchors to the home screen, so an export started from the pushed batch
-        // page tried to present from a covered view and the confirmation arrived
-        // seconds late — long after the page had reacted to the export finishing.
-        .alert(exporter.result?.title ?? "", isPresented: Binding(
-            get: { exporter.result != nil },
-            set: { if !$0 { exporter.result = nil } }
-        ), presenting: exporter.result) { result in
-            if let url = result.openURL {
-                Button("Open") { openURL(url) }
-            }
-            Button("OK", role: .cancel) {}
-        } message: { result in
-            Text(result.message)
-        }
-    }
-
-    // MARK: - Home
-
-    private var homeView: some View {
-        VStack(spacing: 20) {
-            // The tagline is gone: the trend chart now occupies that vertical
-            // space, and the privacy footnote at the bottom says the same thing
-            // in the place a footnote belongs.
-            spendCard
-            receiptsCard
-
-            // Scan and Import side by side: same OCR job, two sources, so they
-            // belong in one row rather than stacked as equals with Receipts and
-            // Settings. Scan is the only filled button on the screen now, which
-            // is what it should always have been — five same-size pills made
-            // everything equally important, and "Export: GitHub" was a status
-            // readout wearing a button.
-            HStack(spacing: 10) {
-                if VNDocumentCameraViewController.isSupported {
-                    Button {
-                        showScanner = true
-                    } label: {
-                        Label("Scan", systemImage: "camera.viewfinder")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.bbAccent)
-                    .controlSize(.large)
-                }
-
-                // A workspace rather than a picker: importing from the library
-                // means working through a pile, which wants somewhere to come
-                // back to. The camera button beside it stays the one-receipt
-                // path. Driven through `navigationDestination` rather than a
-                // NavigationLink so the `-showBatchImport` DEBUG deep-link can
-                // open it headlessly for screenshots.
-                Button {
-                    showBatchImport = true
-                } label: {
-                    VStack(spacing: 2) {
-                        // Text, not a Label: the icon plus the word didn't fit
-                        // the fixed width below and wrapped "Import" onto two
-                        // lines. Scan keeps its icon — it's the primary action
-                        // and has the room.
-                        Text("Import")
-                            .font(.headline)
-                        if !batch.isEmpty {
-                            Text("\(batch.drafts.count) waiting")
-                                .font(.caption)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                }
-                .buttonStyle(.bordered)
-                .tint(.bbAccent)
-                .controlSize(.large)
-                // Sized on the *button*, not its label: constraining the label
-                // leaves the bordered background to take whatever share the
-                // HStack proposes, which made the secondary action nearly as
-                // wide as the primary one. Dropped when there's no camera, so
-                // Import isn't a narrow button next to empty space.
-                .frame(maxWidth: VNDocumentCameraViewController.isSupported ? 124 : .infinity)
-            }
-
-            exportCaptionRow
-
-            HStack(spacing: 8) {
-                Image(systemName: "lock.shield")
-                Text("Scanned and parsed on your device. Nothing leaves it unless you export.")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 12)
-        }
-        .padding(.top, 28)
-    }
-
-    /// The current month's tracked spend, right on the home screen — the one
-    /// number the app exists to produce, and the way through to `SpendingView`.
-    /// A button labelled "Spending" would hide it behind a tap for no gain.
+    /// Every `-flag` the headless harnesses launch with — screenshots, dumps
+    /// and seeded fixtures. DEBUG only, and one place rather than scattered
+    /// `onAppear`s, so what a flag does is greppable from the flag.
     ///
-    /// Hidden until something has been scanned: a card reading `$0.00` is worse
-    /// than no card, and a new user's first move is the scanner below anyway.
-    /// Which month it shows comes from `SpendSummary.defaultMonthId` — the same
-    /// rule `SpendingView` opens on, so the card can't advertise one month and
-    /// hand you another.
-    @ViewBuilder
-    private var spendCard: some View {
-        if !SpendStore.shared.records.isEmpty {
-            let records = SpendStore.shared.records
-            let month = SpendSummary.month(SpendSummary.defaultMonthId(from: records),
-                                           from: records)
-            // Two sibling buttons, not one nested in the other: an eye laid over
-            // the card's own Button loses the hit test to it, so tapping the eye
-            // pushed Spending instead of unmasking. Side by side, each owns its
-            // taps outright.
-            let trend = SpendSummary.trend(from: records)
-            VStack(alignment: .leading, spacing: 14) {
-                // Two sibling buttons, not one nested in the other: an eye laid
-                // over the card's own Button loses the hit test to it, so
-                // tapping the eye pushed Spending instead of unmasking. Side by
-                // side, each owns its taps outright.
-                // Top-aligned so the eye sits in the card's top-right corner
-                // rather than floating halfway down beside a 40pt figure.
-                HStack(alignment: .top, spacing: 0) {
-                    Button {
-                        showSpending = true
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            // The chevron rides the caption while the trend is
-                            // withheld: the delta row below used to carry the
-                            // only visible "this pushes Spending" affordance,
-                            // and without it the card looks inert.
-                            HStack(spacing: 4) {
-                                Text("\(month.label) · \(month.receiptCount) receipt\(month.receiptCount == 1 ? "" : "s")")
-                                if !SpendSummary.showWeeklyTrend {
-                                    Image(systemName: "chevron.right").font(.caption2)
-                                }
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                            // Grown from 28pt: the app is a spending tracker
-                            // that happens to scan receipts, so this is the
-                            // headline rather than one card among equals. Still
-                            // not accent red — red reads as "alert" on a money
-                            // figure, and the filled Scan button below stays the
-                            // loudest thing on the screen.
-                            Text(amountPrivacy.text(PriceFormat.currency(month.tracked)))
-                                .font(.system(size: 40, weight: .bold))
-                                .foregroundStyle(.primary)
-                                .monospacedDigit()
-
-                            // The rolling figure rides along as a second line
-                            // rather than replacing the month: the month is the
-                            // frame people think in, and 30 days is the truer
-                            // reading early in one.
-                            Text("\(amountPrivacy.text(PriceFormat.currency(trend.rolling))) in the last 30 days")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-
-                    // Always present, not just while masked: it's a toggle now,
-                    // so hiding it after a reveal would strand the user with no
-                    // way back short of Settings.
-                    Button {
-                        amountPrivacy.toggle()
-                    } label: {
-                        Image(systemName: amountPrivacy.hideAmounts ? "eye" : "eye.slash")
-                            .font(.system(size: 18))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(amountPrivacy.hideAmounts ? "Show amounts" : "Hide amounts")
-                }
-
-                // Masking hides the line, not just the numbers: its height
-                // encodes dollars, so a visible line beside a masked figure
-                // would give away exactly what the mask is for.
-                if SpendSummary.showWeeklyTrend {
-                    if amountPrivacy.isMasked {
-                        TrendChart.masked()
-                    } else {
-                        TrendChart(amounts: trend.amounts,
-                                   leadingLabel: "6 wks ago",
-                                   trailingLabel: "this week")
-                    }
-
-                    Divider()
-
-                    Button {
-                        showSpending = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(trendDeltaText(trend))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(trend.isFlat ? Color.secondary : Color.bbAccent)
-                                .monospacedDigit()
-                            Text(trendDeltaCaption(trend))
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                            Spacer(minLength: 4)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                }
+    /// `-showSettings` selects the tab now that Settings is one; the rest are
+    /// unchanged.
+    @MainActor
+    private func runDebugDeepLinks() async {
+            // Lets `simctl launch … -autoRunSample` exercise the pipeline
+            // headlessly for screenshots/verification.
+            if ProcessInfo.processInfo.arguments.contains("-autoRunSample") {
+                await pipeline.scanBundledSample(named: sampleName)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            .padding(.bottom, 16)
-            .bbCard()
-        }
-    }
-
-    /// The delta figure. Rust rounds to cents, so "no change" is an exact test
-    /// rather than an epsilon — and it gets words rather than `↑ $0.00`, which
-    /// is what an unrounded float would otherwise have rendered forever.
-    private func trendDeltaText(_ trend: SpendTrend) -> String {
-        if trend.isFlat { return "No change" }
-        let arrow = trend.delta > 0 ? "↑" : "↓"
-        return "\(arrow) \(amountPrivacy.text(PriceFormat.currency(abs(trend.delta))))"
-    }
-
-    /// What the delta is measured against. Says "so far" because the comparison
-    /// is week-to-date against the same span of last week — a partial week
-    /// against a whole one would read as a fall every Monday.
-    private func trendDeltaCaption(_ trend: SpendTrend) -> String {
-        trend.isFlat ? "vs the same point last week" : "vs last week, so far"
-    }
-
-    /// The way through to the receipt list, and now the only thing this card
-    /// carries.
-    ///
-    /// It used to hold the backlog row and the sync destination too — three rows
-    /// and two pill buttons, which put a ledger chore at the same weight as the
-    /// spending above it. Both moved into `exportCaptionRow`, which is one quiet
-    /// line above the Scan button. Nothing was dropped: the backlog is still
-    /// counted, the export flow is still one tap, and the per-receipt status
-    /// dots in `ReceiptsView` are untouched.
-    @ViewBuilder
-    private var receiptsCard: some View {
-        let store = SpendStore.shared
-        if !store.records.isEmpty {
-            Button {
+            // `-showOriginReceipt` (paired with `-autoRunSample`): open the
+            // zoomable receipt-review sheet so a headless run can screenshot
+            // it — the pinch gesture itself still needs a real finger.
+            if ProcessInfo.processInfo.arguments.contains("-showOriginReceipt") {
+                showOriginReceipt = true
+            }
+            // `-dumpMoneyManager` (paired with `-autoRunSample`): after the
+            // sample scan, write its Money Manager `.xlsx` to Documents so a
+            // headless `simctl` run can pull and validate the real export end
+            // to end — the share sheet can't be driven from a script.
+            if ProcessInfo.processInfo.arguments.contains("-dumpMoneyManager"),
+               case .done(let result) = pipeline.status,
+               let src = try? MoneyManagerExport.makeFile(for: [result]) {
+                let dest = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("moneymanager-dump.xlsx")
+                try? FileManager.default.removeItem(at: dest)
+                try? FileManager.default.copyItem(at: src, to: dest)
+                NSLog("[MoneyManager] dumped export to \(dest.path)")
+            }
+            if ProcessInfo.processInfo.arguments.contains("-showLedgerSettings") {
+                showLedgerSettings = true
+            }
+            if ProcessInfo.processInfo.arguments.contains("-showSettings") {
+                tab = .settings
+            }
+            if ProcessInfo.processInfo.arguments.contains("-showBatchImport") {
+                showBatchImport = true
+            }
+            if ProcessInfo.processInfo.arguments.contains("-showSpending") {
+                showSpending = true
+            }
+            if ProcessInfo.processInfo.arguments.contains("-showReceipts") {
                 showReceipts = true
-            } label: {
-                HStack {
-                    Text("Receipts").font(.headline)
-                    Spacer()
-                    Text("\(store.records.count)").foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .foregroundStyle(.primary)
-                .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-            .bbCard()
-        }
-    }
-
-    /// The whole export card, demoted to one caption row above the Scan button.
-    ///
-    /// The backlog and the sync destination were three rows and two pill
-    /// buttons, which gave a ledger chore equal billing with the spending the
-    /// app is now about. Nothing is removed: the state is still said, the export
-    /// flow is still one tap, and the per-receipt dots in `ReceiptsView` are
-    /// untouched. It is just quiet.
-    ///
-    /// Three states, because the row has to carry the first-run case too — with
-    /// the card gone this is the only route to Sync from home, and setting up a
-    /// ledger before scanning anything is a real first-run order, one an App
-    /// Store reviewer takes.
-    @ViewBuilder
-    private var exportCaptionRow: some View {
-        let store = SpendStore.shared
-        let backlog = store.unexportedRecords.count
-
-        Button {
-            // A backlog wants the receipts in front of you before a batch goes
-            // out; anything else wants the destination page.
-            if backlog > 0 { showReceipts = true } else { showLedgerSettings = true }
-        } label: {
-            HStack(spacing: 8) {
-                if backlog > 0 {
-                    ExportStatusDot(status: .notExported)
-                } else if store.lastExportedAt != nil {
-                    ExportStatusDot(status: .exported)
-                }
-
-                Text(exportCaptionText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-
-                Spacer(minLength: 8)
-
-                Text(backlog > 0 ? "Export" : (exporter.selectedTargetReady ? "Change" : "Set Up"))
-                    .font(.caption)
-                    .foregroundStyle(Color.bbAccent)
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(Color.bbAccent)
+            if ProcessInfo.processInfo.arguments.contains("-showDataDump") {
+                debugShowDataDump = true
             }
-            .padding(.horizontal, 4)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
+            if ProcessInfo.processInfo.arguments.contains("-showPrivacy") {
+                debugShowPrivacy = true
+            }
+            if ProcessInfo.processInfo.arguments.contains("-showDebugInfoList") {
+                debugShowDebugInfoList = true
+            }
+            // `-dumpSpend`: every SpendRecord, so the two explicit states
+            // (photo, export) and the exclusion flag are greppable rather
+            // than eyeballed on a screenshot.
+            if ProcessInfo.processInfo.arguments.contains("-dumpSpend") {
+                SpendStore.shared.logState("dump")
+            }
+            // `-dumpSpending`: each month's arithmetic, by hand-checkable
+            // line — the same numbers `SpendingView` renders. `tracked`
+            // should land on `receiptTotal`, and every root and leaf is
+            // listed so a category total can be checked against the receipt
+            // it came from.
+            if ProcessInfo.processInfo.arguments.contains("-dumpSpending") {
+                let records = SpendStore.shared.records
+                for id in SpendSummary.monthIds(from: records) {
+                    let month = SpendSummary.month(id, from: records)
+                    dumpLine("[Spending] \(month.label) | tracked=\(month.tracked) items=\(month.itemsTotal) "
+                        + "tax=\(month.tax) receiptTotal=\(month.receiptTotal) "
+                        + "receipts=\(month.receiptCount) excluded=\(month.excludedCount) "
+                        + "unreadable=\(month.unreadablePriceCount)")
+                    for group in month.roots {
+                        dumpLine("[Spending]   root \(group.id) \"\(group.label)\"=\(group.amount) "
+                            + "(\(group.itemCount) items)")
+                        for leaf in group.leaves {
+                            dumpLine("[Spending]     leaf \(leaf.label)=\(leaf.amount) (\(leaf.itemCount) items)")
+                            // The drill-down's own query, not a re-derivation:
+                            // these are the rows `CategoryItemsView` lists, so a
+                            // leaf whose entries don't sum to its total is
+                            // greppable rather than only visible by tapping.
+                            // Grouped by receipt the way the screen groups them,
+                            // and the flat sum kept alongside so a grouping that
+                            // dropped or double-counted an item shows up as the
+                            // two numbers disagreeing.
+                            let entries = SpendSummary.items(.leaf(leaf.label), from: month.records)
+                            let sum = entries.reduce(0) { $0 + $1.amount }
+                            dumpLine("[Spending]       items sum=\(sum) count=\(entries.count)")
+                            for group in SpendSummary.receipts(.leaf(leaf.label), from: month.records) {
+                                let merchant: String = group.record.result.merchant
+                                let receiptTotal: String = group.receiptTotal.map { "\($0)" } ?? "unparsed"
+                                let here: Int = group.entries.count
+                                let onReceipt: Int = group.record.result.items.count
+                                dumpLine("[Spending]       receipt \(merchant) share=\(group.amount) "
+                                    + "of \(receiptTotal) (\(here) of \(onReceipt) items)")
+                                for entry in group.entries {
+                                    let description: String = entry.item.description
+                                    dumpLine("[Spending]         · \(description)=\(entry.amount)")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // `-autoRunBatch`: headless E2E over Documents/batch_in/*.jpg → batch_out.json.
+            if BatchRunner.isRequested {
+                await BatchRunner.run()
+            }
+            // Photo-import batch, headless: `-dumpBatch` logs what came back
+            // off disk (run it alone on a second launch to check a parsed
+            // batch survived), `-seedPhotoBatch <n>` fills one and parses it.
+            if ProcessInfo.processInfo.arguments.contains("-dumpBatch") {
+                batch.logState("loaded")
+            }
+            if let count = BatchRunner.argValue("-seedPhotoBatch").flatMap(Int.init) {
+                await batch.seedFromBundledSample(count: count)
+            }
+            if ProcessInfo.processInfo.arguments.contains("-fakeExportProgress") {
+                Task { await exporter.simulateProgress() }
+            }
+            if ProcessInfo.processInfo.arguments.contains("-discardBatch") {
+                batch.discardAll()
+                batch.logState("after discard")
+            }
     }
 
-    /// What the caption row says, in the three states it has to cover.
-    private var exportCaptionText: String {
-        let store = SpendStore.shared
-        let backlog = store.unexportedRecords.count
-        if backlog > 0 {
-            return "\(backlog) receipt\(backlog == 1 ? "" : "s") not yet in your ledger"
-        }
-        if let last = store.lastExportedAt {
-            return "All receipts filed · last export "
-                + last.formatted(date: .abbreviated, time: .omitted)
-        }
-        // Nothing filed and nothing waiting: this is the setup prompt, and the
-        // only one on the screen.
-        return exporter.selectedTargetReady
-            ? "Exports to \(exporter.exportIndicator)"
-            : "No export destination yet"
-    }
-
+#endif
 
     // MARK: - Scanning
 
@@ -914,6 +681,9 @@ struct SettingsView: View {
     }
     /// Only so the promoted Sync group can show its state and push its page.
     var exporter: LedgerExporter
+    /// Whether to draw the modal "Done". False when this is a tab root, where
+    /// there is nothing to dismiss and the button would be a dead control.
+    var showsDone: Bool = true
     var onRunSample: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var spendStore = SpendStore.shared
@@ -1018,8 +788,10 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                if showsDone {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { dismiss() }
+                    }
                 }
             }
 #if DEBUG
@@ -1173,6 +945,90 @@ struct SettingsView: View {
 
 // MARK: - Result card
 
+/// The generated ledger entry and what reconciles it — subtotal, tax, total,
+/// and the beancount posting itself.
+///
+/// **Its own view so the two screens that show it can place it differently.**
+/// `BatchReceiptDetailView` keeps it directly under the receipt, where it is the
+/// reason you opened the row. The scan result puts it *below* its buttons: what
+/// you want immediately after a scan is the next scan or the export, and the
+/// posting is reference material you reach for when a figure looks wrong.
+///
+/// A view rather than a computed property on `ReceiptCard` because the
+/// disclosure owns `@State`. Read off a `ReceiptCard` value that is never
+/// installed in the hierarchy, that state has nowhere to live and the section
+/// closes itself again on the next render.
+struct AccountingDetailsCard: View {
+    let result: ReceiptResult
+    var wallMs: Double?
+    var capturedImageURL: URL?
+    @State private var expandAccounting = false
+
+    private func subtotalRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(PriceFormat.display(value).text).font(.bbMono(13))
+        }
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expandAccounting) {
+            VStack(alignment: .leading, spacing: 12) {
+                if result.subtotal != nil || result.tax != nil {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let subtotal = result.subtotal {
+                            subtotalRow("Subtotal", subtotal)
+                        }
+                        if let tax = result.tax {
+                            subtotalRow("Tax", tax)
+                        }
+                        subtotalRow("Total", result.total)
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+
+                Text(result.beancount)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+
+#if DEBUG
+                ScanTimingsView(timings: result.timings, wallMs: wallMs)
+                if let url = capturedImageURL {
+                    ShareLink(item: url) {
+                        Label("Debug: Export captured image", systemImage: "photo.badge.arrow.down")
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+#endif
+            }
+            .padding(.top, 12)
+        } label: {
+            Label("Accounting details", systemImage: "text.alignleft")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+        }
+        .tint(.secondary)
+        .bbCard()
+        .id("beancount")
+#if DEBUG
+        // Screenshot scaffold: `-expandAccounting` opens the beancount
+        // disclosure so a `simctl` capture can show the generated ledger.
+        .task {
+            if ProcessInfo.processInfo.arguments.contains("-expandAccounting") {
+                expandAccounting = true
+            }
+        }
+#endif
+    }
+}
+
+
 /// The parsed receipt itself — merchant, totals, items, warnings, and the
 /// generated beancount. Shared by the single-scan result screen and the batch
 /// detail, which differ only in the actions sitting under it: a batch exports as
@@ -1187,80 +1043,65 @@ struct ReceiptCard: View {
     /// and the items are the supporting detail. `BatchReceiptDetailView` passes
     /// nothing, since a receipt opened from the list was not just added.
     var impact: AnyView?
+    /// Show this many items, then collapse the rest behind a "Show all N items"
+    /// control. Nil lists everything.
+    ///
+    /// **Only the scan result passes one.** There, the card is a *summary* of
+    /// what just happened and the actions under it — Scan Another, Export — are
+    /// the point; a 30-item Costco run pushed all of them off the screen. A
+    /// receipt opened from the list is the opposite: inspecting the items is the
+    /// entire reason you tapped it, so `BatchReceiptDetailView` lists them all.
+    var collapseItemsAfter: Int?
+    /// Draw the sawtooth strip along the card's bottom edge. The scan result's
+    /// one torn edge; nothing else on that screen gets one.
+    var showsTornEdge = false
+    /// Whether the accounting disclosure is drawn inline, under the card. The
+    /// scan result turns this off and places `accountingDetails` itself, below
+    /// its buttons.
+    var includesAccountingDetails = true
     @State private var expandAccounting = false
+    @State private var showAllItems = false
 
     private var friendlyDate: String? { ReceiptDateFormat.friendly(result.date) }
 
     var body: some View {
         VStack(spacing: 16) {
-            VStack(spacing: 16) {
-                header
-                if let impact {
-                    impact
+            VStack(spacing: 0) {
+                VStack(spacing: 16) {
+                    header
+                    if let impact {
+                        impact
+                    }
+                    if !result.items.isEmpty {
+                        Divider()
+                        itemsList
+                    }
                 }
-                if !result.items.isEmpty {
-                    Divider()
-                    itemsList
+                // Rounded on top only when a tear follows, so the two read as
+                // one piece of paper rather than a card with a strip under it.
+                .modifier(BBCard(padding: 16,
+                                 corners: showsTornEdge
+                                     ? .init(topLeading: 20, bottomLeading: 0,
+                                             bottomTrailing: 0, topTrailing: 20)
+                                     : .init(topLeading: 20, bottomLeading: 20,
+                                             bottomTrailing: 20, topTrailing: 20)))
+
+                if showsTornEdge {
+                    TornEdge()
+                        .fill(Color.bbCardFill)
+                        .frame(height: TornEdge.height)
+                        .shadow(color: Color.bbCardShadow, radius: 6, y: 4)
                 }
             }
-            .bbCard()
 
             if !result.warnings.worthShowing.isEmpty {
                 warningsBanner
             }
 
-            DisclosureGroup(isExpanded: $expandAccounting) {
-                VStack(alignment: .leading, spacing: 12) {
-                    if result.subtotal != nil || result.tax != nil {
-                        VStack(alignment: .leading, spacing: 2) {
-                            if let subtotal = result.subtotal {
-                                subtotalRow("Subtotal", subtotal)
-                            }
-                            if let tax = result.tax {
-                                subtotalRow("Tax", tax)
-                            }
-                            subtotalRow("Total", result.total)
-                        }
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    }
-
-                    Text(result.beancount)
-                        .font(.system(.footnote, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-
-#if DEBUG
-                    ScanTimingsView(timings: result.timings, wallMs: wallMs)
-                    if let url = capturedImageURL {
-                        ShareLink(item: url) {
-                            Label("Debug: Export captured image", systemImage: "photo.badge.arrow.down")
-                        }
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    }
-#endif
-                }
-                .padding(.top, 12)
-            } label: {
-                Label("Accounting details", systemImage: "text.alignleft")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
+            if includesAccountingDetails {
+                AccountingDetailsCard(result: result, wallMs: wallMs,
+                                      capturedImageURL: capturedImageURL)
             }
-            .tint(.secondary)
-            .bbCard()
-            .id("beancount")
-#if DEBUG
-            // Screenshot scaffold: `-expandAccounting` opens the beancount
-            // disclosure so a `simctl` capture can show the generated ledger.
-            .task {
-                if ProcessInfo.processInfo.arguments.contains("-expandAccounting") {
-                    expandAccounting = true
-                }
-            }
-#endif
         }
     }
 
@@ -1276,7 +1117,9 @@ struct ReceiptCard: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(result.merchant.capitalized).font(.title2.bold())
+                Text(result.merchant.capitalized)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(Color.bbInk)
                 // A `Suggested` match isn't trusted enough to replace the OCR'd
                 // name (that stays in `result.merchant`), so offer the canonical
                 // guess quietly in grey rather than silently rewriting it.
@@ -1286,15 +1129,17 @@ struct ReceiptCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                // Mono: this line is entirely a date and a count — labels
+                // about numbers, which is the half of the type rule mono owns.
                 Text(subheadline)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.bbMono(12))
+                    .foregroundStyle(Color.bbInkSecondary)
             }
             Spacer(minLength: 8)
             Text(PriceFormat.display(result.total).text)
-                .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(.primary)
-                .monospacedDigit()
+                .font(.bbMono(28, .semibold))
+                .tracking(-1)
+                .foregroundStyle(Color.bbInk)
         }
     }
 
@@ -1310,19 +1155,59 @@ struct ReceiptCard: View {
         return parts.joined(separator: " · ")
     }
 
-    private func subtotalRow(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(PriceFormat.display(value).text).monospacedDigit()
+    /// The items shown, and what is being held back.
+    private var itemSplit: (shown: [ReceiptItem], hidden: [ReceiptItem]) {
+        guard let limit = collapseItemsAfter, !showAllItems, result.items.count > limit else {
+            return (result.items, [])
         }
+        return (Array(result.items.prefix(limit)), Array(result.items.dropFirst(limit)))
     }
 
     private var itemsList: some View {
-        VStack(spacing: 10) {
-            ForEach(Array(result.items.enumerated()), id: \.offset) { _, item in
+        let split = itemSplit
+        return VStack(spacing: 10) {
+            ForEach(Array(split.shown.enumerated()), id: \.offset) { _, item in
                 itemRow(item)
             }
+            if !split.hidden.isEmpty {
+                itemTailRow(split.hidden)
+            }
+        }
+    }
+
+    /// The collapsed tail as a **control, not a caption**.
+    ///
+    /// A grey "10 more items · $203.05" line reads as a footnote, and footnotes
+    /// don't get tapped — which is how a card could hold back two thirds of a
+    /// receipt without anyone noticing there was more. Accent label with the
+    /// count *in* it, the hidden sum beside it, and a chevron. Same treatment as
+    /// the Spending card's leaf tail, so one pattern covers both.
+    private func itemTailRow(_ hidden: [ReceiptItem]) -> some View {
+        let sum = hidden.reduce(0.0) { $0 + (PriceFormat.value($1.price) ?? 0) }
+        return VStack(spacing: 10) {
+            // Full-bleed, unlike the gaps between rows: it separates the list
+            // from a control rather than one row from the next.
+            Rectangle().fill(Color.bbHairline).frame(height: 1)
+
+            Button {
+                withAnimation(.snappy) { showAllItems = true }
+            } label: {
+                HStack(spacing: 8) {
+                    Text("Show all \(result.items.count) items")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.bbAccent)
+                    Spacer(minLength: 8)
+                    Text("+" + PriceFormat.currency(sum))
+                        .font(.bbMono(15))
+                        .foregroundStyle(Color.bbInkSecondary)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.bbAccent)
+                }
+                .padding(.vertical, 3)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -1346,9 +1231,8 @@ struct ReceiptCard: View {
             }
             let priceDisplay = PriceFormat.display(item.price)
             Text(priceDisplay.text)
-                .monospacedDigit()
-                .font(.subheadline)
-                .foregroundStyle(priceDisplay.isNegative ? .green : .primary)
+                .font(.bbMono(15))
+                .foregroundStyle(priceDisplay.isNegative ? Color.bbImpactText : Color.bbInk)
         }
     }
 
@@ -1359,26 +1243,32 @@ struct ReceiptCard: View {
     private func tagRow(for item: ReceiptItem) -> some View {
         let display = CategoryDisplay.tagDisplay(for: item.tags)
         if let primary = display.primary {
-            HStack(spacing: 8) {
-                Text(primary)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(Color.bbAccent)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(Color.bbAccentSoft, in: Capsule())
-
-                if !display.rest.isEmpty {
-                    Text(display.rest.joined(separator: " · "))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+            HStack(spacing: 5) {
+                // The most specific tag is what the item *is*; the broader ones
+                // are where it sits. Same chip shape for both so the row reads
+                // as one classification, accent on the first so it is obvious
+                // which one is the answer.
+                tagChip(primary, accented: true)
+                ForEach(display.rest.reversed(), id: \.self) { label in
+                    tagChip(label, accented: false)
                 }
             }
+            .lineLimit(1)
         } else {
-            Text("Uncategorized")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            tagChip("Uncategorized", accented: false)
         }
+    }
+
+    private func tagChip(_ label: String, accented: Bool) -> some View {
+        Text(label)
+            .font(.bbMono(10, .medium))
+            .textCase(.uppercase)
+            .tracking(0.6)
+            .foregroundStyle(accented ? Color.bbAccent : Color.bbInkSecondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(accented ? Color.bbAccentSoft : Color.bbInk.opacity(0.06),
+                        in: Capsule())
     }
 
     /// The findings worth reading, each in its own rank's color. The banner as
@@ -1422,11 +1312,22 @@ struct ReceiptResultView: View {
     @State private var spendStore = SpendStore.shared
     @State private var amountPrivacy = AmountPrivacy.shared
 
+    /// Four, which is the design's own card. The point is that the actions under
+    /// this card stay on screen after a big shop, and four rows plus the tail
+    /// control is what fits with them.
+    private static let itemsBeforeCollapse = 4
+
     var body: some View {
         VStack(spacing: 16) {
+            // The screen's one torn edge, along the bottom of the receipt
+            // itself. Nothing below it gets one — see `ReceiptSlip` for why the
+            // effect is spent exactly once per screen.
             ReceiptCard(result: result, wallMs: wallMs,
                         capturedImageURL: capturedImageURL,
-                        impact: AnyView(impactChip))
+                        impact: AnyView(impactChip),
+                        collapseItemsAfter: Self.itemsBeforeCollapse,
+                        showsTornEdge: true,
+                        includesAccountingDetails: false)
 
             VStack(spacing: 8) {
                 if let onScanAnother {
@@ -1488,6 +1389,12 @@ struct ReceiptResultView: View {
                 }
                 .buttonStyle(BBQuietButtonStyle())
             }
+
+            // Last, under the actions. The ledger posting is reference material
+            // you open when a figure looks wrong; what you want immediately
+            // after a scan is the next scan or the export.
+            AccountingDetailsCard(result: result, wallMs: wallMs,
+                                  capturedImageURL: capturedImageURL)
         }
         .sheet(isPresented: $showJSONPreview) {
             ReceiptJSONView(result: result, wallMs: wallMs)

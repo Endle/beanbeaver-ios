@@ -158,7 +158,7 @@ struct BatchImportView: View {
 
             exportFooter
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color.bbCanvas)
     }
 
     private var header: some View {
@@ -244,8 +244,12 @@ struct BatchImportView: View {
             .allowsHitTesting(exporter.runningKind == nil && !awaitingConfirmation)
         }
         .padding(.horizontal)
-        .padding(.vertical, 12)
-        .background(.bar)
+        .padding(.top, 12)
+        .padding(.bottom, BBLayout.tabBarInset)
+        .background(Color.bbCanvas)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.bbHairline).frame(height: 1)
+        }
     }
 
     private var exportLabel: String {
@@ -352,15 +356,20 @@ struct ParsedRow: View {
                     }
                 }
                 if !subtitle.isEmpty {
+                    // **Never `lineLimit(1)`.** This carries `detail` — the
+                    // category share, "photo cleared", "excluded from totals" —
+                    // and truncating it cuts exactly the informational half,
+                    // leaving a date and an item count anyone could guess.
+                    // Proportional, not mono: it is prose, and mono is for the
+                    // amount column on the right, where it aligns.
                     Text(subtitle)
-                        .font(.caption)
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer()
             Text(PriceFormat.display(result.total).text)
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
+                .font(.bbMono(15, .semibold))
         }
         .padding(.vertical, 2)
     }
@@ -456,7 +465,7 @@ struct BatchReceiptDetailView: View {
             }
             .padding()
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color.bbCanvas)
         .navigationTitle(result.merchant.capitalized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

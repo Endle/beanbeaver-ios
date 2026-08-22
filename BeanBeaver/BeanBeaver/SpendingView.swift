@@ -10,7 +10,12 @@ import BBReceiptKit
 /// bar, pace line, the "Set a Monthly Budget" row and its editor sheet. A
 /// target answers "am I allowed to spend this?", and the product's question is
 /// now "what am I spending, and is it climbing?", which the week-over-week card
-/// below answers instead. `BudgetPrefs` and the three `spend_*_budget_root`
+/// below answers instead.
+///
+/// The **per-leaf progress bars are gone too**: a dozen neutral capsules, each
+/// measured against the largest leaf anywhere in the month, answering a
+/// comparison nobody makes and costing every row a second line. A share
+/// percentage in a 30pt column replaced them — see `rootCard`. `BudgetPrefs` and the three `spend_*_budget_root`
 /// functions behind it are left in place, unused, until Android drops its own
 /// budget UI — it pins its own tag, so nothing there breaks meanwhile.
 ///
@@ -31,6 +36,10 @@ struct SpendingView: View {
     /// spending. View-local and reset on entry, by design — it is a way of
     /// looking at the month, not a preference.
     @State private var trendScope: SpendSummary.Category?
+    /// Which roots have had their leaf tail expanded. View-local and reset on
+    /// entry, like `trendScope`: it is a way of looking at the month, not a
+    /// preference worth persisting.
+    @State private var expandedRoots: Set<String> = []
     @State private var showReconciliation = false
 
     private var monthIDs: [String] { SpendSummary.monthIds(from: store.records) }
@@ -74,19 +83,9 @@ struct SpendingView: View {
                 // The same single state the home card's eye and the Settings
                 // toggle write — three places, one value, so they agree.
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        amountPrivacy.toggle()
-                    } label: {
-                        Label(amountPrivacy.hideAmounts ? "Show Amounts" : "Hide Amounts",
-                              systemImage: amountPrivacy.hideAmounts ? "eye" : "eye.slash")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        ReceiptsView(exporter: exporter, onConfigure: onConfigure)
-                    } label: {
-                        Label("All Receipts", systemImage: "list.bullet.rectangle")
-                    }
+                    // The same control Home's slip carries, and the same single
+                    // piece of state the Settings toggle writes.
+                    AmountPrivacyEye(size: 17)
                 }
             }
         }
@@ -96,15 +95,16 @@ struct SpendingView: View {
     private var content: some View {
         ScrollView {
             VStack(spacing: 16) {
-                monthStepper
-                headline
+                headerSlip
 
                 // Only for the month in progress. The series is six weeks back
                 // from *today*, so beside a March total viewed in August it
                 // would be answering a question nobody asked — the same reason
                 // the old pace line was current-month only.
                 //
-                // Withheld entirely for now — see `SpendSummary.showWeeklyTrend`.
+                // Behind `SpendSummary.showWeeklyTrend`, which gates this card
+                // and Home's together — one flag rather than three comment
+                // blocks, which is the point of it.
                 if SpendSummary.showWeeklyTrend, isCurrentMonth {
                     weekOverWeekCard
                 }
@@ -115,9 +115,12 @@ struct SpendingView: View {
 
                 footerSection
             }
-            .padding()
+            .padding(.horizontal, 16)
+            // Clears the tab bar, which floats over this content rather than
+            // shortening it. Same inset Home uses.
+            .padding(.bottom, BBLayout.tabBarInset)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color.bbCanvas)
     }
 
     // MARK: - Month stepper
@@ -143,20 +146,43 @@ struct SpendingView: View {
         selectedMonthID = monthIDs[idx - 1]
     }
 
+    /// The month stepper, on the slip's eyebrow line.
+    ///
+    /// **This is what replaced "tracked spend".** That subhead named the metric,
+    /// which is the one thing a spending screen doesn't need to say — the app
+    /// tracks, and the 44pt figure above it is obviously money. What a reader
+    /// actually can't tell is *which* month and *how many receipts* are behind
+    /// it, so the line says that instead, and carries the paging with it rather
+    /// than spending another row on a control.
     private var monthStepper: some View {
-        HStack {
-            Button { goOlder() } label: { Image(systemName: "chevron.left") }
-                .disabled(!canGoOlder)
-            Spacer()
-            Text(summary.label).font(.headline)
-            Spacer()
-            Button { goNewer() } label: { Image(systemName: "chevron.right") }
-                .disabled(!canGoNewer)
+        HStack(spacing: 10) {
+            stepperArrow("chevron.left", enabled: canGoOlder, action: goOlder)
+            Spacer(minLength: 0)
+            Text("\(summary.label) · \(summary.receiptCount) receipt\(summary.receiptCount == 1 ? "" : "s")")
+                .bbEyebrow()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+            stepperArrow("chevron.right", enabled: canGoNewer, action: goNewer)
         }
-        .foregroundStyle(.primary)
     }
 
-    // MARK: - Headline
+    private func stepperArrow(_ symbol: String,
+                              enabled: Bool,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                // Tertiary is a non-text token, and a chevron is not text.
+                .foregroundStyle(enabled ? Color.bbInkSecondary : Color.bbInkTertiary)
+                .frame(width: 32, height: 32)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    // MARK: - Header slip
 
     /// This month's unfiled receipts — the same `isExported` split the Receipts
     /// screen's dots and chips draw, scoped to the month on screen.
@@ -164,64 +190,70 @@ struct SpendingView: View {
         summary.records.filter { !$0.isExported }.count
     }
 
-    /// Everything tracked this month, and the way through to the receipts behind
-    /// it. The count is the tap target rather than inert text — it's the most
-    /// natural place to reach for when you want to see what made up the number,
-    /// and it's where the month's backlog says so.
+    /// The month's total, the window it covers, and the way through to the
+    /// receipts behind it.
     ///
-    /// The figure is label colour, not accent: red on a 44pt money total reads
-    /// as an alarm, and "tracked spend" is not an alarm. Accent is reserved for
-    /// things you can tap — the link below it — and for the trend delta, which
-    /// is the one figure here that *is* a signal.
-    private var headline: some View {
-        VStack(spacing: 4) {
-            Text(amountPrivacy.text(PriceFormat.currency(summary.tracked)))
-                .font(.system(size: 44, weight: .bold))
-                .foregroundStyle(.primary)
-                .monospacedDigit()
-            Text("tracked spend")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    /// Same construction as Home's slip, and deliberately so: two screens whose
+    /// headers are built differently read as two apps. Centred here rather than
+    /// leading-aligned because this screen's job is the single figure and the
+    /// stepper flanking it, while Home's slip has an eye in the corner to hang a
+    /// left edge on.
+    ///
+    /// The figure is ink, not accent: red on a 44pt money total reads as an
+    /// alarm, and a month's spending is not an alarm. Accent is kept for things
+    /// that can be tapped and for the trend delta, which is the one figure here
+    /// that genuinely is a signal.
+    private var headerSlip: some View {
+        ReceiptSlip {
+            VStack(spacing: 12) {
+                monthStepper
 
-            // The rolling figure beside the month, not instead of it: a month
-            // is the frame people budget in, and 30 days is the truer reading
-            // of "lately" — most of all on the 2nd, when the month total is a
-            // day old. Current month only; for a past month it would be a
-            // figure from a different window entirely.
-            if isCurrentMonth {
-                Text("\(amountPrivacy.text(PriceFormat.currency(allSpendingTrend.rolling))) in the last 30 days")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+                DisplayAmount(amount: summary.tracked, size: 44, tracking: -1.5)
 
-            NavigationLink {
-                ReceiptsView(monthFilter: activeMonthID, exporter: exporter, onConfigure: onConfigure)
-            } label: {
-                HStack(spacing: 4) {
-                    Text("\(summary.records.count) receipt\(summary.records.count == 1 ? "" : "s")")
-                    if monthBacklog > 0 {
-                        ExportStatusDot(status: .notExported, size: 7)
-                            .padding(.leading, 2)
-                        Text("\(monthBacklog) not exported")
-                    }
-                    Image(systemName: "chevron.right").font(.caption2)
-                }
-                .font(.caption)
+                metaLine
             }
-            .padding(.top, 2)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+    }
+
+    /// One line under the total: what it averages per day, and the month's
+    /// backlog if it has one.
+    ///
+    /// The backlog half is the tap target rather than inert text — "13 unfiled"
+    /// is the most natural thing to reach for when you want to see which ones,
+    /// and it is the only place on this screen that says so.
+    @ViewBuilder
+    private var metaLine: some View {
+        let facts = SpendSummary.facts(activeMonthID, from: store.records)
+        HStack(spacing: 8) {
+            Text("\(amountPrivacy.text(PriceFormat.currency(facts.dailyAverage)))/day over \(facts.days) day\(facts.days == 1 ? "" : "s")")
+
+            if monthBacklog > 0 {
+                Rectangle()
+                    .fill(Color.bbInk.opacity(0.2))
+                    .frame(width: 1, height: 11)
+
+                NavigationLink {
+                    ReceiptsView(monthFilter: activeMonthID, exporter: exporter,
+                                 onConfigure: onConfigure)
+                } label: {
+                    HStack(spacing: 5) {
+                        ExportStatusDot(status: .notExported, size: 7)
+                        Text("\(monthBacklog) unfiled")
+                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.bbUnexported)
+            }
+        }
+        .font(.bbMono(12))
+        .foregroundStyle(Color.bbInkSecondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
     }
 
     // MARK: - Week over week
-
-    /// The unscoped series, which the hero's rolling figure reads. Kept separate
-    /// from the card's own scoped series so changing a chip can't move the
-    /// headline above it.
-    private var allSpendingTrend: SpendTrend {
-        SpendSummary.trend(from: store.records)
-    }
 
     /// Every scope the chips offer: all spending, then each root with its own
     /// leaves under it.
@@ -259,13 +291,9 @@ struct SpendingView: View {
         let trend = SpendSummary.trend(trendScope, from: store.records)
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Week over week")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Text(deltaText(trend))
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(trend.isFlat ? Color.secondary : Color.bbAccent)
-                    .monospacedDigit()
+                Text("Week over week").bbEyebrow().lineLimit(1).minimumScaleFactor(0.7)
+                Spacer(minLength: 8)
+                TrendDeltaLabel(trend: trend)
             }
 
             // Mirrors `ReceiptsView`'s chip row — same metrics, same scroll
@@ -281,9 +309,9 @@ struct SpendingView: View {
                                 .font(.footnote.weight(.medium))
                                 .padding(.horizontal, 11)
                                 .padding(.vertical, 5)
-                                .background(selected ? Color.bbAccent : Color(.tertiarySystemFill),
+                                .background(selected ? Color.bbAccent : Color.bbInk.opacity(0.07),
                                             in: Capsule())
-                                .foregroundStyle(selected ? Color.white : Color.primary)
+                                .foregroundStyle(selected ? Color.white : Color.bbInk)
                         }
                         .buttonStyle(.plain)
                     }
@@ -291,148 +319,207 @@ struct SpendingView: View {
                 .padding(.vertical, 1)
             }
 
+            // Bars, matching Home. A line here and bars there would be two
+            // shapes for one series, and the argument for bars is the same on
+            // both screens: six weekly buckets are discrete totals, and the
+            // newest one is a partial week that a line hides.
             if amountPrivacy.isMasked {
-                TrendChart.masked(height: 96)
+                TrendChart.masked(height: 72)
             } else {
-                TrendChart(amounts: trend.amounts,
-                           height: 96,
-                           mean: trend.mean,
-                           leadingLabel: weekStartLabel(trend),
-                           trailingLabel: "this week",
-                           meanLabel: "avg \(PriceFormat.currency(trend.mean))")
+                TrendBars(amounts: trend.amounts, labels: trend.weekLabels, height: 72)
+
+                // The mean, as a caption rather than a dashed rule across the
+                // bars. On a line it was a reference to read against; over bars
+                // it is one more horizontal edge competing with six of them.
+                Text("avg \(amountPrivacy.text(PriceFormat.currency(trend.mean)))/wk")
+                    .font(.bbMono(11))
+                    .foregroundStyle(Color.bbInkSecondary)
             }
 
             Text("Pick any category to trend on its own — Meat alone, or Dairy, not just the total.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.bbInkSecondary)
         }
         .padding()
         .bbCard()
-    }
-
-    /// The oldest week's start date, as the chart's leading axis label.
-    private func weekStartLabel(_ trend: SpendTrend) -> String {
-        guard let first = trend.points.first else { return "" }
-        var components = DateComponents()
-        components.year = Int(first.range.start.year)
-        components.month = Int(first.range.start.month)
-        components.day = Int(first.range.start.day)
-        guard let date = Calendar.current.date(from: components) else { return "" }
-        return date.formatted(.dateTime.month(.abbreviated).day())
-    }
-
-    /// Rust rounds to cents, so "no change" is an exact test rather than an
-    /// epsilon — and it gets words, since `↑ $0.00` is what an unrounded float
-    /// would otherwise have rendered forever.
-    private func deltaText(_ trend: SpendTrend) -> String {
-        if trend.isFlat { return "No change" }
-        let arrow = trend.delta > 0 ? "↑" : "↓"
-        return "\(arrow) \(amountPrivacy.text(PriceFormat.currency(abs(trend.delta))))"
     }
 
     // MARK: - Category breakdown
 
-    /// One top-level category: its total, then the leaves beneath it. The group
-    /// carrying a monthly target — and only that one — also draws the target's
-    /// bar and pace line, so a budget reads as an annotation on the spending
-    /// rather than as the point of the screen.
+    /// How many leaves a card shows before collapsing the rest.
+    ///
+    /// Six is the design's own card. It is enough that the long tail of a real
+    /// grocery month — a dozen leaves, several of them under a dollar — doesn't
+    /// turn one root into a screenful, and few enough that the tail control is
+    /// visible without scrolling the card off.
+    private static let visibleLeaves = 6
+
+    /// One top-level category: its total, then the leaves beneath it.
+    ///
+    /// **The per-row progress bars are gone.** Every leaf used to draw a bar
+    /// measured against the largest leaf anywhere in the month — a dozen neutral
+    /// capsules that answered a question nobody asked (how does Dairy compare to
+    /// the single biggest thing you bought?) and cost every row a second line.
+    /// What replaced them is a share percentage, which is the comparison people
+    /// actually make, in a column that costs 30pt instead of a row.
     private func rootCard(_ group: SpendSummary.RootGroup) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header and leaves both drill into the items behind the figure —
-            // the question a tapped total actually raises. Selected by raw tag
-            // id for a root, by display label for a leaf; see
-            // `SpendSummary.Category`.
-            NavigationLink {
-                CategoryItemsView(category: .root(group.id), title: group.label,
-                                  monthID: activeMonthID)
-            } label: {
-                HStack {
-                    Image(systemName: CategoryDisplay.style(for: group.label).icon)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22)
-                    Text(group.label)
-                        .font(.headline)
-                    Spacer()
-                    Text(amountPrivacy.text(PriceFormat.currency(group.amount)))
-                        .font(.headline)
-                        .monospacedDigit()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        let leaves = group.leaves
+        let expanded = expandedRoots.contains(group.id)
+        let shown = expanded ? leaves : Array(leaves.prefix(Self.visibleLeaves))
+        let hidden = leaves.count - shown.count
+
+        return VStack(spacing: 0) {
+            rootRow(group)
+
+            ForEach(shown) { leaf in
+                hairline
+                NavigationLink {
+                    CategoryItemsView(category: .leaf(leaf.label), title: leaf.label,
+                                      monthID: activeMonthID)
+                } label: {
+                    leafRow(leaf, of: group)
                 }
-                .foregroundStyle(.primary)
-                // Padding before `contentShape` so the padded frame is what gets
-                // hit, not just the glyphs: the header's own text band is only
-                // ~17pt tall, well under the 44pt touch minimum.
-                .padding(.vertical, 8)
+                .buttonStyle(.plain)
+            }
+
+            if hidden > 0 {
+                tailRow(count: hidden,
+                        amount: leaves.suffix(hidden).reduce(0) { $0 + $1.amount },
+                        root: group.id)
+            }
+        }
+        .bbCard(padding: 0)
+    }
+
+    private var hairline: some View {
+        Rectangle()
+            .fill(Color.bbHairline)
+            .frame(height: 1)
+            .padding(.leading, 16)
+    }
+
+    /// The card's own header: icon, name, total, share of the month, chevron.
+    private func rootRow(_ group: SpendSummary.RootGroup) -> some View {
+        NavigationLink {
+            CategoryItemsView(category: .root(group.id), title: group.label,
+                              monthID: activeMonthID)
+        } label: {
+            HStack(spacing: 12) {
+                // A tinted square rather than a bare glyph: it gives the root
+                // rows one shared left edge down the screen, which is what makes
+                // a stack of cards read as one list of categories.
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.bbAccentSoft)
+                    .frame(width: 26, height: 26)
+                    .overlay {
+                        Image(systemName: CategoryDisplay.style(for: group.label).icon)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.bbAccent)
+                    }
+
+                Text(group.label)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.bbInk)
+
+                Spacer(minLength: 8)
+
+                Text(amountPrivacy.text(PriceFormat.currency(group.amount)))
+                    .font(.bbMono(17, .semibold))
+                    .foregroundStyle(Color.bbInk)
+
+                sharePercent(group.amount, of: summary.tracked)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.bbInkTertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            // Padding before `contentShape` so the padded frame is what gets
+            // hit, not just the glyphs: the text band alone is well under the
+            // 44pt touch minimum.
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// A leaf. **Chevron on every row**, so the row reads as the way into its
+    /// items rather than as a line in a table that happens to be tappable.
+    private func leafRow(_ leaf: SpendSummary.Leaf,
+                         of group: SpendSummary.RootGroup) -> some View {
+        HStack(spacing: 8) {
+            Text(leaf.label)
+                .font(.system(size: 16))
+                .foregroundStyle(Color.bbInk)
+
+            Spacer(minLength: 8)
+
+            Text(amountPrivacy.text(PriceFormat.currency(leaf.amount)))
+                .font(.bbMono(15))
+                .foregroundStyle(Color.bbInk)
+
+            // Of its own root, not of the month: "Milk is 31% of Grocery" is the
+            // comparison the row sits inside. A share of the month would make
+            // every leaf a small number and say nothing about the card.
+            sharePercent(leaf.amount, of: group.amount)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.bbInkTertiary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .contentShape(.rect)
+    }
+
+    /// The share column: fixed width and right-aligned, so the percentages line
+    /// up down the card whether they are one digit or three.
+    ///
+    /// Blank while masked. A percentage is not a dollar figure, but `4%` of a
+    /// hidden total next to `62%` of it still describes the month, and the point
+    /// of the eye is that a glance over your shoulder learns nothing.
+    private func sharePercent(_ amount: Double, of total: Double) -> some View {
+        Text(amountPrivacy.isMasked || total <= 0
+             ? ""
+             : "\(Int((amount / total * 100).rounded()))%")
+            .font(.bbMono(12))
+            .foregroundStyle(Color.bbInkSecondary)
+            .frame(width: 30, alignment: .trailing)
+    }
+
+    /// The collapsed tail, as a **control rather than a caption**.
+    ///
+    /// The grey "10 more items · $203.05" line this replaces read as a footnote,
+    /// and footnotes don't get tapped. Accent label, the hidden sum beside it,
+    /// and a chevron — the same treatment the scan result's "Show all 14 items"
+    /// uses, so one pattern covers both places the app collapses a list.
+    private func tailRow(count: Int, amount: Double, root: String) -> some View {
+        VStack(spacing: 0) {
+            // Full-bleed, unlike the row dividers above: it separates the list
+            // from a control, not one row from the next.
+            Rectangle().fill(Color.bbHairline).frame(height: 1)
+
+            Button {
+                withAnimation(.snappy) { _ = expandedRoots.insert(root) }
+            } label: {
+                HStack(spacing: 8) {
+                    Text("Show \(count) more")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.bbAccent)
+                    Spacer(minLength: 8)
+                    Text(amountPrivacy.text(PriceFormat.currency(amount)))
+                        .font(.bbMono(15))
+                        .foregroundStyle(Color.bbInkSecondary)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.bbAccent)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-
-            if !group.leaves.isEmpty {
-                // No spacing of its own: each row carries its gap as padding
-                // instead, so the space between two leaves is *tappable* and
-                // belongs to one of them rather than being a dead band.
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(group.leaves) { leaf in
-                        NavigationLink {
-                            CategoryItemsView(category: .leaf(leaf.label), title: leaf.label,
-                                              monthID: activeMonthID)
-                        } label: {
-                            leafRow(leaf)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
         }
-        .padding()
-        .bbCard()
-    }
-
-    /// Leaf bars scale to `summary.maxLeafAmount` — the largest leaf anywhere in
-    /// the month — so a bar means the same thing in every card on the screen.
-    ///
-    /// Neutral fill, not accent. Every category on the screen drawn in alarm red
-    /// makes the one bar that *is* a judgement — the target bar above, which can
-    /// actually go over — indistinguishable from a dozen bars that are just
-    /// measurements.
-    ///
-    /// The whole row is one touch target: label, bar, and the padding around
-    /// them. Shaping only the text line (which is what this did) left a ~25pt
-    /// strip broken by a dead gap above the bar — a row that looks comfortably
-    /// tappable but isn't, on a card where neighbouring rows lead to *different*
-    /// categories and a near miss is a wrong answer rather than a no-op.
-    private func leafRow(_ leaf: SpendSummary.Leaf) -> some View {
-        let maxAmount = summary.maxLeafAmount
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(leaf.label)
-                    .font(.subheadline)
-                Spacer()
-                Text(amountPrivacy.text(PriceFormat.currency(leaf.amount)))
-                    .font(.subheadline.weight(.medium))
-                    .monospacedDigit()
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.quaternary)
-                    Capsule()
-                        .fill(.secondary)
-                        .frame(width: geo.size.width * (maxAmount > 0 ? leaf.amount / maxAmount : 0))
-                }
-            }
-            .frame(height: 6)
-        }
-        .foregroundStyle(.primary)
-        // Padding *then* `contentShape`, so the hit region is the padded frame
-        // rather than the drawn glyphs and capsules. Replaces the spacing the
-        // enclosing stack used to add, so this buys hit area rather than height.
-        .padding(.vertical, 8)
-        .contentShape(.rect)
     }
 
     // MARK: - Reconciliation

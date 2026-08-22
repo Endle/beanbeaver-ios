@@ -1,4 +1,5 @@
 import SwiftUI
+import BBReceiptKit
 
 /// The weekly spend line — a sparkline, not a chart.
 ///
@@ -133,5 +134,132 @@ struct TrendChart: View {
             }
             .accessibilityElement()
             .accessibilityLabel("Spending trend hidden")
+    }
+}
+
+/// The same six weeks as `TrendChart`, drawn as bars — and what the home card
+/// uses now.
+///
+/// **Bars because the series is six discrete totals.** A line implies you could
+/// read a value between two points, and there is nothing between two weekly
+/// buckets to read; it also hides the thing most worth seeing, which is that the
+/// newest bucket is a *partial* week. A bar that is visibly shorter because the
+/// week is three days old reads as three days old. The line version was drawn
+/// side by side and rejected — it is option `5b` in the design file.
+///
+/// Masking applies exactly as it does to the line: a bar's height encodes
+/// dollars, so the caller hides the whole chart rather than the figures beside
+/// it. `TrendChart.masked(height:)` is the shared placeholder, so toggling the
+/// eye can't make the card jump.
+struct TrendBars: View {
+    /// Oldest first. The last is the week containing today.
+    let amounts: [Double]
+    /// One label per bar, under it. Empty strings draw nothing.
+    var labels: [String] = []
+    var height: CGFloat = 62
+
+    /// Bars are read against each other, not against zero-that-is-off-screen,
+    /// so the tallest fills the frame. A series of identical weeks therefore
+    /// draws six full-height bars, which is the honest picture: they *are* the
+    /// same.
+    private var scale: Double {
+        max(amounts.max() ?? 0, 0.01)
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(alignment: .bottom, spacing: 7) {
+                ForEach(Array(amounts.enumerated()), id: \.offset) { index, amount in
+                    let isCurrent = index == amounts.count - 1
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(isCurrent ? Color.bbAccent : Color.bbInk.opacity(0.16))
+                        // A floor of 2pt, so a week with nothing in it draws a
+                        // seat rather than a gap. An absent bar reads as missing
+                        // data; a flat one reads as a quiet week, which is what
+                        // it is.
+                        .frame(height: max(height * CGFloat(amount / scale), 2))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: height, alignment: .bottom)
+
+            if !labels.isEmpty {
+                HStack(spacing: 7) {
+                    ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
+                        Text(label)
+                            .font(.bbMono(10.5))
+                            .foregroundStyle(index == labels.count - 1
+                                             ? Color.bbAccent : Color.bbInkSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Weekly spending, six weeks")
+    }
+}
+
+/// How the weekly series reads — the axis labels and the delta sentence.
+///
+/// **Here rather than on each screen** because Home and Spending both draw this
+/// series, and the two must not be able to word the same buckets differently.
+/// They already did once: one said `↑ $225.06` and the other `+$225.06 vs last
+/// wk` for the same number.
+extension SpendTrend {
+    /// The six week-start dates, with the newest reading `now`.
+    ///
+    /// `now` rather than a date because the last bucket is the week *containing*
+    /// today: labelling it with its start date invites reading the bar as a
+    /// finished week, which is exactly the misreading bars are here to avoid.
+    var weekLabels: [String] {
+        let format = Date.FormatStyle.dateTime.month(.abbreviated).day()
+        return points.enumerated().map { index, point in
+            if index == points.count - 1 { return "now" }
+            var c = DateComponents()
+            c.year = Int(point.range.start.year)
+            c.month = Int(point.range.start.month)
+            c.day = Int(point.range.start.day)
+            guard let date = Calendar.current.date(from: c) else { return "" }
+            return date.formatted(format)
+        }
+    }
+
+    /// The week-over-week delta, signed and masked.
+    ///
+    /// A `+`/`−` rather than an arrow: the figure sits inches from a chart whose
+    /// bars already point, and two directional signals disagree in a way a sign
+    /// cannot. The crate rounds to cents, so "no change" is an exact test rather
+    /// than an epsilon — and it gets words, because `+$0.00` is what an
+    /// unrounded float would have rendered forever.
+    @MainActor
+    var deltaText: String {
+        if isFlat { return "No change" }
+        let sign = delta > 0 ? "+" : "−"
+        let figure = AmountPrivacy.shared.text(PriceFormat.currency(abs(delta)))
+        return "\(sign)\(figure) vs last wk"
+    }
+}
+
+/// The delta figure as both screens draw it: accent when there is a change,
+/// quiet when there isn't.
+///
+/// A view rather than a string so the colour rule travels with the wording. It
+/// also carries the shrink-to-fit, which is load-bearing: `+$1,225.06 vs last
+/// wk` beside a mono eyebrow overruns the card, and it did.
+struct TrendDeltaLabel: View {
+    let trend: SpendTrend
+
+    var body: some View {
+        Text(trend.deltaText)
+            .font(.bbMono(13, .semibold))
+            .foregroundStyle(trend.isFlat ? Color.bbInkSecondary : Color.bbAccent)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            // Wins the space contest against the eyebrow beside it: the eyebrow
+            // is a fixed label anyone can guess, the figure is the news.
+            .layoutPriority(1)
     }
 }
