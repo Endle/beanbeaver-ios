@@ -175,7 +175,7 @@ dependencies = [
 [[package]]
 name = "bb-mobile-ffi"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.9#cd4909ca2a19861c7555a6b279a9cff0726f4245"
+source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.10#e874fae4219e19f599292738351171430e3f8ab0"
 dependencies = [
  "bb-receipt-ffi",
  "spend-core",
@@ -1666,7 +1666,7 @@ dependencies = [
 [[package]]
 name = "spend-core"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.9#cd4909ca2a19861c7555a6b279a9cff0726f4245"
+source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.10#e874fae4219e19f599292738351171430e3f8ab0"
 
 [[package]]
 name = "stable_deref_trait"
