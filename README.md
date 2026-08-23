@@ -3,6 +3,10 @@
 BeanBeaver turns a photo of a receipt into an itemized Beancount transaction — entirely on
 your phone.
 
+<a href="https://apps.apple.com/ca/app/beanbeaver/id6790981690"><img
+  src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg"
+  alt="Download BeanBeaver on the App Store" height="52"></a>
+
 
 ## Parsing Grocery Receipts
 Snap a receipt with the camera (or pick one from your photo library). BeanBeaver reads it with on-device text recognition, then extracts the merchant, date, line items, and total cost. The result is a plain-text transaction, ready to copy, share, or export to Beancount.
