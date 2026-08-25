@@ -1082,6 +1082,7 @@ struct ReceiptCard: View {
                         Divider()
                         itemsList
                     }
+                    taxFootnote
                 }
                 // Rounded on top only when a tear follows, so the two read as
                 // one piece of paper rather than a card with a strip under it.
@@ -1117,9 +1118,9 @@ struct ReceiptCard: View {
     /// The total is 28pt label colour rather than 32pt accent red. Red is the
     /// tap-me colour here and a receipt total is not an action; and this figure
     /// now shares the eye-line with the impact chip below, which is the one that
-    /// says what the scan did to the month. Subtotal and tax moved into
-    /// "Accounting details" — they reconcile the parse, which is what that
-    /// section is for.
+    /// says what the scan did to the month. Subtotal moved into "Accounting
+    /// details" — it reconciles the parse, which is what that section is for;
+    /// tax is repeated small at the card's foot, see `taxFootnote`.
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -1159,6 +1160,32 @@ struct ReceiptCard: View {
             parts.append("\(result.items.count) item\(result.items.count == 1 ? "" : "s")")
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// Tax, small and quiet at the card's bottom right — where a paper receipt
+    /// prints it, and below the items it is charged on.
+    ///
+    /// Deliberately *not* a promotion of the reconciliation block: subtotal and
+    /// total stay in "Accounting details" (see `header`), because those two
+    /// exist to check the parse, while tax is a figure people look for on the
+    /// receipt itself. One line, secondary ink, mono only on the figure so it
+    /// sits under the item prices above it.
+    ///
+    /// Absent when the parser found no tax — a zero would be a claim, and "no
+    /// tax line was read" and "$0.00 of tax" are not the same thing.
+    @ViewBuilder
+    private var taxFootnote: some View {
+        if let tax = result.tax {
+            HStack(spacing: 6) {
+                Spacer(minLength: 0)
+                Text("Tax")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.bbInkSecondary)
+                Text(PriceFormat.display(tax).text)
+                    .font(.bbMono(12))
+                    .foregroundStyle(Color.bbInkSecondary)
+            }
+        }
     }
 
     /// The items shown, and what is being held back.
