@@ -175,7 +175,24 @@ codegen-units = 1
 # on purpose, because the FFI seam sniffs the format of bytes it did not
 # produce. The only behavioural change in the v0.9.2..v0.9.3 range is unrelated
 # -- core #70 files SALT as a seasoning rather than a staple.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.10.0" }
+#
+# v0.11.0 is a minor for a Rust-API reason, not an FFI one: core #77-#85 renamed
+# most of receipt-core's public modules (`receipt_parser` -> `parser`,
+# `receipt_common` -> `common`) and replaced raw i64 cents and date tuples with
+# `Money` and `Date`. The UniFFI surface is byte-identical to v0.10.0 -- no
+# exported record, enum, variant or function differs -- so the generated Swift
+# is unchanged and no app code moved; `shared/src/bin/batch_e2e.rs`, the one
+# thing here that touches the core's Rust API, still compiles untouched.
+# The behaviour in the range is core #87: a tax of 0.00 under a total that
+# exceeds the subtotal is now derived from SUBTOTAL + TAX = TOTAL and reported
+# as `PriceAutoCorrected`, instead of quietly booking no tax at all. Found on a
+# FOODY MART scan from this device -- OCR read "HST 1.82" as "11:82", so the
+# summed tax rows returned the hst5% bucket's 0.00 and $1.82 vanished from the
+# entry. Three private-corpus receipts gain their real tax (0.46 / 0.17 / 0.20),
+# each verified against the photo; merchant/date/total/crit-items are unchanged
+# corpus-wide with zero per-receipt divergence. Also SACHIMA now classifies as a
+# snack rather than Dairy (it had matched only the dairy rule's "EGG").
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.11.0" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -195,7 +212,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # clock-relative figures are a separate call rather than fields on it.
 # Rerun ./build-xcframework.sh after bumping, or the app compiles against
 # stale generated Swift and fails with confusing "extra arguments" errors.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.10" }
+# v0.1.11 carries core v0.11.0 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.11" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
