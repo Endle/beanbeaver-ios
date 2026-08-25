@@ -724,6 +724,7 @@ struct SettingsView: View {
                         }
                     }
                 }
+                .listRowBackground(Color.bbCardFill)
 
                 trackingSection
 
@@ -747,6 +748,7 @@ struct SettingsView: View {
                 } footer: {
                     Text("Save details file writes a .json of each receipt's items, prices, and tags next to the exported beancount and photo.")
                 }
+                .listRowBackground(Color.bbCardFill)
 
 
                 receiptsSection
@@ -761,6 +763,7 @@ struct SettingsView: View {
                 } footer: {
                     Text("Both ship inside the app, so they're readable offline.")
                 }
+                .listRowBackground(Color.bbCardFill)
 
                 versionSection
                 feedbackSection
@@ -789,8 +792,16 @@ struct SettingsView: View {
                 } footer: {
                     Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.\n\nScan a Sample Receipt runs the full on-device scan on a receipt bundled with the app — a way to see what BeanBeaver does without a receipt in hand.")
                 }
+                .listRowBackground(Color.bbCardFill)
                 .id("debug")
             }
+            .listStyle(.insetGrouped)
+            // The warm ground the rest of the app stands on. Same two-part move
+            // as `ReceiptsView`: hide the scroll view's own background so the
+            // canvas shows through, and repaint each section's rows, because a
+            // List row's fill is its own and not the scroll view's.
+            .scrollContentBackground(.hidden)
+            .background(Color.bbCanvas)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -836,6 +847,7 @@ struct SettingsView: View {
         } footer: {
             Text("beanbeaver-core is the on-device scanning engine. Include both versions when reporting a scan issue.")
         }
+        .listRowBackground(Color.bbCardFill)
     }
 
     /// Where to reach the project. Placed directly under About so the two read
@@ -859,6 +871,7 @@ struct SettingsView: View {
         } footer: {
             Text("Questions, bugs, and receipts that came out wrong — whichever room suits you. When it's a scan problem, include the two versions above.")
         }
+        .listRowBackground(Color.bbCardFill)
     }
 
     /// A room the project can be reached in. A named type, not a tuple: `ForEach`
@@ -905,6 +918,7 @@ struct SettingsView: View {
         } footer: {
             Text("Hide amounts covers the figures and the trend charts alike, and is the same switch as the eye on the home and Spending screens.")
         }
+        .listRowBackground(Color.bbCardFill)
     }
 
     /// The honest successor to the old "Clear Old Receipts": no heuristic, and
@@ -931,6 +945,7 @@ struct SettingsView: View {
         } header: {
             Text("Receipts")
         }
+        .listRowBackground(Color.bbCardFill)
         .alert("Clear all photos?", isPresented: $confirmClearAllPhotos) {
             Button("Clear Photos", role: .destructive) { spendStore.clearAllPhotos() }
             Button("Cancel", role: .cancel) {}

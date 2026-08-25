@@ -42,9 +42,16 @@ extension Color {
 /// automatically.
 ///
 /// Scoped to the redesigned surfaces (Home, Spending, Receipts, the scan result
-/// and their pushes). `Form`-based pages — Settings, Sync — stay
-/// platform-standard, which is the handoff's own rule: only what was designed
-/// gets restyled.
+/// and their pushes) — plus **Settings**, which was left platform-standard by
+/// the original handoff and looked like a different app once it became a tab
+/// root sitting beside Home. Its list takes the canvas the same way
+/// `ReceiptsView`'s does: `.scrollContentBackground(.hidden)` for the ground,
+/// `.listRowBackground(.bbCardFill)` per section for the rows.
+///
+/// The pages *pushed from* Settings — Sync (`LedgerSettingsView`), Categories &
+/// Tags, the bundled documents, the debug screens — are still platform-standard.
+/// That is the handoff's rule holding where it still applies: only what was
+/// designed gets restyled.
 extension Color {
     /// The canvas behind the cards. Replaces `Color(.systemGroupedBackground)`.
     static let bbCanvas = Color(uiColor: UIColor { traits in
