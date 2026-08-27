@@ -192,7 +192,17 @@ codegen-units = 1
 # each verified against the photo; merchant/date/total/crit-items are unchanged
 # corpus-wide with zero per-receipt divergence. Also SACHIMA now classifies as a
 # snack rather than Dairy (it had matched only the dairy rule's "EGG").
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.11.0" }
+#
+# v0.11.1 is a patch: three behaviour commits, no API movement of any kind.
+# Weighed items whose price carries two tax flags ("W $12.81 G F") were being
+# dropped by BOTH parser paths, each missing the half the other had (core #88);
+# a Costco summary block that slipped a row is now repaired from the
+# SUBTOTAL + TAX = TOTAL identity (core #89); and six Costco items that used to
+# book to Expenses:FIXME classify (core #90) -- SCHWARTZ'S, JAM BIOTIN,
+# VITAFUSION, GRACE+STELLA, COSEQUIN, SLEEMAN. One public Rust item changed
+# (`extract_tax_reconciled` -> `extract_summary_reconciled`), which nothing
+# outside receipt-core calls, so batch_e2e.rs is untouched again.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.11.1" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -214,7 +224,11 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # stale generated Swift and fails with confusing "extra arguments" errors.
 # v0.1.11 carries core v0.11.0 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.11" }
+# v0.1.12 is the same shape again: core v0.11.1 and nothing else. The `shared/`
+# submodule is deliberately NOT moved with it -- mobile-util v0.1.11..v0.1.12
+# touches only the pin and the lockfile, so the build/test assets this app
+# compiles from that submodule are unchanged.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.12" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
