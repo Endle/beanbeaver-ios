@@ -183,16 +183,20 @@ codegen-units = 1
 # exported record, enum, variant or function differs -- so the generated Swift
 # is unchanged and no app code moved; `shared/src/bin/batch_e2e.rs`, the one
 # thing here that touches the core's Rust API, still compiles untouched.
-# The behaviour in the range is core #87: a tax of 0.00 under a total that
-# exceeds the subtotal is now derived from SUBTOTAL + TAX = TOTAL and reported
-# as `PriceAutoCorrected`, instead of quietly booking no tax at all. Found on a
-# FOODY MART scan from this device -- OCR read "HST 1.82" as "11:82", so the
-# summed tax rows returned the hst5% bucket's 0.00 and $1.82 vanished from the
-# entry. Three private-corpus receipts gain their real tax (0.46 / 0.17 / 0.20),
-# each verified against the photo; merchant/date/total/crit-items are unchanged
-# corpus-wide with zero per-receipt divergence. Also SACHIMA now classifies as a
-# snack rather than Dairy (it had matched only the dairy rule's "EGG").
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.11.0" }
+# This crosses two core releases (v0.11.0 -> v0.11.2), all of it parser and
+# rules work -- the FFI surface is byte-identical, so no bindings change.
+#
+# v0.11.2 -- brand names are blanked out of an item description BEFORE its
+# keywords are matched (new `[[brands]]` table: `Fish Well`, `Meat Corner`).
+# Found on a FOODY MART scan from this device: "Fish Well - Preserved Veg"
+# matched FISH inside the BRAND and filed the pickles under Seafood:Fish. Rock
+# sugar and preserved veg also now file as seasoning. Replaying that receipt on
+# the device moved exactly 3 of its 13 lines, totals and warnings unchanged.
+#
+# v0.11.1 -- weighed items whose price carries two tax flags ("W $12.81 G F")
+# are recovered instead of dropped; a summary block that slipped a row is
+# repaired; six Costco items that booked to FIXME are categorized.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.11.2" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -214,7 +218,7 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # stale generated Swift and fails with confusing "extra arguments" errors.
 # v0.1.11 carries core v0.11.0 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.11" }
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.13" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
