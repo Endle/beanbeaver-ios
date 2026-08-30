@@ -1594,6 +1594,10 @@ extension ReceiptResult {
         merchant: "Costco Wholesale",
         merchantMatch: MerchantMatch(
             raw: "Costco Wholesale", canonical: "Costco Wholesale", status: .exact, score: 1.0),
+        merchantDetails: MerchantDetails(
+            streetAddress: "65 Kirkham Drive", city: "Markham", region: "ON",
+            postalCode: "L3S 0A9", phoneNumber: "(905) 555-0143", storeNumber: "545",
+            rawLines: ["65 Kirkham Drive", "Markham, ON L3S 0A9", "Whse:545 Trm:8"]),
         date: "2026-02-18",
         dateIsPlaceholder: false,
         total: "$148.73",
@@ -1634,6 +1638,7 @@ extension ReceiptResult {
         merchant: "Corner Cafe",
         merchantMatch: MerchantMatch(
             raw: "Corner Cafe", canonical: nil, status: .unknown, score: 0.0),
+        merchantDetails: .empty,
         date: nil,
         dateIsPlaceholder: true,
         total: "$6.50",
@@ -1669,6 +1674,7 @@ extension ReceiptResult {
         merchant: "Cosco",
         merchantMatch: MerchantMatch(
             raw: "Cosco", canonical: "Costco", status: .suggested, score: 0.83),
+        merchantDetails: .empty,
         date: "2026-02-18",
         dateIsPlaceholder: false,
         total: "$42.10",

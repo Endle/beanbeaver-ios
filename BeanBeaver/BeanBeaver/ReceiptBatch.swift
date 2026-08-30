@@ -217,6 +217,16 @@ private struct StoredWarning: Codable {
     }
 }
 
+extension MerchantDetails {
+    /// What core returns for a receipt whose address block it found nothing in
+    /// — every field absent. Spelled once because two places need to say "there
+    /// were no details": the decoder below, for batch files written before core
+    /// v0.12.0 carried them, and the SwiftUI previews.
+    static let empty = MerchantDetails(
+        streetAddress: nil, city: nil, region: nil, postalCode: nil,
+        phoneNumber: nil, storeNumber: nil, rawLines: [])
+}
+
 extension ReceiptResult: @retroactive Codable {
     enum CodingKeys: String, CodingKey {
         case merchant, merchantMatch, date, dateIsPlaceholder, total, tax, subtotal
@@ -227,6 +237,7 @@ extension ReceiptResult: @retroactive Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(merchant: try c.decode(String.self, forKey: .merchant),
                   merchantMatch: try c.decode(MerchantMatch.self, forKey: .merchantMatch),
+                  merchantDetails: .empty,
                   date: try c.decodeIfPresent(String.self, forKey: .date),
                   dateIsPlaceholder: try c.decode(Bool.self, forKey: .dateIsPlaceholder),
                   total: try c.decode(String.self, forKey: .total),
@@ -234,11 +245,20 @@ extension ReceiptResult: @retroactive Codable {
                   subtotal: try c.decodeIfPresent(String.self, forKey: .subtotal),
                   items: try c.decode([ReceiptItem].self, forKey: .items),
                   warnings: ReceiptResult.decodeWarnings(from: c),
-                  // v0.3.3 (and v0.4.0's `detections`) grew ReceiptResult with
-                  // these FFI fields. No batch UI reads them yet, and the persisted
-                  // batch JSON predates them, so default here rather than widen the
+                  // v0.3.3 (and v0.4.0's `detections`, v0.12.0's
+                  // `merchantDetails` above) grew ReceiptResult with these FFI
+                  // fields. No batch UI reads them yet, and the persisted batch
+                  // JSON predates them, so default here rather than widen the
                   // on-disk schema (CodingKeys / encode stay unchanged, keeping old
                   // batch files loadable).
+                  //
+                  // `merchantDetails` is deliberately not persisted rather than
+                  // merely not-yet-persisted: it carries a street address, a phone
+                  // number and the raw lines they were read from, and this app does
+                  // not write anything to disk that no screen reads. The scan that
+                  // produced a receipt has the details in memory; whichever feature
+                  // first needs them after a reload can widen the schema and say
+                  // why.
                   rawText: "",
                   imageFilename: "receipt.jpg",
                   tenders: [],

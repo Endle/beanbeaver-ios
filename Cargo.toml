@@ -196,7 +196,29 @@ codegen-units = 1
 # v0.11.1 -- weighed items whose price carries two tax flags ("W $12.81 G F")
 # are recovered instead of dropped; a summary block that slipped a row is
 # repaired; six Costco items that booked to FIXME are categorized.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.11.2" }
+#
+# v0.12.0 is BREAKING in both directions, and both halves force a bindings
+# regeneration. (a) `ReceiptResult` gains `merchant_details` (core #92): the
+# address, city, postal code, phone and store number printed on the receipt,
+# parsed evidence rather than anything geocoded. (b) `ReceiptEdits` is reshaped
+# (core #93) — it gains the item block (`items`, `total`, `tax`, `subtotal`) and
+# loses `item_account_overrides`.
+#
+# That reshape is what makes the edit path usable at all. `reformat_receipt` has
+# been in the FFI since v0.3.3 and this app has never called it, because what it
+# could express was not what correcting a receipt needs: merchant, date, and a
+# positional list of account overrides that only ever reached the beancount
+# posting. `item.category` and the item's tags kept saying something else, so a
+# retag through it would have changed the ledger while the card went on drawing
+# the old category. It now carries the item list itself, edited lines are
+# re-classified, and `EditedItem.tag_path` is the user overruling the classifier
+# for one line — which is what makes a retag reach the tags and not only the
+# ledger. Findings are recomputed too, so a receipt the user has made balance
+# stops reporting that it does not.
+#
+# Nothing in this app calls `ReceiptEdits` yet — the Review & Fix screen is the
+# next PR, and this bump is what lets it compile.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.12.0" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -218,7 +240,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # stale generated Swift and fails with confusing "extra arguments" errors.
 # v0.1.11 carries core v0.11.0 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.13" }
+# v0.1.14 carries core v0.12.0 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.14" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
