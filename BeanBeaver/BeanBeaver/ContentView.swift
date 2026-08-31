@@ -181,6 +181,25 @@ struct ContentView: View {
                 // dismissal mid-scan would leave the finished result to present
                 // itself unbidden.
                 .interactiveDismissDisabled(isScanning)
+                // **Attached inside the cover, not beside it.** A `.sheet` on
+                // this view's root presents *under* the full-screen cover: the
+                // flag flips, the sheet is built, and nothing appears. Verified
+                // by the same failure on the pre-existing `-showOriginReceipt`
+                // deep-link, which fires after the scan with the cover already
+                // up. Anything the result screen presents belongs here.
+                .sheet(isPresented: $showEditor) {
+                    if let result = doneResult {
+                        // Both halves, in this order: the record was written the
+                        // moment the scan finished (`SpendStore.record`), so it
+                        // is corrected by the parse it was filed under, and only
+                        // then does the screen start showing the corrected one.
+                        ReceiptEditorView(original: result,
+                                          imageURL: pipeline.capturedImageURL) { edited in
+                            SpendStore.shared.updateResult(replacing: result, with: edited)
+                            pipeline.replaceResult(with: edited)
+                        }
+                    }
+                }
         }
         .sheet(isPresented: $showOriginReceipt) {
             OriginReceiptView(imageURL: pipeline.capturedImageURL)
@@ -191,19 +210,6 @@ struct ContentView: View {
         .sheet(isPresented: $showJSONPreview) {
             if let result = doneResult {
                 ReceiptJSONView(result: result, wallMs: pipeline.lastWallMs)
-            }
-        }
-        .sheet(isPresented: $showEditor) {
-            if let result = doneResult {
-                // Both halves, in this order: the record was written the moment
-                // the scan finished (`SpendStore.record`), so it is corrected by
-                // the parse it was filed under, and only then does the screen
-                // start showing the corrected one.
-                ReceiptEditorView(original: result,
-                                  imageURL: pipeline.capturedImageURL) { edited in
-                    SpendStore.shared.updateResult(replacing: result, with: edited)
-                    pipeline.replaceResult(with: edited)
-                }
             }
         }
         .sheet(item: $moneyManagerShare) { share in
@@ -365,6 +371,13 @@ struct ContentView: View {
             // it — the pinch gesture itself still needs a real finger.
             if ProcessInfo.processInfo.arguments.contains("-showOriginReceipt") {
                 showOriginReceipt = true
+            }
+            // `-showEditor` (paired with `-autoRunSample`): open Review & Fix
+            // over the scanned result. The only way to reach this screen without
+            // a finger, and the check that caught it presenting under the
+            // full-screen cover.
+            if ProcessInfo.processInfo.arguments.contains("-showEditor") {
+                showEditor = true
             }
             // `-dumpMoneyManager` (paired with `-autoRunSample`): after the
             // sample scan, write its Money Manager `.xlsx` to Documents so a
