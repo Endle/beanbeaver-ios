@@ -199,7 +199,8 @@ struct BatchImportView: View {
         case .parsed(let result):
             NavigationLink {
                 BatchReceiptDetailView(result: result, wallMs: draft.wallMs,
-                                       imageURL: batch.url(for: draft))
+                                       imageURL: batch.url(for: draft),
+                                       onSaveEdits: { batch.updateResult(draft.id, to: $0) })
             } label: {
                 ParsedRow(result: result)
             }
@@ -450,7 +451,12 @@ struct BatchReceiptDetailView: View {
     /// review flow, where photos aren't yet something the user manages
     /// per-receipt — so the toolbar there stays the single photo button.
     var onClearPhoto: (() -> Void)?
+    /// Where a correction goes. Nil leaves the screen read-only — which is what
+    /// a caller that has nowhere to put an edited parse should pass, rather than
+    /// offering an Edit button whose result would be dropped on dismiss.
+    var onSaveEdits: ((ReceiptResult) -> Void)?
 
+    @State private var showEditor = false
     @State private var showOriginReceipt = false
     /// Outcome of the last "Save to Camera Roll", shown in an alert. One piece
     /// of state for both outcomes: the action is invisible either way once the
@@ -475,6 +481,14 @@ struct BatchReceiptDetailView: View {
         .navigationTitle(result.merchant.capitalized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // Its own item rather than another row in the menu below: correcting
+            // a misread receipt is the one thing on this screen a user comes
+            // here to *do*, and the menu is where the photo actions live.
+            if onSaveEdits != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Edit") { showEditor = true }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 if let onClearPhoto {
                     Menu {
@@ -516,6 +530,12 @@ struct BatchReceiptDetailView: View {
         }
         .sheet(isPresented: $showOriginReceipt) {
             OriginReceiptView(imageURL: imageURL)
+        }
+        .sheet(isPresented: $showEditor) {
+            if let onSaveEdits {
+                ReceiptEditorView(original: result, imageURL: imageURL,
+                                  exportedAt: exportedAt, onSave: onSaveEdits)
+            }
         }
         .alert(saveOutcome?.title ?? "", isPresented: showingSaveOutcome, presenting: saveOutcome) { _ in
             Button("OK", role: .cancel) {}

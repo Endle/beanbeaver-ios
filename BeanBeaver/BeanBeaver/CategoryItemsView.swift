@@ -48,7 +48,8 @@ struct CategoryItemsView: View {
                         BatchReceiptDetailView(result: group.record.result,
                                                wallMs: group.record.wallMs,
                                                imageURL: store.photoURL(for: group.record),
-                                               onClearPhoto: { store.clearPhoto(group.record.id) })
+                                               onClearPhoto: { store.clearPhoto(group.record.id) },
+                                               onSaveEdits: { store.updateResult(group.record.id, to: $0) })
                     } label: {
                         receiptRow(group)
                     }

@@ -328,7 +328,8 @@ struct ReceiptsView: View {
                                        imageURL: store.photoURL(for: record),
                                        exportedAt: record.exportedAt,
                                        exportedTargets: record.exportedTargets,
-                                       onClearPhoto: { store.clearPhoto(record.id) })
+                                       onClearPhoto: { store.clearPhoto(record.id) },
+                                       onSaveEdits: { store.updateResult(record.id, to: $0) })
             } label: {
                 ParsedRow(result: record.result, status: record.exportStatus,
                           detail: detail(for: record))

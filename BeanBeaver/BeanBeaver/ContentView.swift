@@ -33,6 +33,9 @@ struct ContentView: View {
     /// launch so what `DebugInfoStore` captured can be screenshotted headlessly.
     @State private var debugShowDebugInfoList = false
     @State private var showJSONPreview = false
+    /// Review & Fix over the receipt that was just scanned — the moment a
+    /// misread is most visible, and the last one before it is exported.
+    @State private var showEditor = false
     /// The Money Manager `.xlsx` awaiting the share sheet — one presentation point
     /// for both the toolbar menu and the result card's menu.
     @State private var moneyManagerShare: ShareFile?
@@ -190,6 +193,19 @@ struct ContentView: View {
                 ReceiptJSONView(result: result, wallMs: pipeline.lastWallMs)
             }
         }
+        .sheet(isPresented: $showEditor) {
+            if let result = doneResult {
+                // Both halves, in this order: the record was written the moment
+                // the scan finished (`SpendStore.record`), so it is corrected by
+                // the parse it was filed under, and only then does the screen
+                // start showing the corrected one.
+                ReceiptEditorView(original: result,
+                                  imageURL: pipeline.capturedImageURL) { edited in
+                    SpendStore.shared.updateResult(replacing: result, with: edited)
+                    pipeline.replaceResult(with: edited)
+                }
+            }
+        }
         .sheet(item: $moneyManagerShare) { share in
             ActivityView(items: [share.url])
         }
@@ -293,7 +309,14 @@ struct ContentView: View {
                         Button("Done") { pipeline.reset() }
                     }
                 }
+                // Correcting the scan is worth a button of its own here for the
+                // same reason it is on the detail screen — and this is the
+                // screen where a misread is actually noticed, since the export
+                // that would carry it into the ledger is one tap below.
                 if isDone {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Edit") { showEditor = true }
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu {
                             Button {

@@ -98,6 +98,19 @@ final class ReceiptPipeline {
         await scan(imageData: data, options: options)
     }
 
+    /// Show a corrected parse in place of the one that was just scanned
+    /// (`ReceiptEditorView`), leaving the photo, the timings and the progress
+    /// state alone — nothing was re-scanned, only re-rendered.
+    ///
+    /// Here rather than at the call site because `status`'s setter is private;
+    /// same reason as the preview factory at the foot of this file. Ignored
+    /// unless a result is actually showing, so a correction can't resurrect a
+    /// dismissed scan.
+    func replaceResult(with result: ReceiptResult) {
+        guard case .done = status else { return }
+        status = .done(result)
+    }
+
     /// Return to the home screen (idle state) so the user can scan another receipt.
     func reset() {
         status = .idle
