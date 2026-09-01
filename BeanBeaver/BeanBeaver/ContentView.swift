@@ -33,6 +33,9 @@ struct ContentView: View {
     /// launch so what `DebugInfoStore` captured can be screenshotted headlessly.
     @State private var debugShowDebugInfoList = false
     @State private var showJSONPreview = false
+    /// Review & Fix over the receipt that was just scanned — the moment a
+    /// misread is most visible, and the last one before it is exported.
+    @State private var showEditor = false
     /// The Money Manager `.xlsx` awaiting the share sheet — one presentation point
     /// for both the toolbar menu and the result card's menu.
     @State private var moneyManagerShare: ShareFile?
@@ -178,6 +181,25 @@ struct ContentView: View {
                 // dismissal mid-scan would leave the finished result to present
                 // itself unbidden.
                 .interactiveDismissDisabled(isScanning)
+                // **Attached inside the cover, not beside it.** A `.sheet` on
+                // this view's root presents *under* the full-screen cover: the
+                // flag flips, the sheet is built, and nothing appears. Verified
+                // by the same failure on the pre-existing `-showOriginReceipt`
+                // deep-link, which fires after the scan with the cover already
+                // up. Anything the result screen presents belongs here.
+                .sheet(isPresented: $showEditor) {
+                    if let result = doneResult {
+                        // Both halves, in this order: the record was written the
+                        // moment the scan finished (`SpendStore.record`), so it
+                        // is corrected by the parse it was filed under, and only
+                        // then does the screen start showing the corrected one.
+                        ReceiptEditorView(original: result,
+                                          imageURL: pipeline.capturedImageURL) { edited in
+                            SpendStore.shared.updateResult(replacing: result, with: edited)
+                            pipeline.replaceResult(with: edited)
+                        }
+                    }
+                }
         }
         .sheet(isPresented: $showOriginReceipt) {
             OriginReceiptView(imageURL: pipeline.capturedImageURL)
@@ -293,7 +315,14 @@ struct ContentView: View {
                         Button("Done") { pipeline.reset() }
                     }
                 }
+                // Correcting the scan is worth a button of its own here for the
+                // same reason it is on the detail screen — and this is the
+                // screen where a misread is actually noticed, since the export
+                // that would carry it into the ledger is one tap below.
                 if isDone {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Edit") { showEditor = true }
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu {
                             Button {
@@ -342,6 +371,13 @@ struct ContentView: View {
             // it — the pinch gesture itself still needs a real finger.
             if ProcessInfo.processInfo.arguments.contains("-showOriginReceipt") {
                 showOriginReceipt = true
+            }
+            // `-showEditor` (paired with `-autoRunSample`): open Review & Fix
+            // over the scanned result. The only way to reach this screen without
+            // a finger, and the check that caught it presenting under the
+            // full-screen cover.
+            if ProcessInfo.processInfo.arguments.contains("-showEditor") {
+                showEditor = true
             }
             // `-dumpMoneyManager` (paired with `-autoRunSample`): after the
             // sample scan, write its Money Manager `.xlsx` to Documents so a

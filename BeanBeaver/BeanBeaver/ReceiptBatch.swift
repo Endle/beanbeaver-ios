@@ -553,6 +553,26 @@ final class ReceiptBatch {
         startParsing()
     }
 
+    /// Replace one parsed draft's result with a corrected one
+    /// (`ReceiptEditorView`).
+    ///
+    /// **Two places hold this parse, and both have to move.** A draft records
+    /// its `SpendRecord` the moment it parses (see `parseLoop`), so correcting
+    /// only the draft would leave the budget — and the Receipts list, and any
+    /// later export — reading the misparse the user just fixed. The record is
+    /// found by the *previous* result's identity, which is exactly what
+    /// `record(result:…)` filed it under.
+    ///
+    /// Only a `.parsed` draft can be corrected: there is nothing to re-render
+    /// for one that is still queued, scanning, or failed.
+    func updateResult(_ id: UUID, to result: ReceiptResult) {
+        guard let index = drafts.firstIndex(where: { $0.id == id }),
+              let previous = drafts[index].state.result else { return }
+        drafts[index].state = .parsed(result)
+        save()
+        SpendStore.shared.updateResult(replacing: previous, with: result)
+    }
+
     // MARK: Parsing
 
     /// Parse whatever is queued or interrupted, one at a time. Idempotent, so

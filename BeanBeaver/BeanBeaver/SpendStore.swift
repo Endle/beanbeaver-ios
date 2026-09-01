@@ -9,7 +9,11 @@ import BBReceiptKit
 /// these.
 struct SpendRecord: Identifiable, Codable {
     let id: UUID
-    let result: ReceiptResult
+    /// Var, not let: `ReceiptEditorView` replaces this wholesale when the user
+    /// corrects a misread receipt (`SpendStore.updateResult`). Still the parse
+    /// rather than anything hand-assembled — a correction is re-rendered by the
+    /// core, not patched here.
+    var result: ReceiptResult
     let scannedAt: Date
     /// Bare filename in `ReceiptCaptureStore.directory`, never a URL — container
     /// paths go stale across updates. Nil when the capture write itself failed.
@@ -107,6 +111,38 @@ final class SpendStore {
     }
 
     // MARK: Mutation
+
+    /// Replace one record's parse with a corrected one (`ReceiptEditorView`).
+    ///
+    /// The whole `ReceiptResult`, not a patch: an edit goes back through
+    /// `reformatReceipt`, so the beancount, the accounts, the tags and the
+    /// warnings are all re-derived together and there is no version of this
+    /// record where some of them are corrected and the rest are not.
+    ///
+    /// Every spending figure follows from `records`, so this is also what makes
+    /// a corrected price reach the budget — no separate invalidation, because
+    /// `SpendSummary` is computed from these rows on each read.
+    func updateResult(_ id: UUID, to result: ReceiptResult) {
+        guard let index = records.firstIndex(where: { $0.id == id }) else { return }
+        records[index].result = result
+        save()
+    }
+
+    /// The same update addressed by identity rather than row, for the scan
+    /// result screen — it holds a `ReceiptResult` straight from the pipeline and
+    /// never learns the `SpendRecord.id` that `record(result:…)` minted for it.
+    ///
+    /// Matched on the receipt's *previous* `beanbeaverId`, since correcting the
+    /// date changes the id the edited copy will carry. A receipt with no id
+    /// can't be located this way and is left alone — the same nil-hash case that
+    /// makes `record(result:…)` skip its dedup.
+    func updateResult(replacing previous: ReceiptResult, with result: ReceiptResult) {
+        guard let id = previous.beanbeaverId,
+              let index = records.firstIndex(where: { $0.result.beanbeaverId == id })
+        else { return }
+        records[index].result = result
+        save()
+    }
 
     func setExcluded(_ excluded: Bool, for id: UUID) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
