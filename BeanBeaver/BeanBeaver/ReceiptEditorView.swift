@@ -423,6 +423,13 @@ private struct TagPickerView: View {
 
 // MARK: - Previews
 
+// Guarded, like every other preview in the app: the fixture it builds from
+// (`ReceiptResult.previewFull`) is itself `#if DEBUG`, so an unguarded
+// `#Preview` still expands in a Release build and fails to compile against a
+// member that isn't there. Caught by an Archive, which is the first Release
+// build anything here gets.
+#if DEBUG
 #Preview("Editor") {
     ReceiptEditorView(original: .previewFull) { _ in }
 }
+#endif
