@@ -13,7 +13,8 @@ import BBReceiptKit
 ///
 /// 1. **The top of the screen was empty.** The month card sat below a large
 ///    blank band under the nav bar. The header slip now starts at the top of the
-///    content area, so the first thing on screen is the total.
+///    content area, so the total is the first thing on screen — below only
+///    `ReleaseNoticeCard`, which is the one thing that sits above it.
 /// 2. **There was no bottom navigation.** Spending, Receipts, Import and
 ///    Settings were all pushes or toolbar buttons off this one screen. Scan and
 ///    Settings moved into a real tab bar (`RootTabView`), and what is left here
@@ -43,6 +44,13 @@ struct HomeView: View {
         GeometryReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
+                    // Above the slip, and above the empty state's Scan button:
+                    // a copy of the app that isn't from the store has no other
+                    // way to say so, and a reader who stops at the first card
+                    // has still read it.
+                    ReleaseNoticeCard()
+                        .padding(.bottom, 14)
+
                     if records.isEmpty {
                         emptyState
                     } else {

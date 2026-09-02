@@ -737,7 +737,10 @@ struct SettingsView: View {
         NavigationStack {
             ScrollViewReader { proxy in
             List {
-                // First, above every section header. Where receipts go is the
+                releaseNoticeSection
+
+                // First of the settings themselves, above every section header
+                // and below only the App Store notice. Where receipts go is the
                 // one setting here with a *state* worth reporting, and it used
                 // to be reachable only from the home screen's export card —
                 // which no longer exists. Its own group rather than a row under
@@ -859,6 +862,25 @@ struct SettingsView: View {
 #endif
             }
         }
+    }
+
+    /// The App Store pointer, first in the list.
+    ///
+    /// Headerless like the Sync group above it — a notice is not a category of
+    /// setting — and the sentence lives in the footer, where a `List` already
+    /// wraps and dims explanatory text. The wording and the URL are
+    /// `ReleaseNotice`'s, shared with the home screen's card.
+    private var releaseNoticeSection: some View {
+        Section {
+            if let url = ReleaseNotice.url {
+                Link(destination: url) {
+                    Label(ReleaseNotice.linkTitle, systemImage: "checkmark.seal")
+                }
+            }
+        } footer: {
+            Text(ReleaseNotice.message)
+        }
+        .listRowBackground(Color.bbCardFill)
     }
 
     /// App marketing version + build number, e.g. "1.0.3 (12)".
