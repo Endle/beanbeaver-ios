@@ -423,6 +423,13 @@ private struct TagPickerView: View {
 
 // MARK: - Previews
 
+// `#if DEBUG` because `ReceiptResult.previewFull` is itself DEBUG-only
+// (`ContentView.swift`), and `#Preview` expands in every configuration — so an
+// unguarded one referencing it fails the **Release** build, which is the
+// configuration an archive uses and the only one whose numbers `SpendPerf`
+// trusts. Same guard `BatchImportView`'s previews carry, for the same reason.
+#if DEBUG
 #Preview("Editor") {
     ReceiptEditorView(original: .previewFull) { _ in }
 }
+#endif
