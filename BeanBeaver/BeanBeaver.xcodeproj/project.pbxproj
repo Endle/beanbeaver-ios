@@ -52,10 +52,11 @@
 		1C0000000000000000000092 /* WarningSeverity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000092 /* WarningSeverity.swift */; };
 		1C0000000000000000000093 /* TrendChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000093 /* TrendChart.swift */; };
 		1C0000000000000000000094 /* ReceiptSlip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000094 /* ReceiptSlip.swift */; };
-		1C0000000000000000000098 /* ReceiptEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000098 /* ReceiptEditorView.swift */; };
-		1C0000000000000000000097 /* ReceiptEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000097 /* ReceiptEditing.swift */; };
 		1C0000000000000000000095 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000095 /* HomeView.swift */; };
 		1C0000000000000000000096 /* RootTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000096 /* RootTab.swift */; };
+		1C0000000000000000000097 /* ReceiptEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000097 /* ReceiptEditing.swift */; };
+		1C0000000000000000000098 /* ReceiptEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000098 /* ReceiptEditorView.swift */; };
+		1C0000000000000000000099 /* SpendPerf.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000099 /* SpendPerf.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -104,10 +105,11 @@
 		1B0000000000000000000092 /* WarningSeverity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarningSeverity.swift; sourceTree = "<group>"; };
 		1B0000000000000000000093 /* TrendChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendChart.swift; sourceTree = "<group>"; };
 		1B0000000000000000000094 /* ReceiptSlip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptSlip.swift; sourceTree = "<group>"; };
-		1B0000000000000000000098 /* ReceiptEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptEditorView.swift; sourceTree = "<group>"; };
-		1B0000000000000000000097 /* ReceiptEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptEditing.swift; sourceTree = "<group>"; };
 		1B0000000000000000000095 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		1B0000000000000000000096 /* RootTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTab.swift; sourceTree = "<group>"; };
+		1B0000000000000000000097 /* ReceiptEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptEditing.swift; sourceTree = "<group>"; };
+		1B0000000000000000000098 /* ReceiptEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptEditorView.swift; sourceTree = "<group>"; };
+		1B0000000000000000000099 /* SpendPerf.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendPerf.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -167,6 +169,7 @@
 				1B0000000000000000000096 /* RootTab.swift */,
 				1B0000000000000000000095 /* HomeView.swift */,
 				1B0000000000000000000094 /* ReceiptSlip.swift */,
+				1B0000000000000000000099 /* SpendPerf.swift */,
 				1B0000000000000000000098 /* ReceiptEditorView.swift */,
 				1B0000000000000000000097 /* ReceiptEditing.swift */,
 				1B0000000000000000000028 /* CategoryItemsView.swift */,
@@ -319,6 +322,7 @@
 				1C0000000000000000000096 /* RootTab.swift in Sources */,
 				1C0000000000000000000095 /* HomeView.swift in Sources */,
 				1C0000000000000000000094 /* ReceiptSlip.swift in Sources */,
+				1C0000000000000000000099 /* SpendPerf.swift in Sources */,
 				1C0000000000000000000098 /* ReceiptEditorView.swift in Sources */,
 				1C0000000000000000000097 /* ReceiptEditing.swift in Sources */,
 				1C0000000000000000000028 /* CategoryItemsView.swift in Sources */,

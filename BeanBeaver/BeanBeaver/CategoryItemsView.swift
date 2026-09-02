@@ -30,8 +30,12 @@ struct CategoryItemsView: View {
     @State private var amountPrivacy = AmountPrivacy.shared
 
     private var groups: [SpendSummary.ReceiptGroup] {
-        let records = store.records.filter { SpendSummary.monthId(for: $0) == monthID }
-        return SpendSummary.receipts(category, from: records)
+        // Both memoized on the store. The filter used to cost one FFI crossing
+        // per record in the corpus; a group's `amount` is that receipt's own
+        // share, so narrowing the corpus-wide answer to this month gives the
+        // same numbers.
+        let ids = Set(store.records(inMonth: monthID).map(\.id))
+        return store.receipts(category).filter { ids.contains($0.record.id) }
     }
 
     var body: some View {

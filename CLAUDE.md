@@ -220,6 +220,64 @@ that was just deleted. This app has no XCTest target, so `spend-core`'s 28 Rust
 tests are the first automated coverage this logic has ever had on the iOS side;
 before, it was checkable only by hand through `-dumpSpending`.
 
+### Screens read spending through `SpendStore`, never `SpendSummary`
+
+**`SpendSummary.month(_:from: store.records)` and its siblings must not appear in
+a view.** Every one of them projects the whole corpus into `[SpendInput]` and
+crosses the FFI, and every caller in a SwiftUI view is a **computed property** —
+re-evaluated on each access, not once per body pass. That is not a small
+constant: `SpendingView` read `summary` about twenty times per pass, and
+`ReceiptsView`'s `monthChips` cost one crossing *per record per month* and was
+re-read by every chip, while `categoryShare` — commented "one FFI call for the
+whole list rather than a rollup per row" — was read once per row.
+
+Use `SpendStore`'s memoized surface instead: `monthIds`, `defaultMonthId`,
+`monthId(for:)`, `records(inMonth:)`, `month(_:)`, `facts(_:)`, `trend(_:)`,
+`receipts(_:)`, `items(_:)`. Each is the same value `SpendSummary` returns; the
+projection and the crossing happen once per change to `records` rather than once
+per property access. `SpendSummary`'s `[SpendRecord]` entry points stay right for
+a *subset* — one month, or a single record — where there is nothing corpus-wide
+to memoize.
+
+Measured with `-benchSpend` (`SpendPerf`), **Release**, iPhone 17 Pro simulator,
+200 receipts over 8 months, one body pass:
+
+| Screen | Before | Warm | Cold |
+|---|---|---|---|
+| `HomeView` | 3.3 ms | 0.002 ms | 3.4 ms |
+| `SpendingView` | 34.2 ms | 0.016 ms | 3.2 ms |
+| `ReceiptsView` | 132.3 ms | 0.106 ms | 7.6 ms |
+
+At 800 receipts the "before" column is 14.1 / 180.3 / 542.1 ms. A 60 Hz frame is
+16.7 ms. **Warm** is every pass that is not the first after a change — a scroll,
+the privacy eye, a chip, a push and a pop — and is the case that was dropping
+frames. **Cold** is the first pass after a scan or an edit; caching moves that
+work from once-per-pass to once-per-change, it does not delete it, which is why
+`HomeView` cold is unchanged and the other two still gain 10–17×.
+
+Three things about the cache, all load-bearing:
+
+- **It lives in `SpendCache`, held `@ObservationIgnored`.** Reading a memo writes
+  to it, and an observed write during a view update is a re-render loop. The
+  observed dependency stays `records`.
+- **`revision` is the whole invalidation story**, bumped by `didChange()`, which
+  every mutator funnels through. A mutator that skipped it would serve figures
+  from before its own change. `facts` and `trend` additionally carry the calendar
+  day, because they read the clock.
+- **`-benchSpend` verifies before it times.** `SpendPerf.verify` compares every
+  memoized figure against the uncached `SpendSummary` call it stands in for —
+  totals, roots, leaves, record ids, buckets, trends, drill-downs — so a wrong
+  cache key reports `verify: FAIL` rather than a fast wrong answer.
+
+**`SpendPerf` is deliberately not `#if DEBUG`.** Its numbers are only meaningful
+from a Release build, which is the configuration that would compile out. It is
+launch-argument gated, like `-showAmounts` and `-lockPremium`.
+
+**`beanbeaver-android` has the same shape and has not been fixed.** This is an
+implementation change with no user-visible behaviour, so it is not a parity
+obligation — but the projection-per-render is inherited from the same design and
+is still there.
+
 ### Two pinned tags, and the pair matters
 
 `Cargo.toml` pins `bb-mobile-ffi` (**what ships**) and `bb-receipt-ffi` (only for

@@ -68,18 +68,113 @@ extension SpendRecord {
     var exportStatus: ExportStatus { isExported ? .exported : .notExported }
 }
 
+/// Everything derived from `SpendStore.records`, held until the records change.
+///
+/// # Why this exists
+///
+/// Every `SpendSummary` entry point projects the whole corpus into `[SpendInput]`
+/// and crosses the FFI, and every caller is a SwiftUI **computed property** —
+/// which is re-evaluated on each access, not once per body pass. Measured on a
+/// Release build in the simulator (`SpendPerf`, 200 receipts, 8 months, the
+/// bundled 7-item sample):
+///
+/// | Screen | One body pass, uncached |
+/// |---|---|
+/// | `HomeView` | 3.3 ms |
+/// | `SpendingView` | 34.2 ms |
+/// | `ReceiptsView` | 132.3 ms |
+///
+/// At 800 receipts those become 14.1 / 180.3 / 542.1 ms. A 60 Hz frame is
+/// 16.7 ms. The work is identical every time — the corpus has not changed
+/// between two reads inside one body — so it is all avoidable.
+///
+/// # Why a separate object
+///
+/// `@ObservationIgnored` in `SpendStore`: reading a memo *writes* to it, and an
+/// observed write during a view update is how you get a re-render loop. Nothing
+/// here is state a view should ever depend on — the dependency is `records`,
+/// which stays observed.
+///
+/// # Invalidation
+///
+/// One `revision` counter, bumped by `SpendStore.didChange()`, which every
+/// mutator already funnels through. `facts` and `trend` are additionally
+/// clock-relative, so they also carry the calendar day they were computed for —
+/// an app left open past midnight recomputes them rather than reporting
+/// yesterday's window.
+@MainActor
+private final class SpendCache {
+    private var revision = -1
+    private var day: SpendDate?
+
+    var inputs: [SpendInput] = []
+    var byId: [String: SpendRecord] = [:]
+    var monthIdByRecordId: [UUID: String] = [:]
+    var recordsByMonth: [String: [SpendRecord]] = [:]
+    var monthIds: [String]?
+    var defaultMonthId: String?
+    var months: [String: SpendSummary.Month] = [:]
+    var facts: [String: SpendMonthFacts] = [:]
+    var trends: [String: SpendTrend] = [:]
+    var receiptGroups: [String: [SpendSummary.ReceiptGroup]] = [:]
+    var itemEntries: [String: [SpendSummary.ItemEntry]] = [:]
+
+    /// Drop everything derived from a corpus that is no longer current, or from
+    /// a day that has ended. Returns having left the cache valid for
+    /// `(revision, today)`.
+    func validate(revision: Int, today: SpendDate) {
+        if revision != self.revision {
+            self.revision = revision
+            inputs = []
+            byId = [:]
+            monthIdByRecordId = [:]
+            recordsByMonth = [:]
+            monthIds = nil
+            defaultMonthId = nil
+            months = [:]
+            receiptGroups = [:]
+            itemEntries = [:]
+            facts = [:]
+            trends = [:]
+            day = today
+            return
+        }
+        if today != day {
+            day = today
+            // `month` is pure over records and takes no date; only these two
+            // read the clock.
+            facts = [:]
+            trends = [:]
+        }
+    }
+}
+
+extension SpendDate: @retroactive Equatable {
+    public static func == (lhs: SpendDate, rhs: SpendDate) -> Bool {
+        lhs.year == rhs.year && lhs.month == rhs.month && lhs.day == rhs.day
+    }
+}
+
 /// Every receipt ever scanned, kept indefinitely until the user removes it —
 /// the substrate the budget and the Receipts screen are both views over. Owns
 /// the lifetime of each receipt's captured photo: deleting a record deletes its
 /// photo, and clearing a photo leaves the record (and every spending figure it
 /// contributes to) untouched. This is what let `ReceiptCaptureStore.clearOld`
 /// go away — nothing here ages out on its own.
+///
+/// It is also where every spending figure is *read* from — see "Derived
+/// figures" below and `SpendCache` for why the screens must not call
+/// `SpendSummary` over the corpus themselves.
 @Observable
 @MainActor
 final class SpendStore {
     static let shared = SpendStore()
 
     private(set) var records: [SpendRecord] = []   // newest first
+
+    /// Bumped by `didChange()`. The whole invalidation story for `cache`.
+    @ObservationIgnored private var revision = 0
+    @ObservationIgnored private let cache = SpendCache()
 
     private static var fileURL: URL {
         ReceiptCaptureStore.directory.appendingPathComponent("spend.json")
@@ -89,8 +184,20 @@ final class SpendStore {
         let records: [SpendRecord]
     }
 
+    /// False for a store that must never reach disk — `SpendPerf`'s synthetic
+    /// corpus, and any preview that wants a populated store. Every mutator
+    /// still works; only `didChange()` is a no-op.
+    private let persists: Bool
+
     init() {
+        persists = true
         load()
+    }
+
+    /// A store over `records` that never reads or writes `spend.json`.
+    init(ephemeralRecords records: [SpendRecord]) {
+        persists = false
+        self.records = records
     }
 
     // MARK: Recording
@@ -107,7 +214,7 @@ final class SpendStore {
         records.insert(SpendRecord(id: UUID(), result: result, scannedAt: Date(),
                                    captureFilename: captureFilename, wallMs: wallMs),
                        at: 0)
-        save()
+        didChange()
     }
 
     // MARK: Mutation
@@ -125,7 +232,7 @@ final class SpendStore {
     func updateResult(_ id: UUID, to result: ReceiptResult) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         records[index].result = result
-        save()
+        didChange()
     }
 
     /// The same update addressed by identity rather than row, for the scan
@@ -141,13 +248,13 @@ final class SpendStore {
               let index = records.firstIndex(where: { $0.result.beanbeaverId == id })
         else { return }
         records[index].result = result
-        save()
+        didChange()
     }
 
     func setExcluded(_ excluded: Bool, for id: UUID) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         records[index].isExcluded = excluded
-        save()
+        didChange()
     }
 
     /// Mark every record whose `beanbeaverId` is in `ids` as having reached
@@ -166,7 +273,7 @@ final class SpendStore {
             }
             changed = true
         }
-        if changed { save() }
+        if changed { didChange() }
     }
 
     /// Same idea as `markExported`, keyed by the results a Money Manager
@@ -186,7 +293,7 @@ final class SpendStore {
             ReceiptCaptureStore.delete(filename: filename)
         }
         records.remove(at: index)
-        save()
+        didChange()
     }
 
     /// Drop a chosen set of rows and their photos in one pass — the middle
@@ -201,7 +308,7 @@ final class SpendStore {
             }
         }
         records.removeAll { ids.contains($0.id) }
-        if records.count != before { save() }
+        if records.count != before { didChange() }
     }
 
     /// Every row and photo, gone.
@@ -212,7 +319,7 @@ final class SpendStore {
             }
         }
         records.removeAll()
-        save()
+        didChange()
     }
 
     /// Drop rows whose capture matches `filenames` — used when a batch draft is
@@ -226,7 +333,7 @@ final class SpendStore {
         records.removeAll { record in
             record.captureFilename.map(filenames.contains) ?? false
         }
-        if records.count != before { save() }
+        if records.count != before { didChange() }
     }
 
     /// Delete one receipt's photo, keeping the row — the figures stay, the JPEG
@@ -236,7 +343,7 @@ final class SpendStore {
               let filename = records[index].captureFilename else { return }
         ReceiptCaptureStore.delete(filename: filename)
         records[index].photoClearedAt = Date()
-        save()
+        didChange()
     }
 
     /// Delete every photo, keeping every row — the honest successor to the old
@@ -249,7 +356,147 @@ final class SpendStore {
             }
             records[index].photoClearedAt = Date()
         }
-        save()
+        didChange()
+    }
+
+    // MARK: Derived figures
+    //
+    // The screens read spending through these, never through `SpendSummary.…(from:
+    // records)` directly — see `SpendCache` for the measurements that made that a
+    // rule. Each is the same value `SpendSummary` would return; the only
+    // difference is that the projection and the FFI crossing happen once per
+    // change to `records` rather than once per property access.
+    //
+    // `SpendSummary`'s `[SpendRecord]` entry points are still the right call for
+    // a *subset* — one month's records, or a single one — where there is nothing
+    // corpus-wide to memoize (`CategoryItemsView`, the scan result's impact
+    // chip).
+
+    /// The corpus as the shared crate reads it.
+    var inputs: [SpendInput] {
+        validated()
+        if cache.inputs.isEmpty && !records.isEmpty {
+            cache.inputs = records.map(\.spendInput)
+        }
+        return cache.inputs
+    }
+
+    /// The re-attachment index for results Rust keys by record id.
+    var recordsById: [String: SpendRecord] {
+        validated()
+        if cache.byId.isEmpty && !records.isEmpty {
+            cache.byId = records.byRecordId
+        }
+        return cache.byId
+    }
+
+    /// Every month with at least one record, newest first.
+    var monthIds: [String] {
+        validated()
+        if let cached = cache.monthIds { return cached }
+        let value = SpendSummary.monthIds(fromInputs: inputs)
+        cache.monthIds = value
+        return value
+    }
+
+    /// The month a screen opens on — the newest with receipts in it.
+    var defaultMonthId: String {
+        validated()
+        if let cached = cache.defaultMonthId { return cached }
+        let value = SpendSummary.defaultMonthId(fromInputs: inputs)
+        cache.defaultMonthId = value
+        return value
+    }
+
+    /// Which month a record belongs to.
+    ///
+    /// **A dictionary lookup, not an FFI crossing.** `SpendSummary.monthId(for:)`
+    /// costs one crossing per call, and the list screens call it inside `filter`
+    /// closures — once per record, per chip, per body pass. The whole corpus is
+    /// bucketed here in a single pass instead, off the already-cached projection
+    /// so no record is re-projected.
+    func monthId(for record: SpendRecord) -> String {
+        buildMonthIndex()
+        return cache.monthIdByRecordId[record.id] ?? SpendSummary.monthId(for: record)
+    }
+
+    /// The records in one month, newest first — the store's own order, filtered.
+    func records(inMonth id: String) -> [SpendRecord] {
+        buildMonthIndex()
+        return cache.recordsByMonth[id] ?? []
+    }
+
+    private func buildMonthIndex() {
+        validated()
+        guard cache.monthIdByRecordId.isEmpty, !records.isEmpty else { return }
+        let projected = inputs
+        var byRecord: [UUID: String] = [:]
+        var byMonth: [String: [SpendRecord]] = [:]
+        byRecord.reserveCapacity(records.count)
+        for (index, record) in records.enumerated() {
+            let month = SpendSummary.monthId(forInput: projected[index])
+            byRecord[record.id] = month
+            byMonth[month, default: []].append(record)
+        }
+        cache.monthIdByRecordId = byRecord
+        cache.recordsByMonth = byMonth
+    }
+
+    func month(_ id: String) -> SpendSummary.Month {
+        validated()
+        if let cached = cache.months[id] { return cached }
+        let value = SpendSummary.month(id, fromInputs: inputs, byId: recordsById)
+        cache.months[id] = value
+        return value
+    }
+
+    func facts(_ id: String) -> SpendMonthFacts {
+        validated()
+        if let cached = cache.facts[id] { return cached }
+        let value = SpendSummary.facts(id, fromInputs: inputs)
+        cache.facts[id] = value
+        return value
+    }
+
+    func trend(_ scope: SpendSummary.Category? = nil) -> SpendTrend {
+        validated()
+        let key = Self.key(for: scope)
+        if let cached = cache.trends[key] { return cached }
+        let value = SpendSummary.trend(scope, fromInputs: inputs)
+        cache.trends[key] = value
+        return value
+    }
+
+    func receipts(_ category: SpendSummary.Category) -> [SpendSummary.ReceiptGroup] {
+        validated()
+        let key = Self.key(for: category)
+        if let cached = cache.receiptGroups[key] { return cached }
+        let value = SpendSummary.receipts(category, fromInputs: inputs, byId: recordsById)
+        cache.receiptGroups[key] = value
+        return value
+    }
+
+    func items(_ category: SpendSummary.Category) -> [SpendSummary.ItemEntry] {
+        validated()
+        let key = Self.key(for: category)
+        if let cached = cache.itemEntries[key] { return cached }
+        let value = SpendSummary.items(category, fromInputs: inputs, byId: recordsById)
+        cache.itemEntries[key] = value
+        return value
+    }
+
+    /// A cache key for a scope. `root:` / `leaf:` prefixed because a root tag and
+    /// a leaf label can be the same string and must not collide.
+    private static func key(for category: SpendSummary.Category?) -> String {
+        switch category {
+        case nil: return "all"
+        case .root(let id): return "root:\(id)"
+        case .leaf(let label): return "leaf:\(label)"
+        }
+    }
+
+    private func validated() {
+        cache.validate(revision: revision, today: Date().spendDate)
     }
 
     // MARK: Photo state
@@ -323,9 +570,52 @@ final class SpendStore {
         records = stored.records
     }
 
-    private func save() {
-        guard let data = try? JSONEncoder().encode(Persisted(records: records)) else { return }
-        try? data.write(to: Self.fileURL, options: .atomic)
+    /// One mutation happened. Invalidates every derived figure and schedules the
+    /// write.
+    ///
+    /// Every mutator funnels through here rather than calling `persist()`
+    /// directly, which is what makes `revision` a complete description of when
+    /// `cache` is stale — a mutator that forgot to bump it would serve figures
+    /// from before its own change.
+    private func didChange() {
+        revision &+= 1
+        persist()
+    }
+
+    /// The encode and the write, off the main actor.
+    ///
+    /// The encode is the expensive half — the whole corpus, every time, and it
+    /// used to run on the main actor between a tap and the next frame. What
+    /// crosses to the queue is a snapshot of `records`, which is O(1): an array
+    /// of structs is copy-on-write, and nothing mutates it afterwards.
+    ///
+    /// **Serial, so the last write wins.** Two mutations in quick succession
+    /// enqueue two encodes; a concurrent queue could land them out of order and
+    /// leave the older corpus on disk.
+    private func persist() {
+        guard persists else { return }
+        let snapshot = Persisted(records: records)
+        let url = Self.fileURL
+        Self.ioQueue.async {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    private static let ioQueue = DispatchQueue(
+        label: "com.beanbeaver.SpendStore.persist", qos: .utility)
+
+    /// Block until every scheduled write has landed.
+    ///
+    /// Called when the app leaves the foreground (`BeanBeaverApp`). Without it
+    /// the move off the main actor would trade a hitch for a durability window:
+    /// iOS can suspend the process between the enqueue and the write, and the
+    /// mutation the user just made would be gone on next launch. On the
+    /// background transition there is time to spend and no frame to miss, so
+    /// this is where the old synchronous behaviour belongs.
+    func flushPendingWrites() {
+        guard persists else { return }
+        Self.ioQueue.sync {}
     }
 }
 

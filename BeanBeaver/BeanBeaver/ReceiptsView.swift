@@ -42,10 +42,13 @@ struct ReceiptsView: View {
         case notExported
         case merchant(String)
 
-        func matches(_ record: SpendRecord) -> Bool {
+        /// `store` rather than `SpendSummary.monthId(for:)`: that one is an FFI
+        /// crossing per call, and this runs inside a `filter` over the corpus.
+        @MainActor
+        func matches(_ record: SpendRecord, in store: SpendStore) -> Bool {
             switch self {
             case .all: return true
-            case .month(let id): return SpendSummary.monthId(for: record) == id
+            case .month(let id): return store.monthId(for: record) == id
             case .notExported: return !record.isExported
             case .merchant(let name): return record.result.merchant == name
             }
@@ -57,7 +60,7 @@ struct ReceiptsView: View {
     /// shows.
     private var scopedRecords: [SpendRecord] {
         guard let monthFilter else { return store.records }
-        return store.records.filter { SpendSummary.monthId(for: $0) == monthFilter }
+        return store.records(inMonth: monthFilter)
     }
 
     /// Opens on the newest month rather than everything: the list is for
@@ -70,7 +73,10 @@ struct ReceiptsView: View {
     }
     private var activeFilter: Filter { filter ?? defaultFilter }
 
-    private var records: [SpendRecord] { scopedRecords.filter(activeFilter.matches) }
+    private var records: [SpendRecord] {
+        let filter = activeFilter
+        return scopedRecords.filter { filter.matches($0, in: store) }
+    }
 
     /// The backlog the footer bar acts on — scoped to the month being shown, but
     /// deliberately *not* to the chips: the bar means "file everything here that
@@ -187,9 +193,10 @@ struct ReceiptsView: View {
                         Text("Every receipt here has reached your ledger.")
                     }
                 } else {
+                    let share = categoryShare
                     List(selection: $selection) {
                         ForEach(records) { record in
-                            row(record)
+                            row(record, share: share)
                                 .listRowBackground(Color.bbCardFill)
                         }
                     }
@@ -219,15 +226,14 @@ struct ReceiptsView: View {
         // be one chip that changes nothing.
         guard monthFilter == nil else { return [] }
         let thisYear = String(SpendSummary.currentMonthId().prefix(4))
-        return SpendSummary.monthIds(from: scopedRecords).map { id in
+        return store.monthIds.map { id in
             // "March", not "March 2026" — a chip is a word wide, and the year
             // only earns its space once the list reaches back past this one.
             let full = SpendSummary.monthLabel(for: id)
             let label = id.hasPrefix(thisYear)
                 ? full.split(separator: " ").first.map(String.init) ?? full
                 : full
-            return (id, label,
-                    scopedRecords.filter { SpendSummary.monthId(for: $0) == id }.count)
+            return (id, label, store.records(inMonth: id).count)
         }
     }
 
@@ -257,25 +263,30 @@ struct ReceiptsView: View {
     /// rather than one tap away. Its count is `scopedRecords`, so under a
     /// month-scoped caller it still means "everything in this month".
     private var filterChips: some View {
-        ScrollView(.horizontal) {
+        // Both read once and handed down. They are computed properties, so a
+        // read per chip is a rebuild per chip — which is what made this row the
+        // most expensive thing on the screen.
+        let months = monthChips
+        let active = activeFilter
+        return ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                chip(.all, label: "All", count: scopedRecords.count, status: nil)
-                if let newest = monthChips.first {
+                chip(.all, label: "All", count: scopedRecords.count, status: nil, active: active)
+                if let newest = months.first {
                     chip(.month(newest.id), label: newest.label, count: newest.count,
-                         status: nil)
+                         status: nil, active: active)
                 }
                 chip(.notExported, label: "Not exported", count: backlog.count,
-                     status: .notExported)
-                ForEach(monthChips.dropFirst(), id: \.id) { month in
+                     status: .notExported, active: active)
+                ForEach(months.dropFirst(), id: \.id) { month in
                     chip(.month(month.id), label: month.label, count: month.count,
-                         status: nil)
+                         status: nil, active: active)
                 }
                 ForEach(merchantChips, id: \.name) { merchant in
                     // `.capitalized` to match `ParsedRow` — the chip and the
                     // rows it selects have to be the same word, and the parse
                     // carries the merchant as printed (`COSTCO`).
                     chip(.merchant(merchant.name), label: merchant.name.capitalized,
-                         count: merchant.count, status: nil)
+                         count: merchant.count, status: nil, active: active)
                 }
             }
             .padding(.horizontal)
@@ -292,8 +303,8 @@ struct ReceiptsView: View {
     }
 
     private func chip(_ value: Filter, label: String, count: Int,
-                      status: SpendRecord.ExportStatus?) -> some View {
-        let selected = activeFilter == value
+                      status: SpendRecord.ExportStatus?, active: Filter) -> some View {
+        let selected = active == value
         return Button {
             filter = value
         } label: {
@@ -318,10 +329,10 @@ struct ReceiptsView: View {
     }
 
     @ViewBuilder
-    private func row(_ record: SpendRecord) -> some View {
+    private func row(_ record: SpendRecord, share: CategoryShare?) -> some View {
         if isEditing {
             ParsedRow(result: record.result, status: record.exportStatus,
-                      detail: detail(for: record))
+                      detail: detail(for: record, share: share))
         } else {
             NavigationLink {
                 BatchReceiptDetailView(result: record.result, wallMs: record.wallMs,
@@ -332,7 +343,7 @@ struct ReceiptsView: View {
                                        onSaveEdits: { store.updateResult(record.id, to: $0) })
             } label: {
                 ParsedRow(result: record.result, status: record.exportStatus,
-                          detail: detail(for: record))
+                          detail: detail(for: record, share: share))
             }
             .swipeActions(edge: .trailing) {
                 Button(role: .destructive) {
@@ -367,23 +378,35 @@ struct ReceiptsView: View {
     /// still comes from the data rather than a hardcoded string here, and the
     /// share is simply omitted for a receipt with none of it.
     ///
-    /// One FFI call for the whole list rather than a rollup per row.
-    private var categoryShare: (label: String, byRecord: [String: Double])? {
-        let ids = Set(scopedRecords.map(\.id.uuidString))
-        let month = SpendSummary.month(SpendSummary.defaultMonthId(from: scopedRecords),
-                                       from: scopedRecords)
-        guard let root = month.roots.first else { return nil }
-        let groups = SpendSummary.receipts(.root(root.id), from: scopedRecords)
-        let byRecord = Dictionary(
-            groups.filter { ids.contains($0.record.id.uuidString) }
-                .map { ($0.record.id.uuidString, $0.amount) },
-            uniquingKeysWith: { a, _ in a })
-        return (root.label.lowercased(), byRecord)
+    /// One rollup for the whole list rather than one per row.
+    ///
+    /// It used to say that and not do it: this was a computed property read
+    /// from `detail(for:)`, which runs once per row — so every row re-ran three
+    /// whole-corpus FFI calls. It is computed once in `list` now and handed to
+    /// each row, and the calls behind it are the store's memoized ones.
+    struct CategoryShare {
+        let label: String
+        let byRecord: [String: Double]
     }
 
-    private func detail(for record: SpendRecord) -> String? {
+    private var categoryShare: CategoryShare? {
+        let ids = Set(scopedRecords.map(\.id.uuidString))
+        guard let root = store.month(monthFilter ?? store.defaultMonthId).roots.first
+        else { return nil }
+        // Corpus-wide and memoized. A group's `amount` is that one receipt's
+        // share of the category, so it does not depend on what else is in the
+        // array — filtering to `ids` afterwards gives the scoped answer.
+        let byRecord = Dictionary(
+            store.receipts(.root(root.id))
+                .filter { ids.contains($0.record.id.uuidString) }
+                .map { ($0.record.id.uuidString, $0.amount) },
+            uniquingKeysWith: { a, _ in a })
+        return CategoryShare(label: root.label.lowercased(), byRecord: byRecord)
+    }
+
+    private func detail(for record: SpendRecord, share: CategoryShare?) -> String? {
         var parts: [String] = []
-        if let share = categoryShare,
+        if let share,
            let amount = share.byRecord[record.id.uuidString], amount > 0 {
             parts.append("\(amountPrivacy.text(PriceFormat.currency(amount))) \(share.label)")
         }
