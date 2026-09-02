@@ -157,13 +157,25 @@ enum SpendSummary {
     /// The calendar month a record belongs to: `result.date` unless it's missing
     /// or a placeholder, in which case the row's own `scannedAt` steps in — so a
     /// bucket can't drift with the clock on a later run.
+    ///
+    /// **One FFI crossing per call.** Never call this in a `filter` over the
+    /// store — `SpendStore.monthId(for:)` memoizes the whole corpus in one pass
+    /// and hands back a dictionary lookup.
     static func monthId(for record: SpendRecord) -> String {
         spendMonthId(record: record.spendInput)
     }
 
+    static func monthId(forInput input: SpendInput) -> String {
+        spendMonthId(record: input)
+    }
+
     /// Every month with at least one record, newest first.
     static func monthIds(from records: [SpendRecord]) -> [String] {
-        spendMonthIds(records: records.map(\.spendInput))
+        monthIds(fromInputs: records.map(\.spendInput))
+    }
+
+    static func monthIds(fromInputs inputs: [SpendInput]) -> [String] {
+        spendMonthIds(records: inputs)
     }
 
     /// The month a screen opens on: the newest one with receipts in it, falling
@@ -173,7 +185,12 @@ enum SpendSummary {
     /// screen that opens on a $0.00 October because the last receipt was in
     /// September shows nothing and looks broken.
     static func defaultMonthId(from records: [SpendRecord]) -> String {
-        spendDefaultMonthId(records: records.map(\.spendInput), today: Date().spendDate)
+        defaultMonthId(fromInputs: records.map(\.spendInput))
+    }
+
+    static func defaultMonthId(fromInputs inputs: [SpendInput],
+                               today: Date = Date()) -> String {
+        spendDefaultMonthId(records: inputs, today: today.spendDate)
     }
 
     /// `"2026-07"` -> `"July 2026"`, or `id` unchanged if it isn't a month id.
@@ -242,15 +259,25 @@ enum SpendSummary {
     /// first) and within a receipt in the order the items were printed.
     /// Excluded receipts are left out, matching every other figure.
     static func items(_ category: Category, from records: [SpendRecord]) -> [ItemEntry] {
-        let byId = Dictionary(records.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { a, _ in a })
-        return spendItems(category: category.ffi, records: records.map(\.spendInput))
+        items(category, fromInputs: records.map(\.spendInput), byId: records.byRecordId)
+    }
+
+    static func items(_ category: Category,
+                      fromInputs inputs: [SpendInput],
+                      byId: [String: SpendRecord]) -> [ItemEntry] {
+        spendItems(category: category.ffi, records: inputs)
             .compactMap { $0.reattached(in: byId) }
     }
 
     /// `items(_:from:)`, grouped by the receipt each item was printed on.
     static func receipts(_ category: Category, from records: [SpendRecord]) -> [ReceiptGroup] {
-        let byId = Dictionary(records.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { a, _ in a })
-        return spendReceiptGroups(category: category.ffi, records: records.map(\.spendInput))
+        receipts(category, fromInputs: records.map(\.spendInput), byId: records.byRecordId)
+    }
+
+    static func receipts(_ category: Category,
+                         fromInputs inputs: [SpendInput],
+                         byId: [String: SpendRecord]) -> [ReceiptGroup] {
+        spendReceiptGroups(category: category.ffi, records: inputs)
             .compactMap { group in
                 guard let record = byId[group.recordId] else { return nil }
                 return ReceiptGroup(record: record,
@@ -263,8 +290,13 @@ enum SpendSummary {
     // MARK: - Arithmetic
 
     static func month(_ id: String, from records: [SpendRecord]) -> Month {
-        let byId = Dictionary(records.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { a, _ in a })
-        let m = spendMonth(id: id, records: records.map(\.spendInput))
+        month(id, fromInputs: records.map(\.spendInput), byId: records.byRecordId)
+    }
+
+    static func month(_ id: String,
+                      fromInputs inputs: [SpendInput],
+                      byId: [String: SpendRecord]) -> Month {
+        let m = spendMonth(id: id, records: inputs)
         return Month(
             id: m.id,
             label: m.label,
@@ -341,7 +373,13 @@ enum SpendSummary {
     static func facts(_ id: String,
                       from records: [SpendRecord],
                       today: Date = Date()) -> SpendMonthFacts {
-        spendMonthFacts(id: id, records: records.map(\.spendInput), today: today.spendDate)
+        facts(id, fromInputs: records.map(\.spendInput), today: today)
+    }
+
+    static func facts(_ id: String,
+                      fromInputs inputs: [SpendInput],
+                      today: Date = Date()) -> SpendMonthFacts {
+        spendMonthFacts(id: id, records: inputs, today: today.spendDate)
     }
 
     /// The weekly series for `scope`, or all spending when `scope` is nil.
@@ -352,12 +390,27 @@ enum SpendSummary {
     static func trend(_ scope: Category? = nil,
                       from records: [SpendRecord],
                       today: Date = Date()) -> SpendTrend {
-        spendTrend(records: records.map(\.spendInput),
+        trend(scope, fromInputs: records.map(\.spendInput), today: today)
+    }
+
+    static func trend(_ scope: Category? = nil,
+                      fromInputs inputs: [SpendInput],
+                      today: Date = Date()) -> SpendTrend {
+        spendTrend(records: inputs,
                    scope: scope?.ffi,
                    today: today.spendDate,
                    firstWeekday: Calendar.current.spendFirstWeekday,
                    weeks: trendWeeks,
                    rollingDays: rollingDays)
+    }
+}
+
+extension Array where Element == SpendRecord {
+    /// The re-attachment index Rust's id-keyed results are resolved through.
+    /// Built here rather than inline at four call sites, and cached by
+    /// `SpendStore` for the corpus-wide case.
+    var byRecordId: [String: SpendRecord] {
+        Dictionary(map { ($0.id.uuidString, $0) }, uniquingKeysWith: { a, _ in a })
     }
 }
 

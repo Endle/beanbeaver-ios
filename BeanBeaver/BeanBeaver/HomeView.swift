@@ -37,7 +37,7 @@ struct HomeView: View {
     @State private var amountPrivacy = AmountPrivacy.shared
 
     private var records: [SpendRecord] { store.records }
-    private var monthId: String { SpendSummary.defaultMonthId(from: records) }
+    private var monthId: String { store.defaultMonthId }
 
     var body: some View {
         GeometryReader { proxy in
@@ -72,8 +72,8 @@ struct HomeView: View {
 
     @ViewBuilder
     private var loaded: some View {
-        let month = SpendSummary.month(monthId, from: records)
-        let facts = SpendSummary.facts(monthId, from: records)
+        let month = store.month(monthId)
+        let facts = store.facts(monthId)
 
         headerSlip(month, facts)
 
@@ -141,7 +141,7 @@ struct HomeView: View {
     // MARK: - Weekly spend
 
     private var weeklyCard: some View {
-        let trend = SpendSummary.trend(from: records)
+        let trend = store.trend()
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Weekly spend").bbEyebrow().lineLimit(1).minimumScaleFactor(0.7)

@@ -1500,9 +1500,10 @@ struct ReceiptResultView: View {
     @ViewBuilder
     private var impactChip: some View {
         if let record = storedRecord {
-            let records = spendStore.records
-            let monthId = SpendSummary.monthId(for: record)
-            let month = SpendSummary.month(monthId, from: records)
+            let monthId = spendStore.monthId(for: record)
+            let month = spendStore.month(monthId)
+            // Deliberately not memoized: a one-record array, and the answer is
+            // about this scan rather than about the corpus.
             let own = SpendSummary.month(monthId, from: [record])
             VStack(alignment: .leading, spacing: 2) {
                 Text("Added to \(SpendSummary.monthLabel(for: monthId).split(separator: " ").first.map(String.init) ?? month.label) · now \(amountPrivacy.text(PriceFormat.currency(month.tracked)))")

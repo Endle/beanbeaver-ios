@@ -42,15 +42,13 @@ struct SpendingView: View {
     @State private var expandedRoots: Set<String> = []
     @State private var showReconciliation = false
 
-    private var monthIDs: [String] { SpendSummary.monthIds(from: store.records) }
+    private var monthIDs: [String] { store.monthIds }
     private var currentMonthID: String { SpendSummary.currentMonthId() }
     private var activeMonthID: String {
-        selectedMonthID ?? SpendSummary.defaultMonthId(from: store.records)
+        selectedMonthID ?? store.defaultMonthId
     }
     private var isCurrentMonth: Bool { activeMonthID == currentMonthID }
-    private var summary: SpendSummary.Month {
-        SpendSummary.month(activeMonthID, from: store.records)
-    }
+    private var summary: SpendSummary.Month { store.month(activeMonthID) }
 
     var body: some View {
         Group {
@@ -229,7 +227,7 @@ struct SpendingView: View {
     /// rather than the same one when the link put them one tap apart.
     @ViewBuilder
     private var metaLine: some View {
-        let facts = SpendSummary.facts(activeMonthID, from: store.records)
+        let facts = store.facts(activeMonthID)
         HStack(spacing: 8) {
             Text("\(amountPrivacy.text(PriceFormat.currency(facts.dailyAverage)))/day over \(facts.days) day\(facts.days == 1 ? "" : "s")")
 
@@ -294,7 +292,7 @@ struct SpendingView: View {
     /// that lands in one week hides a grocery trend inside an all-categories
     /// line. The delta, the mean line and the caption all re-scope with it.
     private var weekOverWeekCard: some View {
-        let trend = SpendSummary.trend(trendScope, from: store.records)
+        let trend = store.trend(trendScope)
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Week over week").bbEyebrow().lineLimit(1).minimumScaleFactor(0.7)
