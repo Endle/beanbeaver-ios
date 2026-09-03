@@ -232,7 +232,7 @@ codegen-units = 1
 # user with custom rules actually took, the one path `device_sim` could not
 # reproduce. Both now go through `scan::process_image_with_options`. Plus a
 # batch of known-failure parser and item-classifier fixes.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.13.0" }
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.13.1" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -258,7 +258,7 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.15 carries core v0.13.0 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.15" }
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.16" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
