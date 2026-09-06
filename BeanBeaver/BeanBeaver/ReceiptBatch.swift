@@ -123,7 +123,7 @@ extension ItemTag: @retroactive Codable {
 
 extension ReceiptItem: @retroactive Codable {
     enum CodingKeys: String, CodingKey {
-        case description, price, quantity, account, tags
+        case description, price, quantity, account, tagPath, tags
         /// Pre-0.7.0 batches wrote a classifier key here, not an account.
         case category
     }
@@ -151,10 +151,17 @@ extension ReceiptItem: @retroactive Codable {
             tags = legacy.map { ItemTag(path: $0, display: $0.capitalized) }
         }
 
+        // Core v0.13.2 added the winning classification path. A batch written
+        // before it has no such key, and nil is the honest answer there: the
+        // deepest tag is not reliably the one that claimed the account, which
+        // is why core stopped deriving it that way.
+        let tagPath = try c.decodeIfPresent(String.self, forKey: .tagPath)
+
         self.init(description: try c.decode(String.self, forKey: .description),
                   price: try c.decode(String.self, forKey: .price),
                   quantity: try c.decode(Int32.self, forKey: .quantity),
                   account: account,
+                  tagPath: tagPath,
                   tags: tags)
     }
 
@@ -164,6 +171,7 @@ extension ReceiptItem: @retroactive Codable {
         try c.encode(price, forKey: .price)
         try c.encode(quantity, forKey: .quantity)
         try c.encodeIfPresent(account, forKey: .account)
+        try c.encodeIfPresent(tagPath, forKey: .tagPath)
         try c.encode(tags, forKey: .tags)
     }
 }
