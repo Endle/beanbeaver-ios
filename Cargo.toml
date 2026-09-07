@@ -244,7 +244,26 @@ codegen-units = 1
 # split into `fields/{amounts,dates,prices,tenders}`, the spatial and text
 # engines into `rows`/`pairing` modules, and the detection page becoming a type
 # whose normalization passes run through a runner.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.13.2" }
+#
+# v0.14.0 adds ONE more field, in the same shape and with the same consequence:
+# `item_number`, the merchant's printed item code, on BOTH `ReceiptItem` and
+# `EditedItem`. Kept as a string because the codes have leading zeros that a
+# number would eat. It cost three build rounds here, not one -- the eight
+# `ReceiptItem(...)` preview literals failed first and masked the rest, and the
+# last site to surface was `ReceiptBatch.swift`'s Codable decode, which builds
+# via `self.init(description:` and so matches no `ReceiptItem(` grep. Look for
+# that site FIRST on the next additive field.
+#
+# The edit path carries the code rather than dropping it: core preserves the
+# prior code only while the description is unchanged, so a RENAMED line loses
+# its item number unless the caller hands the original back.
+#
+# Also in v0.14.0: a parser fix for suggested-retail rows -- OCR can fuse a
+# receipt's Chinese sub-line onto the `REG$` marker ("MF7KREG$1.99"), and the
+# backward description walk used to read that as the product name, burying the
+# real one on the line above. Plus five classifier rules (OASIS, bare SAUCE,
+# NOODLE SAUCE, BUTTER FLAVORED, PROSPER UNITY).
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.14.0" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -272,7 +291,7 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.17 carries core v0.13.2 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.17" }
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.18" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).

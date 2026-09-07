@@ -123,7 +123,7 @@ extension ItemTag: @retroactive Codable {
 
 extension ReceiptItem: @retroactive Codable {
     enum CodingKeys: String, CodingKey {
-        case description, price, quantity, account, tagPath, tags
+        case description, itemNumber, price, quantity, account, tagPath, tags
         /// Pre-0.7.0 batches wrote a classifier key here, not an account.
         case category
     }
@@ -157,7 +157,13 @@ extension ReceiptItem: @retroactive Codable {
         // is why core stopped deriving it that way.
         let tagPath = try c.decodeIfPresent(String.self, forKey: .tagPath)
 
+        // Core v0.14.0 added the merchant's printed item code. A batch written
+        // before it has no such key, and nil is right: the code is only ever
+        // read off the receipt, so it cannot be recovered from an older draft.
+        let itemNumber = try c.decodeIfPresent(String.self, forKey: .itemNumber)
+
         self.init(description: try c.decode(String.self, forKey: .description),
+                  itemNumber: itemNumber,
                   price: try c.decode(String.self, forKey: .price),
                   quantity: try c.decode(Int32.self, forKey: .quantity),
                   account: account,
@@ -168,6 +174,7 @@ extension ReceiptItem: @retroactive Codable {
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(description, forKey: .description)
+        try c.encodeIfPresent(itemNumber, forKey: .itemNumber)
         try c.encode(price, forKey: .price)
         try c.encode(quantity, forKey: .quantity)
         try c.encodeIfPresent(account, forKey: .account)
