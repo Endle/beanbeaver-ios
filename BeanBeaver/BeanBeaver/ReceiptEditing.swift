@@ -87,12 +87,20 @@ struct EditedItemDraft: Identifiable, Equatable {
     /// What the parse classified this line as, for the row to show while
     /// `tagPath` is empty. Nil on a line the user added, which has no parse.
     var parsedCategory: String?
+    /// The merchant's printed item code, carried through the edit unchanged.
+    ///
+    /// Held but never shown or edited: core keeps the prior code only when the
+    /// description still matches, so a line the user RENAMES would lose its code
+    /// unless we hand the original back. Nil on a line the user added, which has
+    /// no printed code.
+    var itemNumber: String?
 
     init(item: ReceiptItem) {
         description = item.description
         price = item.price
         quantity = item.quantity
         parsedCategory = item.tags.last?.display
+        itemNumber = item.itemNumber
     }
 
     /// A blank line for the user to fill in — the "add the row an orphaned price
@@ -102,6 +110,7 @@ struct EditedItemDraft: Identifiable, Equatable {
         price = ""
         quantity = 1
         parsedCategory = nil
+        itemNumber = nil
     }
 }
 
@@ -244,6 +253,7 @@ struct ReceiptEditDraft {
     private static func edited(from draft: EditedItemDraft) -> EditedItem {
         EditedItem(
             description: draft.description.trimmed,
+            itemNumber: draft.itemNumber,
             price: normalizedAmount(draft.price) ?? draft.price.trimmed,
             quantity: draft.quantity,
             tagPath: draft.tagPath
