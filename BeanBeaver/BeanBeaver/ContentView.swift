@@ -1094,12 +1094,6 @@ struct ReceiptCard: View {
     let result: ReceiptResult
     var wallMs: Double?
     var capturedImageURL: URL?
-    /// Optional banner between the header and the items — the scan-result
-    /// screen's "what this did to your month" chip. Sits *inside* the card and
-    /// above the line items on purpose: it answers the question the app is for,
-    /// and the items are the supporting detail. `BatchReceiptDetailView` passes
-    /// nothing, since a receipt opened from the list was not just added.
-    var impact: AnyView?
     /// Show this many items, then collapse the rest behind a "Show all N items"
     /// control. Nil lists everything.
     ///
@@ -1126,9 +1120,6 @@ struct ReceiptCard: View {
             VStack(spacing: 0) {
                 VStack(spacing: 16) {
                     header
-                    if let impact {
-                        impact
-                    }
                     if !result.items.isEmpty {
                         Divider()
                         itemsList
@@ -1167,11 +1158,10 @@ struct ReceiptCard: View {
     /// "what did this cost?" is answered without scanning down the card.
     ///
     /// The total is 28pt label colour rather than 32pt accent red. Red is the
-    /// tap-me colour here and a receipt total is not an action; and this figure
-    /// now shares the eye-line with the impact chip below, which is the one that
-    /// says what the scan did to the month. Subtotal moved into "Accounting
-    /// details" — it reconciles the parse, which is what that section is for;
-    /// tax is repeated small at the card's foot, see `taxFootnote`.
+    /// tap-me colour here and a receipt total is not an action. Subtotal moved
+    /// into "Accounting details" — it reconciles the parse, which is what that
+    /// section is for; tax is repeated small at the card's foot, see
+    /// `taxFootnote`.
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -1397,8 +1387,6 @@ struct ReceiptResultView: View {
     /// the answer to "I just scanned one" is usually "here's the next one".
     var onScanAnother: (() -> Void)?
     @State private var showJSONPreview = false
-    @State private var spendStore = SpendStore.shared
-    @State private var amountPrivacy = AmountPrivacy.shared
 
     /// Four, which is the design's own card. The point is that the actions under
     /// this card stay on screen after a big shop, and four rows plus the tail
@@ -1412,7 +1400,6 @@ struct ReceiptResultView: View {
             // effect is spent exactly once per screen.
             ReceiptCard(result: result, wallMs: wallMs,
                         capturedImageURL: capturedImageURL,
-                        impact: AnyView(impactChip),
                         collapseItemsAfter: Self.itemsBeforeCollapse,
                         showsTornEdge: true,
                         includesAccountingDetails: false)
@@ -1487,47 +1474,6 @@ struct ReceiptResultView: View {
         .sheet(isPresented: $showJSONPreview) {
             ReceiptJSONView(result: result, wallMs: wallMs)
         }
-    }
-
-    /// What this scan did to the month, in one line — the answer to the
-    /// question the app is now *for*, placed above the ledger actions rather
-    /// than below them.
-    ///
-    /// Reads the month *after* the record was stored, so it states the new
-    /// total rather than predicting it. Absent when the receipt isn't in the
-    /// store yet (a preview, or a parse that wasn't recorded), rather than
-    /// guessing at a figure.
-    @ViewBuilder
-    private var impactChip: some View {
-        if let record = storedRecord {
-            let monthId = spendStore.monthId(for: record)
-            let month = spendStore.month(monthId)
-            // Deliberately not memoized: a one-record array, and the answer is
-            // about this scan rather than about the corpus.
-            let own = SpendSummary.month(monthId, from: [record])
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Added to \(SpendSummary.monthLabel(for: monthId).split(separator: " ").first.map(String.init) ?? month.label) · now \(amountPrivacy.text(PriceFormat.currency(month.tracked)))")
-                    .font(.subheadline.weight(.semibold))
-                if !own.roots.isEmpty {
-                    Text(own.roots
-                        .map { "\(amountPrivacy.text(PriceFormat.currency($0.amount))) \($0.label.lowercased())" }
-                        .joined(separator: ", "))
-                        .font(.caption)
-                }
-            }
-            .foregroundStyle(Color.bbImpactText)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(Color.bbImpactSoft,
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-    }
-
-    /// This receipt as the store holds it, matched on the identity the store
-    /// dedups by.
-    private var storedRecord: SpendRecord? {
-        guard let id = result.beanbeaverId else { return nil }
-        return spendStore.records.first { $0.result.beanbeaverId == id }
     }
 
     /// Sends the receipt to the selected target: an append to its ledger
