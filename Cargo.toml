@@ -272,7 +272,18 @@ codegen-units = 1
 # -6.00 rows -- the total read correctly while the ledger sat 6.00 from
 # balancing -- because the bare `TPD` spelling lost both the parser's
 # alpha-ratio waiver and the classifier's discount keyword.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.14.1" }
+#
+# v0.14.2 is another pure parser patch -- `crates/ffi/` byte-identical again,
+# regenerated bindings only. It fixes amounts landing on the sub-line *above*
+# their item when perspective lifts the amount column relative to the text
+# column: on the XV Foody Mart scan that found it, the two candidate rows
+# overlapped the contested amount by exactly 0.745 each, so first-fit gave it
+# to the row above and the receipt parsed 14 lines for a printed 16, running
+# 1.96 short of its own subtotal. What breaks that tie is arithmetic, not
+# geometry -- a `1 @ $0.98` row cannot be holding 3.99. Measured over the
+# 143-receipt corpus: no receipt regresses live or cached, and one unrelated
+# Bestco Fresh receipt gets an item back.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.14.2" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -302,7 +313,7 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.19 carries core v0.14.1 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.19" }
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.20" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
