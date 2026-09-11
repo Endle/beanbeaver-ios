@@ -52,6 +52,12 @@ struct ReceiptEditorView: View {
                 summarySection
                 if exportedAt != nil { alreadyExportedSection }
             }
+            // The warm ground and the brand tint, same recipe as Settings
+            // (`Theme.swift`): this sheet opens over the scan result and the
+            // receipt detail, both already on the canvas, and a cool grey Form
+            // with blue Cancel/Save read as a different app dropping in.
+            .scrollContentBackground(.hidden)
+            .background(Color.bbCanvas)
             .navigationTitle("Review & Fix")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -83,6 +89,9 @@ struct ReceiptEditorView: View {
                 Button("Keep Editing", role: .cancel) {}
             }
         }
+        // On the stack, not the Form: a tint inside the stack doesn't reach the
+        // navigation bar, and Cancel/Save were the blue this is here to fix.
+        .tint(.bbAccent)
     }
 
     // MARK: - Receipt
@@ -108,6 +117,7 @@ struct ReceiptEditorView: View {
                 Button("Set a Date") { draft.date = Date() }
             }
         }
+        .listRowBackground(Color.bbCardFill)
     }
 
     // MARK: - Items
@@ -144,6 +154,7 @@ struct ReceiptEditorView: View {
             Text("Swipe a line to delete it, or Edit to reorder. "
                  + "A line you rename is re-filed from its new text.")
         }
+        .listRowBackground(Color.bbCardFill)
     }
 
     // MARK: - Summary
@@ -158,6 +169,7 @@ struct ReceiptEditorView: View {
         } footer: {
             reconciliation
         }
+        .listRowBackground(Color.bbCardFill)
     }
 
     private func amountField(_ label: String, text: Binding<String>) -> some View {
@@ -212,7 +224,7 @@ struct ReceiptEditorView: View {
     private var alreadyExportedSection: some View {
         Section {
             Label {
-                Text("This receipt has already been filed. Correcting it here "
+                Text("This receipt has already been exported. Correcting it here "
                      + "updates the app, not the entry that was exported.")
             } icon: {
                 Image(systemName: "info.circle")
@@ -220,6 +232,7 @@ struct ReceiptEditorView: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
+        .listRowBackground(Color.bbCardFill)
     }
 
     // MARK: - Save
@@ -336,6 +349,9 @@ private struct ItemEditorView: View {
                      : "You picked this category, so the description won't change it.")
             }
         }
+        .listRowBackground(Color.bbCardFill)
+        .scrollContentBackground(.hidden)
+        .background(Color.bbCanvas)
         .navigationTitle("Item")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -388,6 +404,9 @@ private struct TagPickerView: View {
                 }
             }
         }
+        .listRowBackground(Color.bbCardFill)
+        .scrollContentBackground(.hidden)
+        .background(Color.bbCanvas)
         .searchable(text: $query, prompt: "Find a category")
         .navigationTitle("Category")
         .navigationBarTitleDisplayMode(.inline)

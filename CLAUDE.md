@@ -18,7 +18,7 @@ App code under `BeanBeaver/BeanBeaver/`, by concern (open the file for detail):
 
 - **Entry / shell** — `BeanBeaverApp.swift` (entry); `ContentView.swift` (the tab shell — it owns the app's state, every sheet, the export alert and the DEBUG deep links, and is still a **grab-bag** that also defines `SettingsView`, `ReceiptResultView`, `ReceiptCard`, `AccountingDetailsCard`, `OriginReceiptView`, `ScanTimingsView`); `RootTab.swift` (the three tabs, the raised Scan button, `BBLayout`); `HomeView.swift` (the home screen).
 - **Scan pipeline** — `ReceiptPipeline.swift` (`BatchRunner`, `-autoRunBatch`), `ReceiptCaptureStore.swift`, `ReceiptBatch.swift`, `DocumentScanner.swift`, `BatchImportView.swift`.
-- **Export / sync** — `LedgerExport.swift` (exporter seam), `LedgerSettingsView.swift` (the "Sync" page), backends `GitHubLedger.swift` / `GitHubDeviceFlow.swift` / `FilesLedgerInbox.swift`, and `MoneyManagerExport.swift` / `MoneyManagerWorkbook.swift`.
+- **Export / sync** — `LedgerExport.swift` (exporter seam), `LedgerSettingsView.swift` (the "Export" page), backends `GitHubLedger.swift` / `GitHubDeviceFlow.swift` / `FilesLedgerInbox.swift`, and `MoneyManagerExport.swift` / `MoneyManagerWorkbook.swift`.
 - **Support** — `Entitlements.swift` (`isPremium` seam); `DebugInfoStore.swift` (+`DebugInfoListView`) and `DataDump.swift` (+`DataDumpView`) = in-app debug capture; `ReceiptSlip.swift` (the header slip, `TornEdge`, `AmountPrivacyEye`, `DisplayAmount`); others self-named (`Keychain`, `Theme`, `ZoomableImageView`, `PhotoSaver`, `LaunchTiming`).
 
 **New files must be added to `project.pbxproj` by hand.** The project uses
@@ -322,16 +322,17 @@ which is load-bearing and silent when removed.
   A stale build installs on a device perfectly happily, so check this before trusting
   any on-device or simulator result that is supposed to exercise a new core.
 
-- **Sync page vs. general Settings — where UI config lives.** The **Sync page**
-  (`LedgerSettingsView`, opened from the home screen's "Sync:" button and the
-  result/batch "Sync Settings…" action) is the single place to pick *and* configure the
+- **Export page vs. general Settings — where UI config lives.** The **Export page**
+  (`LedgerSettingsView` — the Settings row "Export destinations", and every
+  "Set Up Export…" / "Export Settings…" action on the result, batch and Receipts
+  screens) is the single place to pick *and* configure the
   downstream exporter — beancount destinations (GitHub PR, Files inbox) and the Money
   Manager Excel export today. It's a **"select one exporter" picker showing only the
   chosen exporter's detail**, so it stays short as targets grow: add a target as a
   `SyncExporter` case + `switch` arm, not another stacked section. **General
   `SettingsView`** (app/device prefs) holds only *cross-cutting* output prefs that span
   services — e.g. the "Save details file" `.json` sidecar toggle (applies to every file
-  backend: Files/Dropbox/GitHub). Rule: one exporter's own target config → Sync page;
+  backend: Files/Dropbox/GitHub). Rule: one exporter's own target config → Export page;
   anything spanning services → Settings.
 
 - Avoid using macro #if DEBUG - think twice that if it's necessary
