@@ -94,6 +94,15 @@ struct EditedItemDraft: Identifiable, Equatable {
     /// unless we hand the original back. Nil on a line the user added, which has
     /// no printed code.
     var itemNumber: String?
+    /// The gift-card purchase metadata the parse attached to this line, carried
+    /// through the edit unchanged — the same reason `itemNumber` is.
+    ///
+    /// Core's contract (docs/gift-card-metadata.md): "carry the existing
+    /// metadata object when editing or moving an item; `None` clears it." The
+    /// editor resends the whole item block on any change, so a nil here would
+    /// silently strip the metadata from every line the user did not touch. Nil
+    /// on a line the user added, which has no parse.
+    var giftCard: GiftCardPurchase?
 
     init(item: ReceiptItem) {
         description = item.description
@@ -101,6 +110,7 @@ struct EditedItemDraft: Identifiable, Equatable {
         quantity = item.quantity
         parsedCategory = item.tags.last?.display
         itemNumber = item.itemNumber
+        giftCard = item.giftCard
     }
 
     /// A blank line for the user to fill in — the "add the row an orphaned price
@@ -240,7 +250,10 @@ struct ReceiptEditDraft {
     /// The edits to send, or nil when nothing changed.
     func edits() -> ReceiptEdits? {
         guard hasChanges else { return nil }
+        // `tenders: nil` keeps the parse's own payment list — the editor has
+        // no tender UI, and core treats an absent list as "leave them alone".
         return ReceiptEdits(
+            tenders: nil,
             merchant: merchantChanged ? merchant.trimmed : nil,
             dateIso: dateChanged ? dateISO : nil,
             items: itemsChanged ? items.map(Self.edited(from:)) : nil,
@@ -252,6 +265,7 @@ struct ReceiptEditDraft {
 
     private static func edited(from draft: EditedItemDraft) -> EditedItem {
         EditedItem(
+            giftCard: draft.giftCard,
             description: draft.description.trimmed,
             itemNumber: draft.itemNumber,
             price: normalizedAmount(draft.price) ?? draft.price.trimmed,
