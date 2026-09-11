@@ -296,7 +296,16 @@ codegen-units = 1
 # metadata does not reach the beancount output. Parser output is unchanged
 # for receipts with no gift-card evidence; the bundled Costco sample parses
 # identically.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.15.0" }
+#
+# v0.15.1 is a pure parser patch -- `crates/ffi/` byte-identical to v0.15.0,
+# regenerated bindings only, no Swift edits. Found on an XV Dollarama scan: a
+# gift card prints as a zero-priced SKU, a `BH 25` load row, and the terminal's
+# activation slip (`Amount $25.00`) BEFORE TOTAL, and the parser emitted all
+# three as items -- 50.00 against a 25.00 total. Now the load row's amount
+# folds into the SKU (auditable as a PriceAutoCorrected warning), AMOUNT joins
+# the terminal-slip skip vocabulary, and AMAZON classifies as `gift_card`.
+# Measured live over 145 receipts: only that receipt moved.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.15.1" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -326,7 +335,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.19 carries core v0.14.1 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.21" }
+# v0.1.22 carries core v0.15.1 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.22" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
