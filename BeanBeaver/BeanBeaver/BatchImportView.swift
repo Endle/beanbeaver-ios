@@ -236,7 +236,8 @@ struct BatchImportView: View {
             Button {
                 Task { await export() }
             } label: {
-                ExportButtonLabel(idleLabel: exportLabel, exporter: exporter)
+                ExportButtonLabel(idleLabel: exporter.exportActionLabel(count: batch.parsedCount),
+                                  exporter: exporter)
             }
             .buttonStyle(.borderedProminent)
             .tint(exporter.exportTint)
@@ -257,12 +258,6 @@ struct BatchImportView: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Color.bbHairline).frame(height: 1)
         }
-    }
-
-    private var exportLabel: String {
-        guard exporter.selectedTargetReady else { return "Set Up Export…" }
-        let count = batch.parsedCount
-        return count == 1 ? "Export 1 Receipt" : "Export \(count) Receipts"
     }
 
     /// Sends every parsed receipt to the selected target — one pull request or
@@ -549,10 +544,10 @@ struct BatchReceiptDetailView: View {
     /// a draft has been nowhere by definition — doesn't grow a card telling it
     /// so.
     ///
-    /// Says "Shared to" for Money Manager and "Filed to" for a ledger, matching
-    /// `SpendStore.markShared`'s honesty about the difference: a share sheet is
-    /// marked at presentation and may have been cancelled, while a ledger append
-    /// either landed or reported an error.
+    /// Says "Shared to" for Money Manager and "Exported to" for a ledger,
+    /// matching `SpendStore.markShared`'s honesty about the difference: a share
+    /// sheet is marked at presentation and may have been cancelled, while a
+    /// ledger append either landed or reported an error.
     @ViewBuilder
     private var exportStatusCard: some View {
         if let exportedAt {
@@ -584,7 +579,7 @@ struct BatchReceiptDetailView: View {
     }
 
     private static func targetPhrase(_ target: String) -> String {
-        target == "Money Manager" ? "Shared to Money Manager" : "Filed to \(target)"
+        target == "Money Manager" ? "Shared to Money Manager" : "Exported to \(target)"
     }
 
     private var showingSaveOutcome: Binding<Bool> {

@@ -19,10 +19,18 @@ struct ContentView: View {
     @State private var showSpending = false
     /// Also opened by the `-showReceipts` DEBUG deep-link.
     @State private var showReceipts = false
+    /// Presented from inside the scan-result cover — see `scanOutcome`.
     @State private var showOriginReceipt = false
     /// Also opened by the `-showLedgerSettings` DEBUG deep-link, so it can be
     /// screenshotted headlessly (previews render only in Xcode).
+    ///
+    /// **From a tab root only.** The result screen's setup action sets
+    /// `showLedgerSettingsOverResult` instead, because a sheet on this root
+    /// presents under the full-screen cover — see the note in `body`.
     @State private var showLedgerSettings = false
+    /// Setup opened from the scan result — the same page, attached inside the
+    /// cover so it can actually appear there.
+    @State private var showLedgerSettingsOverResult = false
     /// DEBUG deep-link: `-showDataDump` opens the data-dump debug screen on
     /// launch so it can be screenshotted headlessly.
     @State private var debugShowDataDump = false
@@ -183,10 +191,12 @@ struct ContentView: View {
                 .interactiveDismissDisabled(isScanning)
                 // **Attached inside the cover, not beside it.** A `.sheet` on
                 // this view's root presents *under* the full-screen cover: the
-                // flag flips, the sheet is built, and nothing appears. Verified
-                // by the same failure on the pre-existing `-showOriginReceipt`
-                // deep-link, which fires after the scan with the cover already
-                // up. Anything the result screen presents belongs here.
+                // flag flips, the sheet is built, and nothing appears. Found
+                // when the Edit button did nothing; then confirmed on the two
+                // shipped controls below, which had the same shape — "Show
+                // Original Receipt" and "Set Up Export…" from the result's own
+                // menu set root flags and were inert from here. Anything the
+                // result screen presents belongs in this block.
                 .sheet(isPresented: $showEditor) {
                     if let result = doneResult {
                         // Both halves, in this order: the record was written the
@@ -200,9 +210,16 @@ struct ContentView: View {
                         }
                     }
                 }
-        }
-        .sheet(isPresented: $showOriginReceipt) {
-            OriginReceiptView(imageURL: pipeline.capturedImageURL)
+                .sheet(isPresented: $showOriginReceipt) {
+                    OriginReceiptView(imageURL: pipeline.capturedImageURL)
+                }
+                // Its own flag rather than `showLedgerSettings`, which Home and
+                // the pushed screens set with no cover up: one flag driving two
+                // sheets would present the root one on every tap from a tab
+                // and then try the cover one too.
+                .sheet(isPresented: $showLedgerSettingsOverResult) {
+                    NavigationStack { LedgerSettingsView(exporter: exporter) }
+                }
         }
         .sheet(isPresented: $showLedgerSettings) {
             NavigationStack { LedgerSettingsView(exporter: exporter) }
@@ -272,7 +289,7 @@ struct ContentView: View {
                             ReceiptResultView(result: result, wallMs: pipeline.lastWallMs,
                                               capturedImageURL: pipeline.capturedImageURL,
                                               exporter: exporter,
-                                              onConfigure: { showLedgerSettings = true },
+                                              onConfigure: { showLedgerSettingsOverResult = true },
                                               onExportMoneyManager: { presentMoneyManager(for: [result]) },
                                               onScanAnother: VNDocumentCameraViewController.isSupported
                                                   ? { showScanner = true } : nil)
@@ -298,7 +315,6 @@ struct ContentView: View {
             }
             .background(Color.bbCanvas)
             .navigationBarTitleDisplayMode(.inline)
-            .tint(.bbAccent)
             .toolbar {
                 // **Not while scanning.** `reset()` clears the status but does
                 // not cancel the running `scan()` task, so a Done tap mid-scan
@@ -338,7 +354,7 @@ struct ContentView: View {
                                                         imageURL: pipeline.capturedImageURL,
                                                         wallMs: pipeline.lastWallMs,
                                                         exporter: exporter,
-                                                        onConfigure: { showLedgerSettings = true },
+                                                        onConfigure: { showLedgerSettingsOverResult = true },
                                                         onViewJSON: { showJSONPreview = true },
                                                         onExportMoneyManager: { presentMoneyManager(for: [result]) })
                                 }
@@ -350,6 +366,11 @@ struct ContentView: View {
                 }
             }
         }
+        // On the stack, not inside it: a tint on the content doesn't reach the
+        // navigation bar, so Done / Edit / the menu were system blue over a
+        // screen whose every other control is the brand red. The same modifier
+        // used to sit on the scroll view above and only reached the buttons.
+        .tint(.bbAccent)
     }
 
 #if DEBUG
@@ -602,6 +623,9 @@ struct OriginReceiptView: View {
                 }
             }
         }
+        // A sheet doesn't take its presenter's tint, and this one opens over
+        // the result screen and the receipt detail — both brand red.
+        .tint(.bbAccent)
         .task(id: imageURL) {
             guard let imageURL else { return }
             // The capture is a JPEG already on disk; decode it off the main
@@ -752,8 +776,12 @@ struct SettingsView: View {
                                 ExportStatusDot(status: .exported)
                             }
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Sync")
-                                Text(syncSubtitle)
+                                // "Export destinations", not "Sync": the page it
+                                // opens is titled Export and every action that
+                                // reaches it says Export. Sync implied a two-way
+                                // relationship the app doesn't have.
+                                Text("Export destinations")
+                                Text(exportDestinationsSubtitle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -926,14 +954,14 @@ struct SettingsView: View {
                      urlString: "https://matrix.to/#/#beanbeaver:matrix.org"),
     ]
 
-    /// The Sync row's state line: what is configured, and how much has actually
-    /// gone out through it.
-    private var syncSubtitle: String {
+    /// The Export destinations row's state line: what is configured, and how
+    /// much has actually gone out through it.
+    private var exportDestinationsSubtitle: String {
         guard exporter.selectedTargetReady else { return "Not set up" }
-        let filed = spendStore.exportedRecords.count
-        return filed == 0
+        let exported = spendStore.exportedRecords.count
+        return exported == 0
             ? exporter.exportIndicator
-            : "\(exporter.exportIndicator) · \(filed) filed"
+            : "\(exporter.exportIndicator) · \(exported) exported"
     }
 
     /// The tracker's own preferences.
@@ -1421,12 +1449,16 @@ struct ReceiptResultView: View {
                 // has one primary rather than two. Filled when there is no
                 // scanner to go back to (an imported receipt), where export is
                 // the only thing left to do.
+                //
+                // The label says what `primaryExport` will do — export, set up,
+                // or unlock — rather than naming a destination the tap may not
+                // reach. See `LedgerExporter.exportActionLabel`.
                 Group {
                     if onScanAnother == nil {
                         Button {
                             Task { await primaryExport() }
                         } label: {
-                            ExportButtonLabel(idleLabel: "Export:\(exporter.exportIndicator)",
+                            ExportButtonLabel(idleLabel: exporter.exportActionLabel(),
                                               exporter: exporter)
                         }
                         .buttonStyle(.borderedProminent)
@@ -1434,7 +1466,7 @@ struct ReceiptResultView: View {
                         Button {
                             Task { await primaryExport() }
                         } label: {
-                            ExportButtonLabel(idleLabel: "Export:\(exporter.exportIndicator)",
+                            ExportButtonLabel(idleLabel: exporter.exportActionLabel(),
                                               exporter: exporter)
                         }
                         .buttonStyle(.bordered)
@@ -1587,14 +1619,14 @@ extension ReceiptResult {
         tax: "$9.42",
         subtotal: "$139.31",
         items: [
-            ReceiptItem(description: "ORG BANANAS", itemNumber: nil, price: "$2.49", quantity: 1, account: "Expenses:Food:Grocery", tagPath: "grocery/fruit", tags: [.init(path: "grocery", display: "Grocery"), .init(path: "grocery/fruit", display: "Fruit")]),
-            ReceiptItem(description: "ROTISSERIE CHICKEN", itemNumber: nil, price: "$4.99", quantity: 1, account: "Expenses:Food:Grocery:PreparedMeal", tagPath: "grocery/prepared_meal", tags: [.init(path: "grocery", display: "Grocery"), .init(path: "grocery/meat", display: "Meat"),
+            ReceiptItem(giftCard: nil, description: "ORG BANANAS", itemNumber: nil, price: "$2.49", quantity: 1, account: "Expenses:Food:Grocery", tagPath: "grocery/fruit", tags: [.init(path: "grocery", display: "Grocery"), .init(path: "grocery/fruit", display: "Fruit")]),
+            ReceiptItem(giftCard: nil, description: "ROTISSERIE CHICKEN", itemNumber: nil, price: "$4.99", quantity: 1, account: "Expenses:Food:Grocery:PreparedMeal", tagPath: "grocery/prepared_meal", tags: [.init(path: "grocery", display: "Grocery"), .init(path: "grocery/meat", display: "Meat"),
                           .init(path: "grocery/meat/chicken", display: "Chicken"),
                           .init(path: "grocery/prepared_meal", display: "Prepared Meal")]),
-            ReceiptItem(description: "KIRKLAND OLIVE OIL 2L", itemNumber: nil, price: "$21.99", quantity: 1, account: "Expenses:Food:Grocery", tagPath: "grocery/staple", tags: [.init(path: "grocery", display: "Grocery"), .init(path: "grocery/staple", display: "Staple")]),
-            ReceiptItem(description: "BATH TISSUE 30 ROLL", itemNumber: nil, price: "$24.99", quantity: 1, account: "Expenses:Home", tagPath: "household/supply", tags: [.init(path: "household", display: "Household"), .init(path: "household/supply", display: "Supply")]),
-            ReceiptItem(description: "GASOLINE REGULAR", itemNumber: nil, price: "$58.40", quantity: 1, account: "Expenses:Driving:Gas", tagPath: "driving/gas", tags: [.init(path: "driving", display: "Driving"), .init(path: "driving/gas", display: "Gas")]),
-            ReceiptItem(description: "MYSTERY ITEM", itemNumber: nil, price: "$3.00", quantity: 2, account: nil, tagPath: nil, tags: []),
+            ReceiptItem(giftCard: nil, description: "KIRKLAND OLIVE OIL 2L", itemNumber: nil, price: "$21.99", quantity: 1, account: "Expenses:Food:Grocery", tagPath: "grocery/staple", tags: [.init(path: "grocery", display: "Grocery"), .init(path: "grocery/staple", display: "Staple")]),
+            ReceiptItem(giftCard: nil, description: "BATH TISSUE 30 ROLL", itemNumber: nil, price: "$24.99", quantity: 1, account: "Expenses:Home", tagPath: "household/supply", tags: [.init(path: "household", display: "Household"), .init(path: "household/supply", display: "Supply")]),
+            ReceiptItem(giftCard: nil, description: "GASOLINE REGULAR", itemNumber: nil, price: "$58.40", quantity: 1, account: "Expenses:Driving:Gas", tagPath: "driving/gas", tags: [.init(path: "driving", display: "Driving"), .init(path: "driving/gas", display: "Gas")]),
+            ReceiptItem(giftCard: nil, description: "MYSTERY ITEM", itemNumber: nil, price: "$3.00", quantity: 2, account: nil, tagPath: nil, tags: []),
         ],
         warnings: [],
         rawText: "",
@@ -1664,8 +1696,8 @@ extension ReceiptResult {
         tax: "$2.68",
         subtotal: "$39.42",
         items: [
-            ReceiptItem(description: "PAPER TOWELS", itemNumber: nil, price: "$18.99", quantity: 1, account: "Expenses:Home", tagPath: "household/supply", tags: [.init(path: "household", display: "Household"), .init(path: "household/supply", display: "Supply")]),
-            ReceiptItem(description: "ORG EGGS 24CT", itemNumber: nil, price: "$9.49", quantity: 1, account: "Expenses:Food:Grocery", tagPath: "grocery/dairy", tags: [.init(path: "grocery", display: "Grocery"), .init(path: "grocery/dairy", display: "Dairy")]),
+            ReceiptItem(giftCard: nil, description: "PAPER TOWELS", itemNumber: nil, price: "$18.99", quantity: 1, account: "Expenses:Home", tagPath: "household/supply", tags: [.init(path: "household", display: "Household"), .init(path: "household/supply", display: "Supply")]),
+            ReceiptItem(giftCard: nil, description: "ORG EGGS 24CT", itemNumber: nil, price: "$9.49", quantity: 1, account: "Expenses:Food:Grocery", tagPath: "grocery/dairy", tags: [.init(path: "grocery", display: "Grocery"), .init(path: "grocery/dairy", display: "Dairy")]),
         ],
         warnings: [],
         rawText: "",

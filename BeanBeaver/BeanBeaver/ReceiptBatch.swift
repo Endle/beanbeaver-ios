@@ -162,7 +162,14 @@ extension ReceiptItem: @retroactive Codable {
         // read off the receipt, so it cannot be recovered from an older draft.
         let itemNumber = try c.decodeIfPresent(String.self, forKey: .itemNumber)
 
-        self.init(description: try c.decode(String.self, forKey: .description),
+        // Core v0.15.0 added gift-card purchase metadata to the item. It is
+        // deliberately NOT stored here yet: core's docs/gift-card-metadata.md
+        // defers app persistence and UI, and the metadata does not reach the
+        // beancount output, so a record decoded without it loses nothing the
+        // ledger sees. The iOS gift-card work adds a `StoredGiftCard` mirror
+        // (the `StoredWarning` shape) in this extension; until then nil.
+        self.init(giftCard: nil,
+                  description: try c.decode(String.self, forKey: .description),
                   itemNumber: itemNumber,
                   price: try c.decode(String.self, forKey: .price),
                   quantity: try c.decode(Int32.self, forKey: .quantity),

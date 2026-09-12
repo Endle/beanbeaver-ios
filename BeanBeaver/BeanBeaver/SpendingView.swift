@@ -154,18 +154,19 @@ struct SpendingView: View {
     /// than spending another row on a control.
     private var monthStepper: some View {
         HStack(spacing: 10) {
-            stepperArrow("chevron.left", enabled: canGoOlder, action: goOlder)
+            stepperArrow("chevron.left", label: "Previous month", enabled: canGoOlder, action: goOlder)
             Spacer(minLength: 0)
             Text("\(summary.label) · \(summary.receiptCount) receipt\(summary.receiptCount == 1 ? "" : "s")")
                 .bbEyebrow()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             Spacer(minLength: 0)
-            stepperArrow("chevron.right", enabled: canGoNewer, action: goNewer)
+            stepperArrow("chevron.right", label: "Next month", enabled: canGoNewer, action: goNewer)
         }
     }
 
     private func stepperArrow(_ symbol: String,
+                              label: String,
                               enabled: Bool,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -173,11 +174,17 @@ struct SpendingView: View {
                 .font(.system(size: 13, weight: .semibold))
                 // Tertiary is a non-text token, and a chevron is not text.
                 .foregroundStyle(enabled ? Color.bbInkSecondary : Color.bbInkTertiary)
-                .frame(width: 32, height: 32)
+                // A 44pt target on a 32pt footprint: the frame is what gets
+                // hit, the negative padding is what the row lays out, so the
+                // eyebrow line keeps its height. Same move as the privacy eye
+                // on Home's slip.
+                .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .padding(-6)
         .disabled(!enabled)
+        .accessibilityLabel(label)
     }
 
     // MARK: - Header slip

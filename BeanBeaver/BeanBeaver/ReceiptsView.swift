@@ -424,19 +424,49 @@ struct ReceiptsView: View {
     /// One tap to export the whole backlog. The bar is present whenever there's a
     /// backlog and absent the moment there isn't, so it doubles as the answer to
     /// "am I up to date?" — a screen with no bar is a screen with nothing owing.
+    ///
+    /// **Two shapes, by whether the tap can export.** With a target ready it is
+    /// the full-width button. With nothing configured it is a status line and a
+    /// small setup button: nothing can be exported yet, so a large control here
+    /// was a chore-shaped thing standing in front of the browsing this screen is
+    /// for — and, being grey, it read as disabled besides.
+    @ViewBuilder
     private var backlogFooter: some View {
-        Button {
-            Task { await export(backlog) }
-        } label: {
-            ExportButtonLabel(idleLabel: backlogLabel, exporter: exporter)
+        Group {
+            if exporter.selectedTargetReady {
+                Button {
+                    Task { await export(backlog) }
+                } label: {
+                    ExportButtonLabel(idleLabel: exporter.exportActionLabel(count: backlog.count),
+                                      exporter: exporter)
+                }
+                // Tinted, not filled. Filing to a ledger is still one tap and
+                // still always here, but it is no longer the loudest thing on a
+                // screen whose job is browsing what you bought. `Scan` on home
+                // keeps that role.
+                .buttonStyle(.bordered)
+                .tint(.bbAccent)
+                .controlSize(.large)
+                .allowsHitTesting(exporter.runningKind == nil)
+            } else {
+                HStack(spacing: 12) {
+                    Text("\(backlog.count) receipt\(backlog.count == 1 ? "" : "s") not exported")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.bbInkSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Button {
+                        onConfigure()
+                    } label: {
+                        Label(exporter.exportActionLabel(), systemImage: exporter.exportActionSymbol)
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.bbAccent)
+                }
+            }
         }
-        // Tinted, not filled. Filing to a ledger is still one tap and still
-        // always here, but it is no longer the loudest thing on a screen whose
-        // job is browsing what you bought. `Scan` on home keeps that role.
-        .buttonStyle(.bordered)
-        .tint(.bbAccent)
-        .controlSize(.large)
-        .allowsHitTesting(exporter.runningKind == nil)
         .padding(.horizontal)
         .padding(.top, 12)
         .padding(.bottom, BBLayout.scanButtonClearance)
@@ -444,12 +474,6 @@ struct ReceiptsView: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Color.bbHairline).frame(height: 1)
         }
-    }
-
-    private var backlogLabel: String {
-        guard exporter.selectedTargetReady else { return "Set Up Export…" }
-        let count = backlog.count
-        return "Export \(count) Receipt\(count == 1 ? "" : "s") to \(exporter.selectedTarget.label)"
     }
 
     // MARK: - Bulk actions
@@ -480,7 +504,8 @@ struct ReceiptsView: View {
             Button {
                 Task { await exportSelected() }
             } label: {
-                ExportButtonLabel(idleLabel: exportLabel, exporter: exporter)
+                ExportButtonLabel(idleLabel: exporter.exportActionLabel(count: selectedRecords.count),
+                                  exporter: exporter)
             }
             .buttonStyle(.borderedProminent)
             .tint(exporter.exportTint)
@@ -505,12 +530,6 @@ struct ReceiptsView: View {
         store.remove(ids: selection)
         selection.removeAll()
         if scopedRecords.isEmpty { editMode = .inactive }
-    }
-
-    private var exportLabel: String {
-        guard exporter.selectedTargetReady else { return "Set Up Export…" }
-        let count = selectedRecords.count
-        return count == 1 ? "Export 1 Receipt" : "Export \(count) Receipts"
     }
 
     private func exportSelected() async {

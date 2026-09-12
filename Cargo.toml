@@ -283,7 +283,48 @@ codegen-units = 1
 # geometry -- a `1 @ $0.98` row cannot be holding 3.99. Measured over the
 # 143-receipt corpus: no receipt regresses live or cached, and one unrelated
 # Bestco Fresh receipt gets an item back.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.14.2" }
+#
+# v0.15.0 is gift-card milestone 1 (core #106) and, unlike the two patches
+# above, it changes `crates/ffi/`: a new `gift_cards` module, and a first-
+# position field with no default on four existing records -- `ReceiptItem`,
+# `ReceiptTender` and `EditedItem` gain `gift_card`, `ReceiptEdits` gains
+# `tenders`. Every hand-written Swift constructor of those types had to pass
+# it (11 sites). Two of them are not `nil` on purpose: `EditedItem.giftCard`
+# carries the parsed metadata through an edit because core's contract is
+# "None clears it" and the editor resends the whole item block; the Codable
+# decode IS nil because core defers app persistence in this release and the
+# metadata does not reach the beancount output. Parser output is unchanged
+# for receipts with no gift-card evidence; the bundled Costco sample parses
+# identically.
+#
+# v0.15.1 is a pure parser patch -- `crates/ffi/` byte-identical to v0.15.0,
+# regenerated bindings only, no Swift edits. Found on an XV Dollarama scan: a
+# gift card prints as a zero-priced SKU, a `BH 25` load row, and the terminal's
+# activation slip (`Amount $25.00`) BEFORE TOTAL, and the parser emitted all
+# three as items -- 50.00 against a 25.00 total. Now the load row's amount
+# folds into the SKU (auditable as a PriceAutoCorrected warning), AMOUNT joins
+# the terminal-slip skip vocabulary, and AMAZON classifies as `gift_card`.
+# Measured live over 145 receipts: only that receipt moved.
+#
+# v0.15.2 is another pure parser patch -- `crates/ffi/` byte-identical again.
+# Two tender labels the classifier never knew: T&T's bare `Master` and Foody
+# Mart's bare `Credit Card`, 57 corpus receipts that had never produced a
+# tender. Their exported payment posting therefore moves from the configured
+# card account to `Liabilities:CreditCard:PENDING`, the placeholder every
+# other merchant with a recognized tender already uses. Plus three Foody Mart
+# two-row-lift fixes found on an XV scan: a qty row whose `@` OCR'd as a zero
+# (`1 0 $1.51`) posed as an item named `1 0 $` -- and had been a phantom line
+# on one corpus receipt since it was added; the forward description walk now
+# passes a unit-price-only qty row; a bare `Meat` counter label under a priced
+# banner takes the banner's price instead of the second Meat's.
+#
+# v0.15.3 is rules only -- `crates/ffi/` byte-identical once more. ORANGE and
+# POCKY become exact-only keywords (a $15.88 free-range chicken was filing as
+# Fruit because ORANGE fuzzy-matched the RANGE in "Free Range Chic"), and
+# four Bestco rules land: FREE RANGE CHIC -> meat/chicken, GLOVES ->
+# household, POCKY / BISCUIT STICK -> snacks, MILK BITES -> snacks. Exactly
+# one corpus receipt's categories change.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.15.3" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -313,7 +354,13 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.19 carries core v0.14.1 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.20" }
+# v0.1.22 carries core v0.15.1 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+# v0.1.23 carries core v0.15.2 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+# v0.1.24 carries core v0.15.3 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.24" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).

@@ -110,7 +110,7 @@ struct ExportButtonLabel: View {
                     .contentTransition(.opacity)
                     .animation(.default, value: exporter.runningMessage)
             } else {
-                Label(idleLabel, systemImage: "arrow.triangle.2.circlepath")
+                Label(idleLabel, systemImage: exporter.exportActionSymbol)
                     .font(.headline)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -464,19 +464,53 @@ final class LedgerExporter {
         return Entitlements.shared.isPremium
     }
 
-    /// Label for an "Export:" button — the selected target's name, with a lock
-    /// when it's premium and not yet unlocked. Shared by the home screen and the
-    /// result screen so they never drift.
+    /// The selected target's name, with a lock when it's premium and not yet
+    /// unlocked. What the Settings row and the home screen's status line show.
     var exportIndicator: String {
         var label = selectedTarget.label
         if selectedTarget.requiresPremium && !Entitlements.shared.isPremium { label += " 🔒" }
         return label
     }
 
-    /// Green once the selected target is ready (matches the platform's
-    /// "connected" convention), grey while it still needs setup/unlock.
+    /// The primary export button's idle label, by what the tap will actually do.
+    /// Shared by the scan result, the batch page and both Receipts footers, so
+    /// one state can't read three ways.
+    ///
+    /// **The label names the action, not the destination.** The result screen
+    /// used to say `Export:GitHub` with nothing configured — describing a
+    /// destination the tap could not reach, since `primaryExport` sends an
+    /// unconfigured target to setup instead. With the grey tint beside it, that
+    /// read as a disabled export rather than the setup entry it was. Now an
+    /// unconfigured ledger says so, a locked premium target says so, and only a
+    /// target that can receive says "Export".
+    func exportActionLabel(count: Int = 1) -> String {
+        guard selectedTargetReady else {
+            return selectedTarget.requiresPremium
+                ? "Unlock \(selectedTarget.label) Export…"
+                : "Set Up Export…"
+        }
+        let target = selectedTarget.label
+        return count == 1 ? "Export to \(target)" : "Export \(count) Receipts to \(target)"
+    }
+
+    /// The glyph beside `exportActionLabel`: the sync arrows only once the tap
+    /// exports, since setup and unlock are different actions and shouldn't wear
+    /// the export icon.
+    var exportActionSymbol: String {
+        guard selectedTargetReady else {
+            return selectedTarget.requiresPremium ? "lock" : "gearshape"
+        }
+        return "arrow.triangle.2.circlepath"
+    }
+
+    /// Green once the selected target is ready (the platform's "connected"
+    /// convention); the brand accent while it still needs setup or unlock.
+    ///
+    /// Was `.secondary` for the not-ready case, which on a bordered or prominent
+    /// button is the disabled look — on a control whose whole job at that point
+    /// is to be tapped. Accent says "this is the thing to do next".
     var exportTint: Color {
-        selectedTargetReady ? .green : .secondary
+        selectedTargetReady ? .green : .bbAccent
     }
 
     /// Send `entries` to `kind`, publishing a confirmation (or a failure) for the

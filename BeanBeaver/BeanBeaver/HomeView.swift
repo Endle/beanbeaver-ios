@@ -165,8 +165,8 @@ struct HomeView: View {
     /// One card, four rows — where the five pills went.
     ///
     /// A row says what is behind it *and* how much is there, which a pill could
-    /// not: "Receipts 22", "20 waiting to export". That count is the reason the
-    /// row exists, and it is why Export is a row here rather than a button —
+    /// not: "Receipts 22", "20 receipts not exported". That count is the reason
+    /// the row exists, and it is why Export is a row here rather than a button —
     /// it was a status readout wearing a button before.
     private func destinationsCard(_ month: SpendSummary.Month) -> some View {
         VStack(spacing: 0) {
@@ -248,10 +248,13 @@ struct HomeView: View {
             return nil
         }()
 
+        // The trailing word is what the tap does. With a backlog the row opens
+        // the Receipts list — it does not export — so it says "View"; it used
+        // to say "Export", an accented verb on a row that only navigates.
         return destinationRow(
             title: exportRowTitle,
             leading: dot,
-            trailing: .init(text: backlog > 0 ? "Export"
+            trailing: .init(text: backlog > 0 ? "View"
                                 : (exporter.selectedTargetReady ? "Change" : "Set Up"),
                             accented: true),
             action: { backlog > 0 ? onOpenReceipts() : onOpenSync() }
@@ -261,13 +264,13 @@ struct HomeView: View {
     private var exportRowTitle: String {
         let backlog = store.unexportedRecords.count
         if backlog > 0 {
-            return "\(backlog) waiting to export"
+            return "\(backlog) receipt\(backlog == 1 ? "" : "s") not exported"
         }
         if store.lastExportedAt != nil {
-            return "All receipts filed"
+            return "All receipts exported"
         }
-        // Nothing filed and nothing waiting: the setup prompt, and the only
-        // route to Sync from this screen.
+        // Nothing exported and nothing waiting: the setup prompt, and the
+        // only route to the Export page from this screen.
         return exporter.selectedTargetReady
             ? "Exports to \(exporter.exportIndicator)"
             : "No export destination yet"
