@@ -175,7 +175,7 @@ dependencies = [
 [[package]]
 name = "bb-mobile-ffi"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.23#5461a8c4c337d58a469c9072acc3a580c9a661a8"
+source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.24#0fc292b6afc7657e4cb2a97af0bde5c1edc58cee"
 dependencies = [
  "bb-receipt-ffi",
  "spend-core",
@@ -184,8 +184,8 @@ dependencies = [
 
 [[package]]
 name = "bb-receipt-ffi"
-version = "0.15.2"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.15.2#92a7d201740ed3bbefe07cdc6f157783326a67d8"
+version = "0.15.3"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.15.3#48d0777558a499471f63c57d431daac58577248e"
 dependencies = [
  "image",
  "receipt-core",
@@ -1078,8 +1078,8 @@ dependencies = [
 
 [[package]]
 name = "ocr-paddle"
-version = "0.15.2"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.15.2#92a7d201740ed3bbefe07cdc6f157783326a67d8"
+version = "0.15.3"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.15.3#48d0777558a499471f63c57d431daac58577248e"
 dependencies = [
  "geo",
  "image",
@@ -1356,8 +1356,8 @@ dependencies = [
 
 [[package]]
 name = "receipt-core"
-version = "0.15.2"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.15.2#92a7d201740ed3bbefe07cdc6f157783326a67d8"
+version = "0.15.3"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.15.3#48d0777558a499471f63c57d431daac58577248e"
 dependencies = [
  "regex",
  "serde",
@@ -1366,8 +1366,8 @@ dependencies = [
 
 [[package]]
 name = "receipt-image"
-version = "0.15.2"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.15.2#92a7d201740ed3bbefe07cdc6f157783326a67d8"
+version = "0.15.3"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.15.3#48d0777558a499471f63c57d431daac58577248e"
 dependencies = [
  "image",
  "thiserror 2.0.18",
@@ -1458,8 +1458,8 @@ dependencies = [
 
 [[package]]
 name = "scan"
-version = "0.15.2"
-source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.15.2#92a7d201740ed3bbefe07cdc6f157783326a67d8"
+version = "0.15.3"
+source = "git+https://github.com/Endle/beanbeaver-core?tag=v0.15.3#48d0777558a499471f63c57d431daac58577248e"
 dependencies = [
  "image",
  "ocr-paddle",
@@ -1666,7 +1666,7 @@ dependencies = [
 [[package]]
 name = "spend-core"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.23#5461a8c4c337d58a469c9072acc3a580c9a661a8"
+source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.24#0fc292b6afc7657e4cb2a97af0bde5c1edc58cee"
 
 [[package]]
 name = "stable_deref_trait"
