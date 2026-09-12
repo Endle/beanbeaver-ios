@@ -305,7 +305,19 @@ codegen-units = 1
 # folds into the SKU (auditable as a PriceAutoCorrected warning), AMOUNT joins
 # the terminal-slip skip vocabulary, and AMAZON classifies as `gift_card`.
 # Measured live over 145 receipts: only that receipt moved.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.15.1" }
+#
+# v0.15.2 is another pure parser patch -- `crates/ffi/` byte-identical again.
+# Two tender labels the classifier never knew: T&T's bare `Master` and Foody
+# Mart's bare `Credit Card`, 57 corpus receipts that had never produced a
+# tender. Their exported payment posting therefore moves from the configured
+# card account to `Liabilities:CreditCard:PENDING`, the placeholder every
+# other merchant with a recognized tender already uses. Plus three Foody Mart
+# two-row-lift fixes found on an XV scan: a qty row whose `@` OCR'd as a zero
+# (`1 0 $1.51`) posed as an item named `1 0 $` -- and had been a phantom line
+# on one corpus receipt since it was added; the forward description walk now
+# passes a unit-price-only qty row; a bare `Meat` counter label under a priced
+# banner takes the banner's price instead of the second Meat's.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.15.2" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -337,7 +349,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.22 carries core v0.15.1 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.22" }
+# v0.1.23 carries core v0.15.2 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.23" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
