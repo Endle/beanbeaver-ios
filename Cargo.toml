@@ -324,7 +324,21 @@ codegen-units = 1
 # four Bestco rules land: FREE RANGE CHIC -> meat/chicken, GLOVES ->
 # household, POCKY / BISCUIT STICK -> snacks, MILK BITES -> snacks. Exactly
 # one corpus receipt's categories change.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.15.3" }
+#
+# v0.15.4 is three fixes, `crates/ffi/` byte-identical yet again. The grouping
+# work (core #113) is the substantive one: it deletes the
+# `known_failures: ["total"]` marker from the public freshco_7455_redact
+# fixture -- a total that used to parse wrong now parses right -- alongside
+# contest-date and gift-card-label handling and tilted summary blocks. The
+# other two are item-classifier keywords found on XV scans: SWEET POTATO
+# VERMICELLI -> Staple (the produce keyword was outranking VERMICELLI, while
+# the same noodle printed "SW POTATO WIDE VERMICELLI" already booked right),
+# and WATERCRESS -> Vegetable + a new OKRA + the truncated INSTANT NOO prefix
+# (WATER matched inside "Watercress", OKRA matched nothing at all, and BEEF
+# claimed "MK - Hot Beef Instant Noo" because the receipt truncates at ~25
+# chars). Measured by a cached corpus dump diff: byte-identical apart from the
+# receipt added with them.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.15.4" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -360,7 +374,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.24 carries core v0.15.3 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.24" }
+# v0.1.25 carries core v0.15.4 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.25" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
