@@ -338,7 +338,29 @@ codegen-units = 1
 # claimed "MK - Hot Beef Instant Noo" because the receipt truncates at ~25
 # chars). Measured by a cached corpus dump diff: byte-identical apart from the
 # receipt added with them.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.15.4" }
+#
+# v0.16.0 is a minor for a capability, not for the wire: `crates/ffi/` is
+# byte-identical to v0.15.4, so only the bindings are regenerated. Two XV
+# Dollarama gift-card fixes. A variable-amount card prints as a zero-priced
+# SKU over a load row that names a range, not an amount ("PNGO 25-500CAD
+# 0.00" / "Variable 25-500 25.00"); it now folds into one 25.00 line, as
+# v0.15.1 already did for "BH 25", and PNGO classifies as `gift_card`. And
+# the terminal's activation slip (TRANSACTION RECORD / Trans Type ACTIVATE)
+# now fills the card item's gift-card purchase metadata -- activation,
+# Reference #, count, denomination. That half is invisible in this app for
+# now: ReceiptBatch decodes `giftCard` as nil because persistence is
+# deferred. Plus overflow hardening in core's Money parser. Verified before
+# tagging: core main through sim-e2e-private.sh --all, where exactly one of
+# 157 cases changed (the new Dollarama receipt, FAIL -> PASS); then deployed
+# to XV and the two Dollarama photos were replayed on the device.
+#
+# v0.16.1 is rules only, `crates/ffi/` byte-identical again. From an XV Foody
+# Mart scan: the truncated "Sunrise - Fresh Smooth To" (tofu) had been filed
+# as Drink:Juice because SMOOTHIE fuzzy-matched it; it is now Vegetable.
+# CILANTRO files as Seasoning beside CORIANDER (the same herb had two
+# accounts), and "Soya Bean" (soybean sprouts at Foody) as Vegetable.
+# Measured by a full corpus dump diff: only those lines move.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.16.1" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -376,7 +398,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.25 carries core v0.15.4 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.25" }
+# v0.1.26 carries core v0.16.1 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.26" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
