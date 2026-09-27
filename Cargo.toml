@@ -381,7 +381,14 @@ codegen-units = 1
 # Also a new exact rule files Full Fortune's shepherd's-purse wonton filling
 # as Frozen. Measured by a full corpus dump diff: 25 lines gain an account
 # (14 prefix + 11 filling), nothing else moves.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.0" }
+#
+# v0.17.1 is a parser fix, `crates/ffi/` byte-identical again. From an XV
+# rescan that came out at 15 lines against 14 printed, with a phantom 82.98
+# item. Foody prints a deal row under each item ("(...)@5.99(1/$2.98)"); its
+# faded tail read as "(15)@5.99(1/82.98" and the row priced itself. The
+# ")@5.99(1/" shape now marks a deal row on its own. Measured by a full corpus
+# dump diff: only that recapture changes.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.1" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -425,7 +432,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.28 carries core v0.17.0 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.28" }
+# v0.1.29 carries core v0.17.1 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.29" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
