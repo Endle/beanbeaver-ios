@@ -360,7 +360,17 @@ codegen-units = 1
 # CILANTRO files as Seasoning beside CORIANDER (the same herb had two
 # accounts), and "Soya Bean" (soybean sprouts at Foody) as Vegetable.
 # Measured by a full corpus dump diff: only those lines move.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.16.1" }
+#
+# v0.16.2 is a parser fix, `crates/ffi/` byte-identical again. From an XV
+# Longo's scan that came out with no items and total 3.49 instead of 3.94.
+# Longo's prints a SALE column after the tax code ("MONSTER ABSOLUTE ZER
+# $3.49 H SALE"), which left the row looking unpriced, so its only item was
+# dropped. The rewards block below the payment lines ("Total spent", pre-tax)
+# was also being read as the grand total. LONGO'S is now a known merchant, so
+# the payee is the store rather than the header line with its phone number.
+# Measured by a full corpus dump diff: byte-identical apart from the receipt
+# added with it.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.16.2" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -400,7 +410,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.26 carries core v0.16.1 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.26" }
+# v0.1.27 carries core v0.16.2 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.27" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
