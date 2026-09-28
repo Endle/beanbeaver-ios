@@ -388,7 +388,14 @@ codegen-units = 1
 # faded tail read as "(15)@5.99(1/82.98" and the row priced itself. The
 # ")@5.99(1/" shape now marks a deal row on its own. Measured by a full corpus
 # dump diff: only that recapture changes.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.1" }
+#
+# v0.17.2 is a crash fix, `crates/ffi/` byte-identical again. An XV scan
+# failed and was never saved: a grouping check sliced raw OCR text at byte
+# 11, and OCR had put a multi-byte glyph there ("(E#-E3X##‡# 12PCS)..."),
+# so the slice panicked. Latent since v0.13.0. It now uses the char-safe
+# `.get(..11)`. Measured by a full corpus dump diff: every existing receipt
+# byte-identical.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.2" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -434,7 +441,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.29 carries core v0.17.1 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.29" }
+# v0.1.30 carries core v0.17.2 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.30" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
