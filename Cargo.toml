@@ -395,7 +395,16 @@ codegen-units = 1
 # so the slice panicked. Latent since v0.13.0. It now uses the char-safe
 # `.get(..11)`. Measured by a full corpus dump diff: every existing receipt
 # byte-identical.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.2" }
+#
+# v0.17.3 is rules only, `crates/ffi/` byte-identical again. From an XV Bestco
+# scan: "Raw Frozen Black Tiger Sh" booked as Coffee because BLACK TEA
+# fuzzy-matched "BLACK TIG"; it is exact-only now, and BLACK TIGER / BLACK TIE
+# (a shrimp brand) file as Seafood:Shrimp. ICED TEA and HONEY WATER beat the
+# flavour word (APPLE, TOMATO) for Drink, EGG FLAVOU(R) files a pudding as
+# Snacks, and INDOMIE, GRILLING BAMBOO and OKAR (Bestco's okra) stop falling
+# through to no account. Measured by a full corpus dump diff: 9 lines on 3
+# receipts, each wrong-or-empty -> right.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.3" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -443,7 +452,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every SpendXxx signature is as it was in v0.1.10.
 # v0.1.30 carries core v0.17.2 and nothing else -- no spend-layer change, so
 # every SpendXxx signature is as it was in v0.1.10.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.30" }
+# v0.1.31 carries core v0.17.3 and nothing else -- no spend-layer change, so
+# every SpendXxx signature is as it was in v0.1.10.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.31" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
