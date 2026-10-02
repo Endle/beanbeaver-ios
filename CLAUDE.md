@@ -348,6 +348,14 @@ FFI crossing. `ItemsView.swift` shows each merchant's figures separately,
 labels inferred quantities, and links purchases back to the saved receipt.
 Unknown purchase dates stay unknown; scan time is never substituted.
 
+Purchase frequency counts distinct receipts, not item lines or quantities.
+The history shows one entry per receipt, retaining its matching lines as details;
+separate receipts on the same date remain separate occasions. Price comparisons
+require priced observations from at least two receipts at that merchant. A single
+receipt with repeated lines says "One purchase so far". The shared Rust output
+remains line-level; `purchaseOccasions` groups it for presentation without changing
+the receipt or duplicating shared price arithmetic.
+
 User renames and links live in `spend.json` as `HistoryLink` values, with one
 persisted undo snapshot. They identify merchant/product keys rather than line
 indices. Results and source indices are rebuilt after receipt edits/deletions.

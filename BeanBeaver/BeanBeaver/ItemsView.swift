@@ -51,7 +51,7 @@ private struct HistoryListRow: View {
             Text(history.name).foregroundStyle(Color.bbInk)
             Text(history.merchants.map(\.merchant).joined(separator: " · "))
                 .font(.subheadline).foregroundStyle(Color.bbInkSecondary)
-            Text("\(history.purchases.count) purchase\(history.purchases.count == 1 ? "" : "s") · \(history.receiptCount) receipt\(history.receiptCount == 1 ? "" : "s")")
+            Text(history.purchaseCountLabel)
                 .font(.caption).foregroundStyle(Color.bbInkSecondary)
         }
         .padding(.vertical, 3)
@@ -73,6 +73,7 @@ private struct ItemHistoryView: View {
 
     var body: some View {
         if let history = store.itemHistories.first(where: { $0.historyID == historyID }) {
+            let occasions = history.purchaseOccasions
             List {
                 Section {
                     Text("Amounts as printed, before separate discounts. Package size, currency and tax treatment must match to compare prices.")
@@ -80,13 +81,15 @@ private struct ItemHistoryView: View {
                 }
                 ForEach(history.merchants, id: \.merchant) { merchant in
                     Section(merchant.merchant) {
-                        merchantSummary(merchant)
+                        merchantSummary(merchant, occasions: occasions.filter {
+                            $0.lines.first?.merchant == merchant.merchant
+                        })
                     }
                     .listRowBackground(Color.bbCardFill)
                 }
                 Section("Purchases") {
-                    ForEach(history.purchases, id: \.purchaseID) { purchase in
-                        if let record = store.recordsById[purchase.receiptId] {
+                    ForEach(occasions) { occasion in
+                        if let record = store.recordsById[occasion.id] {
                             NavigationLink {
                                 BatchReceiptDetailView(result: record.result, wallMs: record.wallMs,
                                                        imageURL: store.photoURL(for: record),
@@ -94,9 +97,9 @@ private struct ItemHistoryView: View {
                                                        exportedTargets: record.exportedTargets,
                                                        onClearPhoto: { store.clearPhoto(record.id) },
                                                        onSaveEdits: { store.updateResult(record.id, to: $0) })
-                            } label: { purchaseRow(purchase) }
+                            } label: { purchaseRow(occasion) }
                         } else {
-                            purchaseRow(purchase)
+                            purchaseRow(occasion)
                         }
                     }
                     .listRowBackground(Color.bbCardFill)
@@ -143,36 +146,48 @@ private struct ItemHistoryView: View {
     }
 
     @ViewBuilder
-    private func merchantSummary(_ merchant: SpendMerchantPrices) -> some View {
-        switch merchant.pricing {
-        case .steady:
-            LabeledContent("Typical unit price", value: money(merchant.typical))
-            if let latest = merchant.latest {
-                LabeledContent("Latest · \(latest.purchaseDateLabel)", value: money(latest.unitPrice))
-            }
-        case .varies:
-            Text("Amounts vary — no price trend")
+    private func merchantSummary(_ merchant: SpendMerchantPrices, occasions: [HistoryPurchaseOccasion]) -> some View {
+        if occasions.count == 1 {
+            Text("One purchase so far")
                 .foregroundStyle(Color.bbInkSecondary)
-        case .single:
+        } else if HistoryPurchaseOccasion.pricedReceiptCount(in: occasions) < 2 {
             Text("Not enough prices to compare")
                 .foregroundStyle(Color.bbInkSecondary)
-        }
-        if merchant.pricing != .single {
-            LabeledContent("Lowest unit amount", value: money(merchant.lowest))
-            LabeledContent("Highest unit amount", value: money(merchant.highest))
+        } else {
+            switch merchant.pricing {
+            case .steady:
+                LabeledContent("Typical unit price", value: money(merchant.typical))
+                if let latest = merchant.latest {
+                    LabeledContent("Latest · \(latest.purchaseDateLabel)", value: money(latest.unitPrice))
+                }
+            case .varies:
+                Text("Amounts vary — no price trend")
+                    .foregroundStyle(Color.bbInkSecondary)
+            case .single:
+                Text("Not enough prices to compare")
+                    .foregroundStyle(Color.bbInkSecondary)
+            }
+            if merchant.pricing != .single {
+                LabeledContent("Lowest unit amount", value: money(merchant.lowest))
+                LabeledContent("Highest unit amount", value: money(merchant.highest))
+            }
         }
     }
 
-    private func purchaseRow(_ purchase: SpendPurchase) -> some View {
+    private func purchaseRow(_ occasion: HistoryPurchaseOccasion) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(purchase.description).foregroundStyle(Color.bbInk)
-            Text("\(purchase.merchant) · \(purchase.purchaseDateLabel)")
-                .font(.caption).foregroundStyle(Color.bbInkSecondary)
-            Text("Receipt amount: \(money(purchase.amount))")
-                .font(.bbMono(14)).foregroundStyle(Color.bbInk)
-            if purchase.basis != .assumed {
-                Text("\(purchase.units) × \(money(purchase.unitPrice)) · \(purchase.basis == .inferred ? "inferred quantity" : "recorded quantity")")
+            if let purchase = occasion.lines.first {
+                Text("\(purchase.merchant) · \(purchase.purchaseDateLabel)")
                     .font(.caption).foregroundStyle(Color.bbInkSecondary)
+            }
+            ForEach(occasion.lines, id: \.purchaseID) { purchase in
+                Text(purchase.description).foregroundStyle(Color.bbInk)
+                Text("Line amount: \(money(purchase.amount))")
+                    .font(.bbMono(14)).foregroundStyle(Color.bbInk)
+                if purchase.basis != .assumed {
+                    Text("\(purchase.units) × \(money(purchase.unitPrice)) · \(purchase.basis == .inferred ? "inferred quantity" : "recorded quantity")")
+                        .font(.caption).foregroundStyle(Color.bbInkSecondary)
+                }
             }
         }
         .padding(.vertical, 4)

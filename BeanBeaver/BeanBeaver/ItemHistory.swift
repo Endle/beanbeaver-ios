@@ -51,6 +51,26 @@ enum HistoryID: Hashable {
 }
 
 extension SpendItemHistory {
+    var purchaseCountLabel: String {
+        receiptCount == 1 ? "Purchased once" : "Purchased \(receiptCount) times"
+    }
+
+    /// Rust returns line observations. Present one shopping occasion per receipt,
+    /// keeping its lines together and preserving the core's newest-first order.
+    var purchaseOccasions: [HistoryPurchaseOccasion] {
+        var occasions: [HistoryPurchaseOccasion] = []
+        var indices: [String: Int] = [:]
+        for purchase in purchases {
+            if let index = indices[purchase.receiptId] {
+                occasions[index].lines.append(purchase)
+            } else {
+                indices[purchase.receiptId] = occasions.count
+                occasions.append(HistoryPurchaseOccasion(id: purchase.receiptId, lines: [purchase]))
+            }
+        }
+        return occasions
+    }
+
     var historyID: HistoryID {
         switch key {
         case .product(let id): return .product(id)
@@ -73,6 +93,16 @@ extension SpendItemHistory {
         let fields = [name] + members.flatMap { [$0.merchant, $0.value] }
             + purchases.flatMap { [$0.description, $0.merchant] }
         return fields.contains { folded($0).contains(needle) }
+    }
+}
+
+struct HistoryPurchaseOccasion: Identifiable {
+    let id: String
+    var lines: [SpendPurchase]
+
+    /// Multiple lines in one transaction do not establish a price history.
+    static func pricedReceiptCount(in occasions: [Self]) -> Int {
+        occasions.filter { $0.lines.contains { $0.unitPrice != nil } }.count
     }
 }
 
