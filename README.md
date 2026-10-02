@@ -17,7 +17,7 @@ Your spending breaks down to actual categories (Dairy $30, Meat $50, Drink $40, 
 
 
 ## Item history
-Open **Items** from Home to search your saved purchases, see what you paid at each merchant, and open the original receipt. Rename items or link matching products and package sizes, with undo. Quantities inferred from past prices are labelled; variable amounts are shown without a price trend.
+Enable **Turn on price history** in **Settings → Debug** (off by default), then open **Items** from Home to search your saved purchases, see what you paid at each merchant, and open the original receipt. Rename items or link matching products and package sizes, with undo. Quantities inferred from past prices are labelled; variable amounts are shown without a price trend.
 
 ## Privacy is Top Priority
 BeanBeaver uses an on-device OCR model. Scanning, parsing, and categorizing all happen on your device. There is no account registration, no analytics, no user profiling or fingerprinting, and no cloud server. Everything stays on your phone unless you explicitly export it somewhere.

@@ -20,6 +20,7 @@ struct ContentView: View {
     /// Also opened by the `-showReceipts` DEBUG deep-link.
     @State private var showReceipts = false
     @State private var showItems = false
+    @AppStorage(PriceHistoryPrefs.enabledKey) private var priceHistoryEnabled = false
     /// Presented from inside the scan-result cover — see `scanOutcome`.
     @State private var showOriginReceipt = false
     /// Also opened by the `-showLedgerSettings` DEBUG deep-link, so it can be
@@ -126,7 +127,7 @@ struct ContentView: View {
                          exporter: exporter,
                          onOpenSpending: { showSpending = true },
                          onOpenReceipts: { showReceipts = true },
-                         onOpenItems: { showItems = true },
+                         onOpenItems: { showItems = priceHistoryEnabled },
                          onOpenImport: { showBatchImport = true },
                          onOpenSync: { showLedgerSettings = true },
                          onScan: VNDocumentCameraViewController.isSupported
@@ -139,7 +140,9 @@ struct ContentView: View {
                         SpendingView(onScan: { showScanner = true }, exporter: exporter,
                                      onConfigure: { showLedgerSettings = true })
                     }
-                    .navigationDestination(isPresented: $showItems) { ItemsView() }
+                    .navigationDestination(isPresented: $showItems) {
+                        if priceHistoryEnabled { ItemsView() }
+                    }
                     .navigationDestination(isPresented: $showReceipts) {
                         ReceiptsView(exporter: exporter, onConfigure: { showLedgerSettings = true })
                     }
@@ -168,6 +171,9 @@ struct ContentView: View {
             .tag(RootTab.settings)
         }
         .tint(.bbAccent)
+        .onChange(of: priceHistoryEnabled) { _, enabled in
+            if !enabled { showItems = false }
+        }
         .overlay(alignment: .bottom) {
             RootTabBarAction { showScanner = true }
         }
@@ -721,6 +727,7 @@ struct SettingsView: View {
     /// "Store detailed debug info" (Settings › Debug). Off by default — see
     /// `DebugInfoStore` for what turning it on actually keeps around.
     @AppStorage(DebugInfoStore.enabledKey) private var storeDetailedDebugInfo = false
+    @AppStorage(PriceHistoryPrefs.enabledKey) private var priceHistoryEnabled = false
     /// Operating currency for every generated beancount amount. Defaults to the
     /// device locale's currency (falling back to CAD); the picker + pipeline
     /// share `LedgerFormatPrefs`, so this and the scan output stay in step.
@@ -836,6 +843,7 @@ struct SettingsView: View {
                 feedbackSection
 
                 Section {
+                    Toggle("Turn on price history", isOn: $priceHistoryEnabled)
                     Toggle("Store detailed debug info", isOn: $storeDetailedDebugInfo)
 #if DEBUG
                     NavigationLink("Dump All Data") {
@@ -857,7 +865,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Debug")
                 } footer: {
-                    Text("Off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.\n\nScan a Sample Receipt runs the full on-device scan on a receipt bundled with the app — a way to see what BeanBeaver does without a receipt in hand.")
+                    Text("Price history adds Items to Home so you can browse past purchases. It is off by default; turning it off keeps your receipts and item links.\n\nDetailed debug info is off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.\n\nScan a Sample Receipt runs the full on-device scan on a receipt bundled with the app — a way to see what BeanBeaver does without a receipt in hand.")
                 }
                 .listRowBackground(Color.bbCardFill)
                 .id("debug")

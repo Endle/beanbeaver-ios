@@ -36,6 +36,7 @@ struct HomeView: View {
 
     @State private var store = SpendStore.shared
     @State private var amountPrivacy = AmountPrivacy.shared
+    @AppStorage(PriceHistoryPrefs.enabledKey) private var priceHistoryEnabled = false
 
     private var records: [SpendRecord] { store.records }
     private var monthId: String { store.defaultMonthId }
@@ -179,10 +180,12 @@ struct HomeView: View {
                            trailing: .init(text: "\(records.count)", accented: false),
                            action: onOpenReceipts)
             hairline
-            destinationRow(title: "Items",
-                           trailing: .init(text: "price history", accented: false),
-                           action: onOpenItems)
-            hairline
+            if priceHistoryEnabled {
+                destinationRow(title: "Items",
+                               trailing: .init(text: "price history", accented: false),
+                               action: onOpenItems)
+                hairline
+            }
             exportRow
             hairline
             destinationRow(title: "Import from Photos",

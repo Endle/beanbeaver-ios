@@ -340,6 +340,9 @@ which is load-bearing and silent when removed.
 
 ## Item history
 
+Settings → Debug → "Turn on price history" enables Home → Items; it is off by
+default, persisted per device with `PriceHistoryPrefs.enabledKey`. Disabling it
+closes the Items destination and hides its Home row, retaining receipts and links.
 Home → Items searches saved receipts by name, printed code, and merchant.
 `SpendStore.itemHistories` projects every record, including spending-excluded
 receipts, through mobile-util's `spend_price_history` once per store revision.

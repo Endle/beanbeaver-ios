@@ -1,6 +1,10 @@
 import Foundation
 import BBReceiptKit
 
+enum PriceHistoryPrefs {
+    static let enabledKey = "priceHistoryEnabled"
+}
+
 /// Persist only the user's links. Purchases and item indices are rebuilt from
 /// the current receipts, so inserting or removing a line cannot move an alias.
 struct HistoryMember: Codable, Hashable {
