@@ -123,7 +123,7 @@ extension ItemTag: @retroactive Codable {
 
 extension ReceiptItem: @retroactive Codable {
     enum CodingKeys: String, CodingKey {
-        case description, itemNumber, price, quantity, account, tagPath, tags
+        case description, itemNumber, price, quantity, account, tagPath, tags, giftCard
         /// Pre-0.7.0 batches wrote a classifier key here, not an account.
         case category
     }
@@ -162,13 +162,7 @@ extension ReceiptItem: @retroactive Codable {
         // read off the receipt, so it cannot be recovered from an older draft.
         let itemNumber = try c.decodeIfPresent(String.self, forKey: .itemNumber)
 
-        // Core v0.15.0 added gift-card purchase metadata to the item. It is
-        // deliberately NOT stored here yet: core's docs/gift-card-metadata.md
-        // defers app persistence and UI, and the metadata does not reach the
-        // beancount output, so a record decoded without it loses nothing the
-        // ledger sees. The iOS gift-card work adds a `StoredGiftCard` mirror
-        // (the `StoredWarning` shape) in this extension; until then nil.
-        self.init(giftCard: nil,
+        self.init(giftCard: try c.decodeIfPresent(StoredGiftPurchase.self, forKey: .giftCard)?.value,
                   description: try c.decode(String.self, forKey: .description),
                   itemNumber: itemNumber,
                   price: try c.decode(String.self, forKey: .price),
@@ -182,6 +176,7 @@ extension ReceiptItem: @retroactive Codable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(description, forKey: .description)
         try c.encodeIfPresent(itemNumber, forKey: .itemNumber)
+        try c.encodeIfPresent(giftCard.map(StoredGiftPurchase.init), forKey: .giftCard)
         try c.encode(price, forKey: .price)
         try c.encode(quantity, forKey: .quantity)
         try c.encodeIfPresent(account, forKey: .account)

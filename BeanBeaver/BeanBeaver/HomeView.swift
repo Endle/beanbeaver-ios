@@ -17,7 +17,7 @@ import BBReceiptKit
 /// 2. **There was no bottom navigation.** Spending, Receipts, Import and
 ///    Settings were all pushes or toolbar buttons off this one screen. Scan and
 ///    Settings moved into a real tab bar (`RootTabView`), and what is left here
-///    is a destinations card — four rows, each saying what is behind it *and*
+///    is a destinations card — five rows, each saying what is behind it *and*
 ///    its current count, which a pill never did.
 ///
 /// The nav bar is hidden on this screen deliberately: the slip is the header,
@@ -28,6 +28,7 @@ struct HomeView: View {
     var exporter: LedgerExporter
     var onOpenSpending: () -> Void
     var onOpenReceipts: () -> Void
+    var onOpenItems: () -> Void
     var onOpenImport: () -> Void
     var onOpenSync: () -> Void
     /// The empty state's own Scan button. Nil where the camera isn't available.
@@ -35,6 +36,7 @@ struct HomeView: View {
 
     @State private var store = SpendStore.shared
     @State private var amountPrivacy = AmountPrivacy.shared
+    @AppStorage(PriceHistoryPrefs.enabledKey) private var priceHistoryEnabled = false
 
     private var records: [SpendRecord] { store.records }
     private var monthId: String { store.defaultMonthId }
@@ -162,7 +164,7 @@ struct HomeView: View {
 
     // MARK: - Destinations
 
-    /// One card, four rows — where the five pills went.
+    /// One card, five rows — where the five pills went.
     ///
     /// A row says what is behind it *and* how much is there, which a pill could
     /// not: "Receipts 22", "20 receipts not exported". That count is the reason
@@ -178,6 +180,12 @@ struct HomeView: View {
                            trailing: .init(text: "\(records.count)", accented: false),
                            action: onOpenReceipts)
             hairline
+            if priceHistoryEnabled {
+                destinationRow(title: "Items",
+                               trailing: .init(text: "price history", accented: false),
+                               action: onOpenItems)
+                hairline
+            }
             exportRow
             hairline
             destinationRow(title: "Import from Photos",

@@ -336,3 +336,37 @@ which is load-bearing and silent when removed.
   anything spanning services → Settings.
 
 - Avoid using macro #if DEBUG - think twice that if it's necessary
+
+
+## Item history
+
+Settings → Debug → "Turn on price history" enables Home → Items; it is off by
+default, persisted per device with `PriceHistoryPrefs.enabledKey`. Disabling it
+closes the Items destination and hides its Home row, retaining receipts and links.
+Home → Items searches saved receipts by name, printed code, and merchant.
+`SpendStore.itemHistories` projects every record, including spending-excluded
+receipts, through mobile-util's `spend_price_history` once per store revision.
+The empty-query result is cached; search filters that result without another
+FFI crossing. `ItemsView.swift` shows each merchant's figures separately,
+labels inferred quantities, and links purchases back to the saved receipt.
+Unknown purchase dates stay unknown; scan time is never substituted.
+
+Purchase frequency counts distinct receipts, not item lines or quantities.
+The history shows one entry per receipt, retaining its matching lines as details;
+separate receipts on the same date remain separate occasions. Price comparisons
+require priced observations from at least two receipts at that merchant. A single
+receipt with repeated lines says "One purchase so far". The shared Rust output
+remains line-level; `purchaseOccasions` groups it for presentation without changing
+the receipt or duplicating shared price arithmetic.
+
+User renames and links live in `spend.json` as `HistoryLink` values, with one
+persisted undo snapshot. They identify merchant/product keys rather than line
+indices. Results and source indices are rebuilt after receipt edits/deletions.
+Older stores decode missing links as empty. `StoredGiftPurchase` preserves the
+item's full gift-card metadata so restarting cannot turn an excluded gift-card
+purchase into a product price. It does not add gift-card management UI.
+
+This first version uses mobile-util v0.1.33 and core v0.17.4. It has no package
+size, weight, currency partition, or item-discount allocation; the screen states
+that comparison requires matching currency and package size. Android rollout
+is explicitly deferred at the user's request (2026-10-01).

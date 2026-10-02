@@ -118,6 +118,7 @@ private final class SpendCache {
     var trends: [String: SpendTrend] = [:]
     var receiptGroups: [String: [SpendSummary.ReceiptGroup]] = [:]
     var itemEntries: [String: [SpendSummary.ItemEntry]] = [:]
+    var histories: [SpendItemHistory]?
 
     /// Drop everything derived from a corpus that is no longer current, or from
     /// a day that has ended. Returns having left the cache valid for
@@ -134,6 +135,7 @@ private final class SpendCache {
             months = [:]
             receiptGroups = [:]
             itemEntries = [:]
+            histories = nil
             facts = [:]
             trends = [:]
             day = today
@@ -171,6 +173,8 @@ final class SpendStore {
     static let shared = SpendStore()
 
     private(set) var records: [SpendRecord] = []   // newest first
+    private(set) var historyLinks: [HistoryLink] = []
+    private(set) var previousHistoryLinks: [HistoryLink]?
 
     /// Bumped by `didChange()`. The whole invalidation story for `cache`.
     @ObservationIgnored private var revision = 0
@@ -182,6 +186,8 @@ final class SpendStore {
 
     private struct Persisted: Codable {
         let records: [SpendRecord]
+        var historyLinks: [HistoryLink]?
+        var previousHistoryLinks: [HistoryLink]?
     }
 
     /// False for a store that must never reach disk — `SpendPerf`'s synthetic
@@ -558,6 +564,54 @@ final class SpendStore {
         }
     }
 
+    // MARK: Item history
+
+    var itemHistories: [SpendItemHistory] {
+        // Register both observed dependencies before reading the ignored cache.
+        _ = records
+        _ = historyLinks
+        validated()
+        if let value = cache.histories { return value }
+        let value = spendPriceHistory(receipts: records.map(\.historyInput),
+                                     links: historyLinks.map(\.input), query: "")
+        cache.histories = value
+        return value
+    }
+
+    /// Rename or merge whole merchant keys; retain members without current
+    /// purchases so deleting a receipt does not silently delete a user's link.
+    @discardableResult
+    func linkHistory(_ history: SpendItemHistory, with other: SpendItemHistory? = nil, name: String) -> HistoryID {
+        let selected = [history] + (other.map { [$0] } ?? [])
+        let ids = Set(selected.compactMap(\.productID))
+        var members = historyLinks.filter { ids.contains($0.id) }.flatMap(\.members)
+        for member in selected.flatMap(\.members).map(HistoryMember.init) where !members.contains(member) {
+            members.append(member)
+        }
+        previousHistoryLinks = historyLinks
+        historyLinks.removeAll { ids.contains($0.id) }
+        let id = history.productID ?? UUID().uuidString
+        historyLinks.append(HistoryLink(id: id,
+                                        name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                                        members: members))
+        didChange()
+        return .product(id)
+    }
+
+    func resetHistory(_ history: SpendItemHistory) {
+        guard let id = history.productID else { return }
+        previousHistoryLinks = historyLinks
+        historyLinks.removeAll { $0.id == id }
+        didChange()
+    }
+
+    func undoHistoryChange() {
+        guard let previous = previousHistoryLinks else { return }
+        historyLinks = previous
+        previousHistoryLinks = nil
+        didChange()
+    }
+
     // MARK: Storage
 
     private func load() {
@@ -568,6 +622,8 @@ final class SpendStore {
         // has to be parsed); here the parse is already done and the numbers are
         // the asset. `photoState(for:)` reports `.unavailable` for it.
         records = stored.records
+        historyLinks = stored.historyLinks ?? []
+        previousHistoryLinks = stored.previousHistoryLinks
     }
 
     /// One mutation happened. Invalidates every derived figure and schedules the
@@ -594,7 +650,8 @@ final class SpendStore {
     /// leave the older corpus on disk.
     private func persist() {
         guard persists else { return }
-        let snapshot = Persisted(records: records)
+        let snapshot = Persisted(records: records, historyLinks: historyLinks,
+                                 previousHistoryLinks: previousHistoryLinks)
         let url = Self.fileURL
         Self.ioQueue.async {
             guard let data = try? JSONEncoder().encode(snapshot) else { return }
