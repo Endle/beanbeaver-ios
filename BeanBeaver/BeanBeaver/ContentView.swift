@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var showSpending = false
     /// Also opened by the `-showReceipts` DEBUG deep-link.
     @State private var showReceipts = false
+    @State private var showItems = false
     /// Presented from inside the scan-result cover — see `scanOutcome`.
     @State private var showOriginReceipt = false
     /// Also opened by the `-showLedgerSettings` DEBUG deep-link, so it can be
@@ -125,6 +126,7 @@ struct ContentView: View {
                          exporter: exporter,
                          onOpenSpending: { showSpending = true },
                          onOpenReceipts: { showReceipts = true },
+                         onOpenItems: { showItems = true },
                          onOpenImport: { showBatchImport = true },
                          onOpenSync: { showLedgerSettings = true },
                          onScan: VNDocumentCameraViewController.isSupported
@@ -137,6 +139,7 @@ struct ContentView: View {
                         SpendingView(onScan: { showScanner = true }, exporter: exporter,
                                      onConfigure: { showLedgerSettings = true })
                     }
+                    .navigationDestination(isPresented: $showItems) { ItemsView() }
                     .navigationDestination(isPresented: $showReceipts) {
                         ReceiptsView(exporter: exporter, onConfigure: { showLedgerSettings = true })
                     }

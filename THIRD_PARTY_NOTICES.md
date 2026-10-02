@@ -47,106 +47,98 @@ BeanBeaver relies on the permissive option in each case.
 
 ### MIT OR Apache-2.0
 
-aligned 0.4.3, allocator-api2 0.2.21, anstream 1.0.0, anstyle 1.0.14, anstyle-
-parse 1.0.0, anstyle-query 1.1.5, anstyle-wincon 3.0.11, anyhow 1.0.103,
-arbitrary 1.4.2, arrayvec 0.7.8, as-slice 0.2.1, askama 0.12.1, askama_escape
-0.10.3, askama_parser 0.2.1, base64 0.22.1, basic-toml 0.1.10, bitflags
-2.13.0, block-buffer 0.10.4, bumpalo 3.20.3, camino 1.2.4, cargo-platform
-0.1.9, cc 1.2.66, cfg-if 1.0.4, clap 4.6.1, clap_builder 4.6.0, clap_derive
-4.6.1, clap_lex 1.1.0, colorchoice 1.0.5, core-foundation 0.10.1, core-
-foundation-sys 0.8.7, cpufeatures 0.2.17, crc32fast 1.5.0, crossbeam-deque
-0.8.6, crossbeam-epoch 0.9.18, crossbeam-utils 0.8.21, crypto-common 0.1.7,
-digest 0.10.7, either 1.16.0, errno 0.3.14, fdeflate 0.3.7, find-msvc-tools
-0.1.9, flate2 1.1.9, futures-core 0.3.32, futures-task 0.3.32, futures-util
-0.3.32, geo 0.29.3, geo-types 0.7.19, getrandom 0.2.17, getrandom 0.3.4,
-getrandom 0.4.3, gif 0.14.2, glob 0.3.3, half 2.7.1, hash32 0.3.1, hashbrown
-0.16.1, hashbrown 0.17.1, heapless 0.8.0, heck 0.5.0, http 1.4.2, httparse
-1.10.1, image 0.25.10, image-webp 0.2.4, is_terminal_polyfill 1.70.2,
-itertools 0.11.0, itertools 0.12.1, itertools 0.14.0, itoa 1.0.18, jobserver
-0.1.34, js-sys 0.3.103, libc 0.2.186, log 0.4.33, mime 0.3.17, native-tls
-0.2.18, ndarray 0.17.2, num 0.4.3, num-bigint 0.4.8, num-complex 0.4.6, num-
-derive 0.4.2, num-integer 0.1.46, num-iter 0.1.45, num-rational 0.4.2, num-
-traits 0.2.19, once_cell 1.21.4, once_cell_polyfill 1.70.2, openssl-probe
-0.2.1, ort 2.0.0-rc.12, ort-sys 2.0.0-rc.12, paste 1.0.15, pastey 0.1.1,
-percent-encoding 2.3.2, pkg-config 0.3.33, png 0.18.1, ppv-lite86 0.2.21,
-proc-macro2 1.0.106, profiling 1.0.18, profiling-procmacros 1.0.18, quote
-1.0.46, rand 0.8.6, rand 0.9.4, rand_chacha 0.3.1, rand_chacha 0.9.0,
-rand_core 0.6.4, rand_core 0.9.5, rand_distr 0.4.3, rayon 1.12.0, rayon-core
+allocator-api2 0.2.21, anstream 1.0.0, anstyle 1.0.14, anstyle-parse
+1.0.0, anstyle-query 1.1.5, anstyle-wincon 3.0.11, anyhow 1.0.103,
+askama 0.12.1, askama_escape 0.10.3, askama_parser 0.2.1, base64 0.22.1,
+basic-toml 0.1.10, bitflags 2.13.0, block-buffer 0.10.4, bumpalo 3.20.3,
+camino 1.2.4, cargo-platform 0.1.9, cc 1.2.66, cfg-if 1.0.4, clap 4.6.1,
+clap_builder 4.6.0, clap_derive 4.6.1, clap_lex 1.1.0, colorchoice
+1.0.5, core-foundation 0.10.1, core-foundation-sys 0.8.7, cpufeatures
+0.2.17, crc32fast 1.5.0, crossbeam-deque 0.8.6, crossbeam-epoch 0.9.18,
+crossbeam-utils 0.8.21, crypto-common 0.1.7, digest 0.10.7, either
+1.16.0, errno 0.3.14, fdeflate 0.3.7, find-msvc-tools 0.1.9, flate2
+1.1.9, futures-core 0.3.32, futures-task 0.3.32, futures-util 0.3.32,
+geo 0.29.3, geo-types 0.7.19, getrandom 0.2.17, getrandom 0.4.3, glob
+0.3.3, hash32 0.3.1, hashbrown 0.16.1, hashbrown 0.17.1, heapless 0.8.0,
+heck 0.5.0, http 1.4.2, httparse 1.10.1, image 0.25.10, image-webp
+0.2.4, is_terminal_polyfill 1.70.2, itertools 0.11.0, itertools 0.12.1,
+itoa 1.0.18, js-sys 0.3.103, libc 0.2.186, log 0.4.33, mime 0.3.17,
+native-tls 0.2.18, ndarray 0.17.2, num 0.4.3, num-bigint 0.4.8, num-
+complex 0.4.6, num-integer 0.1.46, num-iter 0.1.45, num-rational 0.4.2,
+num-traits 0.2.19, once_cell 1.21.4, once_cell_polyfill 1.70.2, openssl-
+probe 0.2.1, ort 2.0.0-rc.12, ort-sys 2.0.0-rc.12, paste 1.0.15,
+percent-encoding 2.3.2, pkg-config 0.3.33, png 0.18.1, ppv-lite86
+0.2.21, proc-macro2 1.0.106, quote 1.0.46, rand 0.8.6, rand_chacha
+0.3.1, rand_core 0.6.4, rand_distr 0.4.3, rayon 1.12.0, rayon-core
 1.13.0, regex 1.12.4, regex-automata 0.4.14, regex-syntax 0.8.11, robust
-1.2.0, rstar 0.12.2, rustls-pki-types 1.15.0, rustversion 1.0.22, security-
-framework 3.7.0, security-framework-sys 2.17.0, semver 1.0.28, serde 1.0.228,
-serde_core 1.0.228, serde_derive 1.0.228, serde_json 1.0.150, serde_spanned
-0.6.9, sha2 0.10.9, shlex 2.0.1, smallvec 1.15.2, spade 2.15.1,
-stable_deref_trait 1.2.1, static_assertions 1.1.0, syn 2.0.118, tempfile
-3.27.0, thiserror 1.0.69, thiserror 2.0.18, thiserror-impl 1.0.69, thiserror-
-impl 2.0.18, toml 0.8.23, toml_datetime 0.6.11, toml_edit 0.22.27, toml_write
-0.1.2, ttf-parser 0.25.1, typenum 1.20.1, unicase 2.9.0, ureq 3.3.0, ureq-
-proto 0.6.0, utf8-zero 0.8.1, wasm-bindgen 0.2.126, wasm-bindgen-macro
-0.2.126, wasm-bindgen-macro-support 0.2.126, wasm-bindgen-shared 0.2.126,
-weezl 0.1.12, windows-link 0.2.1, windows-sys 0.61.2
+1.2.0, rstar 0.12.2, rustls-pki-types 1.15.0, rustversion 1.0.22,
+security-framework 3.7.0, security-framework-sys 2.17.0, semver 1.0.28,
+serde 1.0.228, serde_core 1.0.228, serde_derive 1.0.228, serde_json
+1.0.150, serde_spanned 0.6.9, sha2 0.10.9, shlex 2.0.1, smallvec 1.15.2,
+spade 2.15.1, stable_deref_trait 1.2.1, static_assertions 1.1.0, syn
+2.0.118, tempfile 3.27.0, thiserror 1.0.69, thiserror 2.0.18, thiserror-
+impl 1.0.69, thiserror-impl 2.0.18, toml 0.8.23, toml_datetime 0.6.11,
+toml_edit 0.22.27, toml_write 0.1.2, ttf-parser 0.25.1, typenum 1.20.1,
+unicase 2.9.0, ureq 3.3.0, ureq-proto 0.6.0, utf8-zero 0.8.1, wasm-
+bindgen 0.2.126, wasm-bindgen-macro 0.2.126, wasm-bindgen-macro-support
+0.2.126, wasm-bindgen-shared 0.2.126, windows-link 0.2.1, windows-sys
+0.61.2
 
 ### MIT
 
-aligned-vec 0.6.4, arg_enum_proc_macro 0.3.4, av-scenechange 0.14.1, bb-
-receipt-ffi 0.1.0, bincode 1.3.3, built 0.8.1, bytes 1.12.0, cargo_metadata
-0.15.4, color_quant 1.1.0, crunchy 0.2.4, equator 0.4.2, equator-macro 0.4.2,
-fax 0.2.7, float_next_after 1.0.0, generic-array 0.14.7, geographiclib-rs
-0.2.7, goblin 0.8.2, i_float 1.6.0, i_key_sort 0.2.0, i_overlay 1.9.4, i_shape
-1.6.0, i_tree 0.8.3, imageproc 0.25.1, interpolate_name 0.2.4, libm 0.2.16,
-loop9 0.1.5, maybe-rayon 0.1.1, mime_guess 2.0.5, new_debug_unreachable 1.0.6,
-nom 7.1.3, nom 8.0.0, noop_proc_macro 0.3.0, ocr-paddle 0.1.0, openssl-sys
-0.9.117, receipt-core 0.1.0, rgb 0.8.53, schannel 0.1.29, scroll 0.12.0,
-scroll_derive 0.12.1, simd-adler32 0.3.9, simd_helpers 0.1.0, slab 0.4.12,
-smawk 0.3.3, strsim 0.11.1, textwrap 0.16.2, tiff 0.11.3, tracing 0.1.44,
-tracing-core 0.1.36, weedle2 5.0.0, winnow 0.7.15, y4m 0.8.0, zmij 1.0.21
+bb-mobile-ffi 0.1.0, bb-receipt-ffi 0.17.4, bincode 1.3.3, bytes 1.12.0,
+cargo_metadata 0.15.4, float_next_after 1.0.0, generic-array 0.14.7,
+geographiclib-rs 0.2.7, goblin 0.8.2, i_float 1.6.0, i_key_sort 0.2.0,
+i_overlay 1.9.4, i_shape 1.6.0, i_tree 0.8.3, imageproc 0.25.1, libm
+0.2.16, mime_guess 2.0.5, nom 7.1.3, ocr-paddle 0.17.4, openssl-sys
+0.9.117, price-history 0.1.0, receipt-core 0.17.4, receipt-image 0.17.4,
+scan 0.17.4, schannel 0.1.29, scroll 0.12.0, scroll_derive 0.12.1, simd-
+adler32 0.3.9, slab 0.4.12, smawk 0.3.3, spend-core 0.1.0, strsim
+0.11.1, textwrap 0.16.2, tracing 0.1.44, tracing-core 0.1.36, weedle2
+5.0.0, winnow 0.7.15, zmij 1.0.21
 
 ### MIT/Apache-2.0
 
-askama_derive 0.12.5, bitstream-io 4.10.0, foreign-types 0.3.2, foreign-types-
-shared 0.1.1, fs-err 2.11.0, matrixmultiply 0.3.10, minimal-lexical 0.2.1,
-openssl-macros 0.1.1, plain 0.2.3, qoi 0.4.1, quick-error 2.0.1, rawpointer
-0.2.1, siphasher 0.3.11, socks 0.3.4, toml 0.5.11, vcpkg 0.2.15, version_check
+askama_derive 0.12.5, foreign-types 0.3.2, foreign-types-shared 0.1.1,
+fs-err 2.11.0, matrixmultiply 0.3.10, minimal-lexical 0.2.1, openssl-
+macros 0.1.1, plain 0.2.3, quick-error 2.0.1, rawpointer 0.2.1,
+siphasher 0.3.11, socks 0.3.4, toml 0.5.11, vcpkg 0.2.15, version_check
 0.9.5, winapi 0.3.9, winapi-i686-pc-windows-gnu 0.4.0, winapi-x86_64-pc-
 windows-gnu 0.4.0
 
 ### Apache-2.0 OR MIT
 
-autocfg 1.5.1, base64ct 1.8.3, der 0.8.0, equivalent 1.0.2, fastrand 2.4.1,
-indexmap 2.14.0, no_std_io2 0.9.4, pem-rfc7468 1.0.0, pin-project-lite 0.2.17,
-portable-atomic 1.13.1, portable-atomic-util 0.2.7, utf8parse 0.2.2, zeroize
-1.9.0
+autocfg 1.5.1, base64ct 1.8.3, der 0.8.0, equivalent 1.0.2, fastrand
+2.4.1, indexmap 2.14.0, pem-rfc7468 1.0.0, pin-project-lite 0.2.17,
+portable-atomic 1.13.1, portable-atomic-util 0.2.7, utf8parse 0.2.2,
+zeroize 1.9.0
 
 ### MPL-2.0
 
 uniffi 0.28.3, uniffi_bindgen 0.28.3, uniffi_checksum_derive 0.28.3,
-uniffi_core 0.28.3, uniffi_macros 0.28.3, uniffi_meta 0.28.3, uniffi_testing
-0.28.3, uniffi_udl 0.28.3
+uniffi_core 0.28.3, uniffi_macros 0.28.3, uniffi_meta 0.28.3,
+uniffi_testing 0.28.3, uniffi_udl 0.28.3
 
 ### Apache-2.0
 
-ab_glyph 0.2.32, ab_glyph_rasterizer 0.1.10, approx 0.5.1, lzma-rust2 0.15.8,
-openssl 0.10.81, owned_ttf_parser 0.25.1, simba 0.8.1
+ab_glyph 0.2.32, ab_glyph_rasterizer 0.1.10, approx 0.5.1, lzma-rust2
+0.15.8, openssl 0.10.81, owned_ttf_parser 0.25.1, simba 0.8.1
 
 ### Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
 
-linux-raw-sys 0.12.1, rustix 1.1.4, wasi 0.11.1+wasi-snapshot-preview1, wasip2
-1.0.4+wasi-0.2.12, wit-bindgen 0.57.1
+linux-raw-sys 0.12.1, rustix 1.1.4, wasi 0.11.1+wasi-snapshot-preview1
 
 ### BSD-3-Clause
 
-avif-serialize 0.8.9, exr 1.74.0, lebe 0.5.3, nalgebra 0.32.6, ravif 0.13.0
+nalgebra 0.32.6
 
 ### Unlicense OR MIT
 
 aho-corasick 1.1.4, byteorder 1.5.0, byteorder-lite 0.1.0, memchr 2.8.2
 
-### BSD-2-Clause
-
-av1-grain 0.2.5, rav1e 0.8.1, v_frame 0.3.9
-
 ### MIT OR Apache-2.0 OR Zlib
 
-zune-core 0.5.1, zune-inflate 0.2.54, zune-jpeg 0.5.15
+zune-core 0.5.1, zune-jpeg 0.5.15
 
 ### Zlib OR Apache-2.0 OR MIT
 
@@ -166,11 +158,7 @@ earcutr 0.4.3, hmac-sha256 1.1.14
 
 ### MIT OR Apache-2.0 OR LGPL-2.1-or-later
 
-r-efi 5.3.0, r-efi 6.0.0
-
-### (MIT OR Apache-2.0) AND NCSA
-
-libfuzzer-sys 0.4.13
+r-efi 6.0.0
 
 ### (MIT OR Apache-2.0) AND Unicode-3.0
 
@@ -179,14 +167,6 @@ unicode-ident 1.0.24
 ### 0BSD OR MIT OR Apache-2.0
 
 adler2 2.0.1
-
-### Apache-2.0/MIT
-
-bit_field 0.10.3
-
-### CC0-1.0 OR Apache-2.0
-
-imgref 1.12.2
 
 ### CDLA-Permissive-2.0
 

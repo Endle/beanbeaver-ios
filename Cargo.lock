@@ -175,9 +175,10 @@ dependencies = [
 [[package]]
 name = "bb-mobile-ffi"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.32#ef36367485577caa14f37fc5ad891370ab1efa5e"
+source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.33#ca39df7a5dd942eace6304179b8e3675a9d659b1"
 dependencies = [
  "bb-receipt-ffi",
+ "price-history",
  "spend-core",
  "uniffi",
 ]
@@ -1253,6 +1254,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "price-history"
+version = "0.1.0"
+source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.33#ca39df7a5dd942eace6304179b8e3675a9d659b1"
+dependencies = [
+ "spend-core",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1666,7 +1675,7 @@ dependencies = [
 [[package]]
 name = "spend-core"
 version = "0.1.0"
-source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.32#ef36367485577caa14f37fc5ad891370ab1efa5e"
+source = "git+https://github.com/Endle/beanbeaver-mobile-util?tag=v0.1.33#ca39df7a5dd942eace6304179b8e3675a9d659b1"
 
 [[package]]
 name = "stable_deref_trait"
