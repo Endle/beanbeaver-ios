@@ -11,7 +11,13 @@ struct BeanBeaverApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if let mode = ReceiptPersistencePreview.requestedMode {
+                    ReceiptPersistencePreview(mode: mode)
+                } else {
+                    ContentView()
+                }
+            }
                 // Fetch entitlements once, and keep listening for changes for
                 // the life of the process — see `Entitlements.start()`.
                 .task { await Entitlements.shared.start() }
@@ -19,6 +25,13 @@ struct BeanBeaverApp: App {
                 // DEBUG` because its numbers are only meaningful from a Release
                 // build — see `SpendPerf`.
                 .task { if SpendPerf.isRequested { await SpendPerf.run() } }
+                .task {
+                    if ProcessInfo.processInfo.arguments.contains("-checkReceiptPersistence") {
+                        ReceiptPersistenceCheck.run()
+                    } else if ProcessInfo.processInfo.arguments.contains("-checkReceiptPersistenceReload") {
+                        ReceiptPersistenceCheck.run(relaunch: true)
+                    }
+                }
         }
         // `SpendStore` writes off the main actor now, so the suspend is where
         // the pending write has to be waited on — see `flushPendingWrites`.

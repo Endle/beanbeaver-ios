@@ -370,3 +370,45 @@ This first version uses mobile-util v0.1.33 and core v0.17.4. It has no package
 size, weight, currency partition, or item-discount allocation; the screen states
 that comparison requires matching currency and package size. Android rollout
 is explicitly deferred at the user's request (2026-10-01).
+
+## Gift-card receipt persistence
+
+`GiftCardPersistence.swift` owns the stored purchase/redemption records and
+ordered tenders. `ReceiptResult`'s Codable implementation is shared by batch
+drafts and spending records; missing `tenders` decodes as empty and missing item
+`giftCard` as nil. Preserve source IDs, exact cents, original evidence, and
+unresolved/corrected field lists. Evidence embeds its source text, so this does
+not require persisting the full OCR text or detections. `ReceiptExportJSON`
+includes the same metadata in its sidecar. No card matching or balance history
+is inferred from these receipt observations.
+
+`ReceiptEditDraft.itemsChanged` compares gift-card metadata too: otherwise two
+identical packs with distinct activation references could be reordered without
+Save detecting a change. Validate with `scripts/check-receipt-persistence.sh`
+after building/installing the current simulator app. Android adoption remains
+explicitly deferred at the user's request (2026-10-03).
+
+Settings → Debug → Track gift card (`GiftCardPrefs.enabledKey`) defaults to off
+and gates gift-card details, transaction links, and correction controls. It does
+not discard parsed or saved metadata. Android remains deferred.
+
+`GiftCardDetailsCard` is part of `ReceiptCard`, so scan results, saved receipts,
+and batch details share the same display. It labels reported balances and
+activation, keeps purchase price separate from face value, and exposes
+unresolved/corrected fields. Transactions opens related merchant visits; original
+evidence remains available in correction forms. `GiftCardTransactions` searches
+by issuer, currency, and the full printed identifier (normalizing mask glyphs
+only). Masked matches are explicitly uncertain, not tracked-card identities.
+Purchase/pack references never identify later redemptions. Unknown dates sort
+last, and multiple matching tenders remain one merchant visit.
+
+Review & Fix → Gift-card payments edits existing redemption records; Items →
+Item → Activation & face value edits existing purchase records. Leaf forms
+apply to the surrounding receipt draft; only the receipt's Save runs Rust
+`reformatReceipt` and persists changes. Keep source IDs and evidence intact;
+Rust normalizes identifiers and records correction provenance. Blank optional
+fields mean unknown. `GiftCardInput` parses decimal strings to exact Int64 cents
+and rejects negatives, excess precision, and overflow instead of rounding.
+
+The native regression script now terminates/relaunches the app and checks that
+corrected payments and purchases still export with their evidence and provenance.

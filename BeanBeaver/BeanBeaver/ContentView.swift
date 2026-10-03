@@ -727,6 +727,7 @@ struct SettingsView: View {
     /// "Store detailed debug info" (Settings › Debug). Off by default — see
     /// `DebugInfoStore` for what turning it on actually keeps around.
     @AppStorage(DebugInfoStore.enabledKey) private var storeDetailedDebugInfo = false
+    @AppStorage(GiftCardPrefs.enabledKey) private var trackGiftCard = false
     @AppStorage(PriceHistoryPrefs.enabledKey) private var priceHistoryEnabled = false
     /// Operating currency for every generated beancount amount. Defaults to the
     /// device locale's currency (falling back to CAD); the picker + pipeline
@@ -844,6 +845,7 @@ struct SettingsView: View {
 
                 Section {
                     Toggle("Turn on price history", isOn: $priceHistoryEnabled)
+                    Toggle("Track gift card", isOn: $trackGiftCard)
                     Toggle("Store detailed debug info", isOn: $storeDetailedDebugInfo)
 #if DEBUG
                     NavigationLink("Dump All Data") {
@@ -865,7 +867,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Debug")
                 } footer: {
-                    Text("Price history adds Items to Home so you can browse past purchases. It is off by default; turning it off keeps your receipts and item links.\n\nDetailed debug info is off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.\n\nScan a Sample Receipt runs the full on-device scan on a receipt bundled with the app — a way to see what BeanBeaver does without a receipt in hand.")
+                    Text("Price history adds Items to Home so you can browse past purchases. It is off by default; turning it off keeps your receipts and item links.\n\nTrack gift card shows gift-card details, related transactions, and correction controls. It is off by default; turning it off keeps saved receipt data.\n\nDetailed debug info is off by default — keep it that way unless support has told you to turn it on. When enabled, BeanBeaver keeps a full copy of each scanned receipt (merchant, items, prices, the raw OCR text, and the generated ledger entry), plus error detail from failed scans and ledger exports, in a debug log on this device — more than the app normally keeps. The raw OCR text can include anything printed on the receipt. Turn it off again once you're done.\n\nScan a Sample Receipt runs the full on-device scan on a receipt bundled with the app — a way to see what BeanBeaver does without a receipt in hand.")
                 }
                 .listRowBackground(Color.bbCardFill)
                 .id("debug")
@@ -1149,6 +1151,7 @@ struct ReceiptCard: View {
     /// scan result turns this off and places `accountingDetails` itself, below
     /// its buttons.
     var includesAccountingDetails = true
+    @AppStorage(GiftCardPrefs.enabledKey) private var trackGiftCard = false
     @State private var expandAccounting = false
     @State private var showAllItems = false
 
@@ -1184,6 +1187,10 @@ struct ReceiptCard: View {
 
             if !result.findings.isEmpty {
                 warningsBanner
+            }
+
+            if trackGiftCard && GiftCardDetailsCard.hasDetails(result) {
+                GiftCardDetailsCard(result: result)
             }
 
             if includesAccountingDetails {
