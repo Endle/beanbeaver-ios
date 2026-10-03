@@ -107,5 +107,8 @@ store, launch with one of these synthetic preview arguments:
 - `-previewGiftCardReceiptEditor`
 - `-previewGiftCardTransactions`
 
+For `-previewGiftCardReceiptEditor`, also pass `-trackGiftCard YES` to
+show the opt-in gift-card controls without changing the saved preference.
+
 These render the real views using synthetic parser inputs. They are visual
 inspection routes, not evidence of tapping through the normal navigation flow.

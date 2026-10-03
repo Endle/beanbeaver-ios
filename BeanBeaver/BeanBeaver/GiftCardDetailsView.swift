@@ -1,6 +1,11 @@
 import SwiftUI
 import BBReceiptKit
 
+/// Opt-in UI; receipt metadata remains preserved regardless of this preference.
+enum GiftCardPrefs {
+    static let enabledKey = "trackGiftCard"
+}
+
 enum GiftCardDisplay {
     static func money(_ cents: Int64?, currency: String?) -> String {
         guard let cents else { return "Unknown" }

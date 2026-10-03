@@ -388,6 +388,10 @@ Save detecting a change. Validate with `scripts/check-receipt-persistence.sh`
 after building/installing the current simulator app. Android adoption remains
 explicitly deferred at the user's request (2026-10-03).
 
+Settings → Debug → Track gift card (`GiftCardPrefs.enabledKey`) defaults to off
+and gates gift-card details, transaction links, and correction controls. It does
+not discard parsed or saved metadata. Android remains deferred.
+
 `GiftCardDetailsCard` is part of `ReceiptCard`, so scan results, saved receipts,
 and batch details share the same display. It labels reported balances and
 activation, keeps purchase price separate from face value, and exposes

@@ -18,6 +18,7 @@ import SwiftUI
 /// showing one thing and the ledger from saying another — the failure the old
 /// positional `item_account_overrides` had by construction.
 struct ReceiptEditorView: View {
+    @AppStorage(GiftCardPrefs.enabledKey) private var trackGiftCard = false
     let original: ReceiptResult
     /// The receipt's photo, used only to re-hash it when the beancount carries
     /// no `beanbeaver-image-sha256` line. See `ReceiptIdentity`.
@@ -49,7 +50,7 @@ struct ReceiptEditorView: View {
             Form {
                 receiptSection
                 itemsSection
-                giftCardPaymentsSection
+                if trackGiftCard { giftCardPaymentsSection }
                 summarySection
                 if exportedAt != nil { alreadyExportedSection }
             }
@@ -340,6 +341,7 @@ private struct ItemRow: View {
 
 /// One line of the item block, opened for correction.
 private struct ItemEditorView: View {
+    @AppStorage(GiftCardPrefs.enabledKey) private var trackGiftCard = false
     @Binding var item: EditedItemDraft
     let tags: [ItemTag]
 
@@ -361,7 +363,7 @@ private struct ItemEditorView: View {
                         value: $item.quantity, in: 1...99)
             }
 
-            if let gift = item.giftCard {
+            if trackGiftCard, let gift = item.giftCard {
                 Section("Gift card") {
                     NavigationLink {
                         GiftCardPurchaseEditor(gift: gift) { item.giftCard = $0 }
