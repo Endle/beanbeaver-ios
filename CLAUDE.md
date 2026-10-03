@@ -390,8 +390,13 @@ explicitly deferred at the user's request (2026-10-03).
 
 `GiftCardDetailsCard` is part of `ReceiptCard`, so scan results, saved receipts,
 and batch details share the same display. It labels reported balances and
-activation, keeps purchase price separate from face value, and exposes original
-evidence plus unresolved/corrected fields. It does not create tracked cards.
+activation, keeps purchase price separate from face value, and exposes
+unresolved/corrected fields. Transactions opens related merchant visits; original
+evidence remains available in correction forms. `GiftCardTransactions` searches
+by issuer, currency, and the full printed identifier (normalizing mask glyphs
+only). Masked matches are explicitly uncertain, not tracked-card identities.
+Purchase/pack references never identify later redemptions. Unknown dates sort
+last, and multiple matching tenders remain one merchant visit.
 
 Review & Fix → Gift-card payments edits existing redemption records; Items →
 Item → Activation & face value edits existing purchase records. Leaf forms

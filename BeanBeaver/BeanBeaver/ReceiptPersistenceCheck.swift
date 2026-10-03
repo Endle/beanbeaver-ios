@@ -174,6 +174,60 @@ enum ReceiptPersistenceCheck {
         try JSONEncoder().encode([corrected, correctedPurchase]).write(to: archiveURL, options: .atomic)
     }
 
+    static func transactionSample() throws -> (ReceiptResult, [SpendRecord]) {
+        var current = try parse("LCBO\nBOTTLE 59.70\nTOTAL 59.70\nGift Card 50.00\n123456xxxxx9876543x EXP:NONE\nAUTHOR.#:123456 BAL:0.00\nGift Card 9.70\n123456xxxxx1112223x EXP:NONE\nAUTHOR.#:789012 BAL:90.30")
+        current.beanbeaverId = "synthetic-first"; current.date = "2026-08-27"; current.dateIsPlaceholder = false
+        var later = current
+        later.beanbeaverId = "synthetic-later"; later.date = "2026-09-01"
+        later.tenders = [current.tenders[1]]
+        later.tenders[0].amount = "90.30"
+        later.tenders[0].giftCard!.sourceId = "different-receipt-occurrence"
+        later.tenders[0].giftCard!.printedIdentifier = "123456*****1112223*"
+        later.tenders[0].giftCard!.remainingBalanceCents = 0
+        return (current, [current, later].map {
+            SpendRecord(id: UUID(), result: $0, scannedAt: Date(), captureFilename: nil, wallMs: nil)
+        })
+    }
+
+    static func checkTransactions() throws {
+        let (current, records) = try transactionSample()
+        let gift = current.tenders[1].giftCard!
+        let visits = GiftCardTransactions.visits(source: .payment(gift), current: current, records: records)
+        try require(visits.count == 2 && visits[0].receipt.beanbeaverId == "synthetic-later", "related visits by date; mask glyph normalization")
+        try require(visits[1].paymentIndices == [1], "neighboring gift card excluded")
+        let duplicate = SpendRecord(id: UUID(), result: records[1].result, scannedAt: Date(), captureFilename: nil, wallMs: nil)
+        try require(GiftCardTransactions.visits(source: .payment(gift), current: current, records: records + [duplicate]).count == 2, "duplicate receipt id shown once")
+        var grouped = records[1]
+        grouped.result.tenders.append(grouped.result.tenders[0])
+        let groupedVisits = GiftCardTransactions.visits(source: .payment(gift), current: current, records: [grouped])
+        try require(groupedVisits.count == 2 && groupedVisits[0].paymentIndices == [0, 1], "multiple payments remain one merchant visit")
+        var unknown = records[1]
+        unknown.result.dateIsPlaceholder = true
+        let ordered = GiftCardTransactions.visits(source: .payment(gift), current: current, records: [unknown])
+        try require(ordered.last?.date == nil && ordered.first?.date == current.date, "unknown dates last, no scan-date substitution")
+        var oldRecord = records[0]
+        oldRecord.result.tenders = []
+        try require(GiftCardTransactions.visits(source: .payment(gift), current: current, records: [oldRecord]).count == 1, "fresh batch metadata available when old history lacks it")
+        for variant in 0..<5 {
+            var unrelated = records[1]
+            switch variant {
+            case 0: unrelated.result.tenders[0].giftCard!.issuer = "Other issuer"
+            case 1: unrelated.result.tenders[0].giftCard!.currency = "USD"
+            case 2: unrelated.result.tenders[0].giftCard!.printedIdentifier = "999999*****1112223*"
+            case 3: unrelated.result.tenders[0].giftCard!.printedIdentifier = nil
+            default: unrelated.result.tenders[0].giftCard!.unresolvedFields = ["printed_identifier"]
+            }
+            try require(GiftCardTransactions.visits(source: .payment(gift), current: current, records: [unrelated]).count == 1, "unrelated or unresolved card excluded")
+        }
+        var missing = gift
+        missing.currency = nil
+        try require(GiftCardTransactions.visits(source: .payment(missing), current: current, records: records).count == 1, "unknown source context only shows current occurrence")
+        try require(GiftCardTransactions.identifier("xxxx") == nil, "mask-only identifier does not match cards")
+        let purchase = try parse("COSTCO\n399 DOORDASH2X50 79.99\nPC 111111 ACTIVATED\nSUBTOTAL 79.99\nTOTAL 79.99\nMASTERCARD 79.99")
+        let purchaseVisits = GiftCardTransactions.visits(source: .purchase(purchase.items[0].giftCard!), current: purchase, records: records)
+        try require(purchaseVisits.count == 1 && purchaseVisits[0].purchaseIndices == [0], "pack purchase not linked to redemption identifiers")
+    }
+
     static var archiveURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("receipt-persistence-relaunch.json")
@@ -207,8 +261,9 @@ enum ReceiptPersistenceCheck {
             } else {
                 try check(at: scratch)
                 try checkEditors()
+                try checkTransactions()
             }
-            result = "PASS: extraction, corrections, edit/save/reload/export, repeated packs, optional balances, expiry, exact cents, legacy records, correction forms (relaunch=\(relaunch))\n"
+            result = "PASS: extraction, corrections, edit/save/reload/export, repeated packs, optional balances, expiry, exact cents, legacy records, correction forms, related visits (relaunch=\(relaunch))\n"
         } catch { result = "FAIL: \(error)\n" }
         try? result.write(to: report, atomically: true, encoding: .utf8)
         NSLog("[ReceiptPersistenceCheck] %@", result)
@@ -221,6 +276,7 @@ struct ReceiptPersistencePreview: View {
     let mode: String
     @State private var result: ReceiptResult?
     @State private var error: String?
+    @State private var transactionStore: SpendStore?
 
     static var requestedMode: String? {
         ProcessInfo.processInfo.arguments.first { $0.hasPrefix("-previewGiftCard") }
@@ -230,6 +286,11 @@ struct ReceiptPersistencePreview: View {
         NavigationStack {
             if let result {
                 switch mode {
+                case "-previewGiftCardTransactions":
+                    if let transactionStore {
+                        GiftCardTransactionsView(source: .payment(result.tenders[1].giftCard!), currentReceipt: result, store: transactionStore)
+                    }
+
                 case "-previewGiftCardPaymentEditor":
                     GiftCardRedemptionEditor(tender: result.tenders[1]) { tender in
                         var draft = ReceiptEditDraft(result: result)
@@ -246,7 +307,7 @@ struct ReceiptPersistencePreview: View {
                     ReceiptEditorView(original: result) { self.result = $0 }
                 case "-previewGiftCardPurchase":
                     ScrollView {
-                        GiftCardPurchaseDetails(item: result.items[0], gift: result.items[0].giftCard!)
+                        GiftCardPurchaseDetails(item: result.items[0], gift: result.items[0].giftCard!, receipt: result)
                             .padding()
                     }.navigationTitle("Gift-card purchase")
                 default:
@@ -254,7 +315,7 @@ struct ReceiptPersistencePreview: View {
                         VStack(spacing: 24) {
                             ForEach(result.tenders.indices, id: \.self) { index in
                                 if let gift = result.tenders[index].giftCard {
-                                    GiftCardPaymentDetails(tender: result.tenders[index], gift: gift, number: index + 1)
+                                    GiftCardPaymentDetails(tender: result.tenders[index], gift: gift, number: index + 1, receipt: result)
                                 }
                             }
                         }.padding()
@@ -267,7 +328,11 @@ struct ReceiptPersistencePreview: View {
         .tint(.bbAccent)
         .task {
             do {
-                if mode.contains("Purchase") {
+                if mode == "-previewGiftCardTransactions" {
+                    let (receipt, records) = try ReceiptPersistenceCheck.transactionSample()
+                    result = receipt
+                    transactionStore = SpendStore(ephemeralRecords: records)
+                } else if mode.contains("Purchase") {
                     result = try ReceiptPersistenceCheck.parse("COSTCO\n399 DOORDASH2X50 79.99\nPC 111111 ACTIVATED\nSUBTOTAL 79.99\nTOTAL 79.99\nMASTERCARD 79.99")
                 } else {
                     result = try ReceiptPersistenceCheck.parse("LCBO\nBOTTLE 59.70\nTOTAL 59.70\nGift Card 50.00\n123456xxxxx9876543x EXP:NONE\nAUTHOR.#:123456 BAL:0.00\nGift Card 9.70\n123456xxxxx1112223x EXP:NONE\nAUTHOR.#:789012 BAL:90.30")

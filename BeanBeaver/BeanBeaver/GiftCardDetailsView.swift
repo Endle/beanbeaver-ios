@@ -41,12 +41,12 @@ struct GiftCardDetailsCard: View {
             VStack(alignment: .leading, spacing: 20) {
                 ForEach(result.tenders.indices, id: \.self) { index in
                     if let gift = result.tenders[index].giftCard {
-                        GiftCardPaymentDetails(tender: result.tenders[index], gift: gift, number: index + 1)
+                        GiftCardPaymentDetails(tender: result.tenders[index], gift: gift, number: index + 1, receipt: result)
                     }
                 }
                 ForEach(result.items.indices, id: \.self) { index in
                     if let gift = result.items[index].giftCard {
-                        GiftCardPurchaseDetails(item: result.items[index], gift: gift)
+                        GiftCardPurchaseDetails(item: result.items[index], gift: gift, receipt: result)
                     }
                 }
                 Text("Use Edit → Review & Fix to correct these receipt details.")
@@ -65,6 +65,7 @@ struct GiftCardPaymentDetails: View {
     let tender: ReceiptTender
     let gift: GiftCardRedemption
     let number: Int
+    let receipt: ReceiptResult
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -76,7 +77,10 @@ struct GiftCardPaymentDetails: View {
             GiftCardDetailRow("Expiry", expiry)
             Text("Balance reported after this payment. It is not a live balance.")
                 .font(.footnote).foregroundStyle(.secondary)
-            GiftCardEvidenceView(evidence: gift.evidence, unresolved: gift.unresolvedFields, corrected: gift.correctedFields)
+            GiftCardEvidenceView(evidence: gift.evidence, unresolved: gift.unresolvedFields, corrected: gift.correctedFields, showEvidence: false)
+            NavigationLink("Transactions") {
+                GiftCardTransactionsView(source: .payment(gift), currentReceipt: receipt)
+            }
         }
     }
 
@@ -92,6 +96,7 @@ struct GiftCardPaymentDetails: View {
 struct GiftCardPurchaseDetails: View {
     let item: ReceiptItem
     let gift: GiftCardPurchase
+    let receipt: ReceiptResult
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -106,7 +111,10 @@ struct GiftCardPurchaseDetails: View {
                               GiftCardDisplay.money(gift.totalFaceValueCents, currency: gift.currency))
             Text("Activation is reported by the receipt, not verified with the issuer. A pack reference does not identify its individual cards.")
                 .font(.footnote).foregroundStyle(.secondary)
-            GiftCardEvidenceView(evidence: gift.evidence, unresolved: gift.unresolvedFields, corrected: gift.correctedFields)
+            GiftCardEvidenceView(evidence: gift.evidence, unresolved: gift.unresolvedFields, corrected: gift.correctedFields, showEvidence: false)
+            NavigationLink("Transactions") {
+                GiftCardTransactionsView(source: .purchase(gift), currentReceipt: receipt)
+            }
         }
     }
 }
@@ -128,6 +136,7 @@ struct GiftCardEvidenceView: View {
     let evidence: [GiftCardEvidence]
     let unresolved: [String]
     let corrected: [String]
+    var showEvidence = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -138,7 +147,7 @@ struct GiftCardEvidenceView: View {
             if !corrected.isEmpty {
                 Text("Corrected: " + labels(corrected)).foregroundStyle(.secondary)
             }
-            if !evidence.isEmpty {
+            if showEvidence && !evidence.isEmpty {
                 DisclosureGroup("Original receipt evidence") {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(evidence.indices, id: \.self) { index in

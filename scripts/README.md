@@ -93,7 +93,9 @@ The check also exercises the correction-form drafts and relaunches with
 `-checkReceiptPersistenceReload` to verify corrected values and exports in a
 second process. It rejects negative/over-precise/overflowing amounts, missing
 printed expiry dates, zero card counts, and overflowing derived face values.
-The temporary synthetic relaunch archive is deleted after verification.
+The temporary synthetic relaunch archive is deleted after verification. Related
+visit checks cover mask normalization, issuer/currency separation, duplicate
+receipts, multiple tenders, unknown dates, and unlinked purchase references.
 
 To inspect production gift-card views without adding receipts to the spending
 store, launch with one of these synthetic preview arguments:
@@ -103,6 +105,7 @@ store, launch with one of these synthetic preview arguments:
 - `-previewGiftCardPaymentEditor`
 - `-previewGiftCardPurchaseEditor`
 - `-previewGiftCardReceiptEditor`
+- `-previewGiftCardTransactions`
 
 These render the real views using synthetic parser inputs. They are visual
 inspection routes, not evidence of tapping through the normal navigation flow.

@@ -60,6 +60,8 @@
 		1C00000000000000000000A1 /* ItemHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000A1 /* ItemHistory.swift */; };
 		1C00000000000000000000B2 /* ReceiptPersistenceCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000B2 /* ReceiptPersistenceCheck.swift */; };
 		1C00000000000000000000B1 /* GiftCardPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000B1 /* GiftCardPersistence.swift */; };
+		1C00000000000000000000B6 /* GiftCardTransactions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000B6 /* GiftCardTransactions.swift */; };
+		1C00000000000000000000B7 /* GiftCardTransactionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000B7 /* GiftCardTransactionsView.swift */; };
 		1C00000000000000000000B3 /* GiftCardEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000B3 /* GiftCardEditing.swift */; };
 		1C00000000000000000000B4 /* GiftCardDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000B4 /* GiftCardDetailsView.swift */; };
 		1C00000000000000000000B5 /* GiftCardEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000B5 /* GiftCardEditorView.swift */; };
@@ -120,6 +122,8 @@
 		1B00000000000000000000A1 /* ItemHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemHistory.swift; sourceTree = "<group>"; };
 		1B00000000000000000000B2 /* ReceiptPersistenceCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptPersistenceCheck.swift; sourceTree = "<group>"; };
 		1B00000000000000000000B1 /* GiftCardPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCardPersistence.swift; sourceTree = "<group>"; };
+		1B00000000000000000000B6 /* GiftCardTransactions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCardTransactions.swift; sourceTree = "<group>"; };
+		1B00000000000000000000B7 /* GiftCardTransactionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCardTransactionsView.swift; sourceTree = "<group>"; };
 		1B00000000000000000000B3 /* GiftCardEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCardEditing.swift; sourceTree = "<group>"; };
 		1B00000000000000000000B4 /* GiftCardDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCardDetailsView.swift; sourceTree = "<group>"; };
 		1B00000000000000000000B5 /* GiftCardEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCardEditorView.swift; sourceTree = "<group>"; };
@@ -188,6 +192,8 @@
 				1B00000000000000000000A1 /* ItemHistory.swift */,
 				1B00000000000000000000B2 /* ReceiptPersistenceCheck.swift */,
 				1B00000000000000000000B1 /* GiftCardPersistence.swift */,
+				1B00000000000000000000B6 /* GiftCardTransactions.swift */,
+				1B00000000000000000000B7 /* GiftCardTransactionsView.swift */,
 				1B00000000000000000000B3 /* GiftCardEditing.swift */,
 				1B00000000000000000000B4 /* GiftCardDetailsView.swift */,
 				1B00000000000000000000B5 /* GiftCardEditorView.swift */,
@@ -348,6 +354,8 @@
 				1C00000000000000000000A1 /* ItemHistory.swift in Sources */,
 				1C00000000000000000000B2 /* ReceiptPersistenceCheck.swift in Sources */,
 				1C00000000000000000000B1 /* GiftCardPersistence.swift in Sources */,
+				1C00000000000000000000B6 /* GiftCardTransactions.swift in Sources */,
+				1C00000000000000000000B7 /* GiftCardTransactionsView.swift in Sources */,
 				1C00000000000000000000B3 /* GiftCardEditing.swift in Sources */,
 				1C00000000000000000000B4 /* GiftCardDetailsView.swift in Sources */,
 				1C00000000000000000000B5 /* GiftCardEditorView.swift in Sources */,
