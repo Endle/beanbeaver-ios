@@ -167,6 +167,8 @@ struct ReceiptEditDraft {
             if draft.description.trimmed != parsed.description { return true }
             if Self.normalizedAmount(draft.price) != Self.normalizedAmount(parsed.price) { return true }
             if draft.quantity != parsed.quantity { return true }
+            // Identical gift-card packs can carry different activation references.
+            if draft.giftCard != parsed.giftCard { return true }
             if !draft.tagPath.isEmpty { return true }
         }
         return false

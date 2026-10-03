@@ -19,6 +19,11 @@ struct BeanBeaverApp: App {
                 // DEBUG` because its numbers are only meaningful from a Release
                 // build — see `SpendPerf`.
                 .task { if SpendPerf.isRequested { await SpendPerf.run() } }
+                .task {
+                    if ProcessInfo.processInfo.arguments.contains("-checkReceiptPersistence") {
+                        ReceiptPersistenceCheck.run()
+                    }
+                }
         }
         // `SpendStore` writes off the main actor now, so the suspend is where
         // the pending write has to be waited on — see `flushPendingWrites`.

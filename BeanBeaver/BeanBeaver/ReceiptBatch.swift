@@ -247,7 +247,7 @@ extension MerchantDetails {
 extension ReceiptResult: @retroactive Codable {
     enum CodingKeys: String, CodingKey {
         case merchant, merchantMatch, date, dateIsPlaceholder, total, tax, subtotal
-        case items, warnings, beancount, beanbeaverId, documentRelpath, timings
+        case items, tenders, warnings, beancount, beanbeaverId, documentRelpath, timings
     }
 
     public init(from decoder: Decoder) throws {
@@ -266,8 +266,8 @@ extension ReceiptResult: @retroactive Codable {
                   // `merchantDetails` above) grew ReceiptResult with these FFI
                   // fields. No batch UI reads them yet, and the persisted batch
                   // JSON predates them, so default here rather than widen the
-                  // on-disk schema (CodingKeys / encode stay unchanged, keeping old
-                  // batch files loadable).
+                  // on-disk schema for these unused fields. Missing optional
+                  // fields elsewhere still keep old batch files loadable.
                   //
                   // `merchantDetails` is deliberately not persisted rather than
                   // merely not-yet-persisted: it carries a street address, a phone
@@ -278,7 +278,8 @@ extension ReceiptResult: @retroactive Codable {
                   // why.
                   rawText: "",
                   imageFilename: "receipt.jpg",
-                  tenders: [],
+                  // Old records have no payment evidence to recover.
+                  tenders: try c.decodeIfPresent([StoredTender].self, forKey: .tenders)?.map(\.value) ?? [],
                   beancount: try c.decode(String.self, forKey: .beancount),
                   beanbeaverId: try c.decodeIfPresent(String.self, forKey: .beanbeaverId),
                   documentRelpath: try c.decodeIfPresent(String.self, forKey: .documentRelpath),
@@ -298,6 +299,7 @@ extension ReceiptResult: @retroactive Codable {
         try c.encodeIfPresent(tax, forKey: .tax)
         try c.encodeIfPresent(subtotal, forKey: .subtotal)
         try c.encode(items, forKey: .items)
+        try c.encode(tenders.map(StoredTender.init), forKey: .tenders)
         try c.encode(warnings.map(StoredWarning.init), forKey: .warnings)
         try c.encode(beancount, forKey: .beancount)
         try c.encodeIfPresent(beanbeaverId, forKey: .beanbeaverId)

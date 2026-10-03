@@ -31,6 +31,7 @@ struct ReceiptDocument {
 /// so the raw parse survives even if the beancount rendering rules change.
 struct ReceiptExportJSON: Encodable {
     struct Item: Encodable {
+        let giftCard: StoredGiftPurchase?
         let description: String
         let price: String
         let quantity: Int32
@@ -62,6 +63,7 @@ struct ReceiptExportJSON: Encodable {
     let subtotal: String?
     let tax: String?
     let items: [Item]
+    let tenders: [StoredTender]
     let warnings: [String]
     let timings: Timings
 
@@ -73,9 +75,11 @@ struct ReceiptExportJSON: Encodable {
         subtotal = result.subtotal
         tax = result.tax
         items = result.items.map {
-            Item(description: $0.description, price: $0.price, quantity: $0.quantity,
+            Item(giftCard: $0.giftCard.map(StoredGiftPurchase.init),
+                 description: $0.description, price: $0.price, quantity: $0.quantity,
                  account: $0.account, tags: $0.tags.map(\.path))
         }
+        tenders = result.tenders.map(StoredTender.init)
         // The sidecar's schema is a list of strings, and stays one. Filtered
         // to what it has always contained: before kinds existed, `warnings`
         // held only findings about the numbers, so exporting the new

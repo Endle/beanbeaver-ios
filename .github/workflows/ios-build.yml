@@ -242,3 +242,8 @@ jobs:
           PY
           [ -f manifest.json ] || exit 0
           python3 shared/scripts/compare-e2e.py --results batch_out.json --manifest manifest.json
+
+      - name: Native receipt persistence and structured export
+        env:
+          SIMULATOR: ${{ steps.sim.outputs.udid }}
+        run: ./scripts/check-receipt-persistence.sh

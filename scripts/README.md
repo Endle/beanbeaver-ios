@@ -76,3 +76,15 @@ maintain.
 
 This is complementary to — not a replacement for — the fast desktop cached suite;
 keep using that for the tight loop, and this for the occasional high-fidelity pass.
+
+### Gift-card persistence regression
+
+After building and installing the current app on a booted simulator, run
+`./scripts/check-receipt-persistence.sh` (`SIMULATOR=<UDID>` is optional).
+It launches `-checkReceiptPersistence` and fails if the app reports a failure or
+never produces a fresh report. Synthetic receipts exercise extraction, native
+editor mapping, correction provenance, disk save/reload, and JSON sidecar export.
+Coverage includes split payments, zero/missing balances, all expiry states,
+exact Int64 cents, repeated packs with distinct references, and old records.
+The check uses a temporary file; it does not add receipts to the spending store
+or import batch. Results are written to `Documents/receipt-persistence-check.txt`.
