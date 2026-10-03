@@ -49,6 +49,7 @@ struct ReceiptEditorView: View {
             Form {
                 receiptSection
                 itemsSection
+                giftCardPaymentsSection
                 summarySection
                 if exportedAt != nil { alreadyExportedSection }
             }
@@ -155,6 +156,30 @@ struct ReceiptEditorView: View {
                  + "A line you rename is re-filed from its new text.")
         }
         .listRowBackground(Color.bbCardFill)
+    }
+
+    @ViewBuilder
+    private var giftCardPaymentsSection: some View {
+        if draft.tenders.contains(where: { $0.giftCard != nil }) {
+            Section("Gift-card payments") {
+                ForEach(draft.tenders.indices, id: \.self) { index in
+                    if let gift = draft.tenders[index].giftCard {
+                        NavigationLink {
+                            GiftCardRedemptionEditor(tender: draft.tenders[index]) {
+                                draft.tenders[index] = $0
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Payment \(index + 1) · \(gift.issuer ?? "Gift card")")
+                                Text(gift.printedIdentifier ?? "Identifier unknown")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .listRowBackground(Color.bbCardFill)
+        }
     }
 
     // MARK: - Summary
@@ -334,6 +359,16 @@ private struct ItemEditorView: View {
                 }
                 Stepper("Quantity: \(item.quantity)",
                         value: $item.quantity, in: 1...99)
+            }
+
+            if let gift = item.giftCard {
+                Section("Gift card") {
+                    NavigationLink {
+                        GiftCardPurchaseEditor(gift: gift) { item.giftCard = $0 }
+                    } label: {
+                        Label("Activation & face value", systemImage: "giftcard")
+                    }
+                }
             }
 
             Section {

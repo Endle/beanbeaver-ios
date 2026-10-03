@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import BBReceiptKit
 
 /// Launch with -checkReceiptPersistence for a native persistence/FFI regression
@@ -108,17 +109,176 @@ enum ReceiptPersistenceCheck {
                     "null tenders")
     }
 
-    static func run() {
+    /// Exercise the drafts bound to the correction forms, then persist the
+    /// corrected results for a second process to verify after relaunch.
+    static func checkEditors() throws {
+        for (input, expected) in [("0", Int64(0)), ("12.3", 1230), ("12,34", 1234),
+                                  ("90071992547409.93", 9_007_199_254_740_993),
+                                  ("92233720368547758.07", Int64.max)] {
+            try require(try GiftCardInput.cents(input, field: "Balance") == expected, "exact editor cents")
+        }
+        try require(try GiftCardInput.cents(" ", field: "Balance") == nil, "blank means unknown")
+        for input in ["-1", "1.234", "1,234.00", "1e2", "NaN", "92233720368547758.08"] {
+            try require((try? GiftCardInput.cents(input, field: "Balance")) == nil, "invalid money rejected: \(input)")
+        }
+        let receipt = try parse("LCBO\nBOTTLE 59.70\nTOTAL 59.70\nGift Card 50.00\n123456xxxxx9876543x EXP:NONE\nAUTHOR.#:123456 BAL:0.00\nGift Card 9.70\n123456xxxxx1112223x EXP:NONE\nAUTHOR.#:789012 BAL:90.30")
+        var draft = ReceiptEditDraft(result: receipt)
+        var payment = GiftCardRedemptionDraft(draft.tenders[1])
+        draft.tenders[1] = try payment.applied()
+        try require(!draft.hasChanges, "applying untouched payment is a no-op")
+        payment.identifier = "123456xxxxx7654321x"
+        payment.balance = "123.45"
+        payment.authorization = "corrected-reference"
+        payment.expiry = .printedDate
+        try require((try? payment.applied()) == nil, "printed expiry requires date")
+        payment.expiryDate = "2030/12/31"
+        draft.tenders[1] = try payment.applied()
+        try require(draft.tendersChanged, "payment edit reaches receipt draft")
+        let corrected = try reformat(receipt, edits: draft.edits()!)
+        let gift = corrected.tenders[1].giftCard!
+        try require(gift.normalizedIdentifier == "123456*****7654321*", "Rust normalizes corrected mask")
+        try require(gift.remainingBalanceCents == 12345 && gift.expiryDate == "2030/12/31", "form values applied")
+        try require(gift.evidence == receipt.tenders[1].giftCard!.evidence, "payment correction keeps original evidence")
+        try require(gift.correctedFields.contains("printed_identifier") && gift.correctedFields.contains("remaining_balance_cents"), "payment provenance")
+        try require(corrected.tenders[0] == receipt.tenders[0], "other payment untouched")
+        payment.balance = ""; payment.expiry = .unknown
+        let clearedPayment = try payment.applied()
+        try require(clearedPayment.giftCard!.remainingBalanceCents == nil && clearedPayment.giftCard!.expiryDate == nil, "clear balance and expiry")
+        payment.amount = ""
+        try require((try? payment.applied()) == nil, "payment amount is required")
+
+        let purchase = try parse("COSTCO\n399 DOORDASH2X50 79.99\nPC 111111 ACTIVATED\n399 DOORDASH2X50 79.99\nPC 222222 ACTIVATED\nSUBTOTAL 159.98\nTOTAL 159.98\nMASTERCARD 159.98")
+        var purchaseDraft = ReceiptEditDraft(result: purchase)
+        var pack = GiftCardPurchaseDraft(purchase.items[0].giftCard!)
+        purchaseDraft.items[0].giftCard = try pack.applied()
+        try require(!purchaseDraft.hasChanges, "applying untouched purchase is a no-op")
+        pack.count = "0"
+        try require((try? pack.applied()) == nil, "zero card count rejected")
+        pack.count = "3"; pack.denomination = "25.00"
+        pack.reference = "corrected-pack"
+        purchaseDraft.items[0].giftCard = try pack.applied()
+        let correctedPurchase = try reformat(purchase, edits: purchaseDraft.edits()!)
+        let correctedPack = correctedPurchase.items[0].giftCard!
+        try require(correctedPack.totalFaceValueCents == 7500 && correctedPack.faceValueDerived, "face value derives from corrected count/value")
+        try require(correctedPurchase.items[0].price == "79.99", "face value does not change price paid")
+        try require(correctedPack.evidence == purchase.items[0].giftCard!.evidence, "purchase evidence retained")
+        try require(correctedPack.correctedFields.contains("card_count"), "purchase provenance")
+        try require(correctedPurchase.items[1].giftCard == purchase.items[1].giftCard, "other pack untouched")
+        pack.count = "4294967295"; pack.denomination = "92233720368547758.07"
+        try require((try? pack.applied()) == nil, "derived face value overflow rejected")
+        pack.derived = false; pack.count = ""; pack.denomination = ""; pack.totalFaceValue = ""
+        pack.activation = .unknown
+        let unknown = try pack.applied()
+        try require(unknown.totalFaceValueCents == nil && unknown.cardCount == nil && unknown.activation == .unknown,
+                    "unknown purchase values remain absent")
+        try JSONEncoder().encode([corrected, correctedPurchase]).write(to: archiveURL, options: .atomic)
+    }
+
+    static var archiveURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("receipt-persistence-relaunch.json")
+    }
+
+    static func checkRelaunch() throws {
+        let receipts = try JSONDecoder().decode([ReceiptResult].self, from: Data(contentsOf: archiveURL))
+        try require(receipts.count == 2, "relaunch archive")
+        let payment = receipts[0].tenders[1].giftCard!
+        let purchase = receipts[1].items[0].giftCard!
+        try require(payment.remainingBalanceCents == 12345 && payment.normalizedIdentifier == "123456*****7654321*", "payment correction after process relaunch")
+        try require(payment.correctedFields.contains("printed_identifier") && !payment.evidence.isEmpty, "payment evidence after relaunch")
+        try require(purchase.reference == "corrected-pack" && purchase.totalFaceValueCents == 7500, "purchase correction after process relaunch")
+        try require(purchase.correctedFields.contains("card_count") && !purchase.evidence.isEmpty, "purchase evidence after relaunch")
+        let tenders = try export(receipts[0])["tenders"] as! [[String: Any]]
+        try require((tenders[1]["giftCard"] as! [String: Any])["remainingBalanceCents"] as? Int == 12345, "corrected payment export after relaunch")
+        let items = try export(receipts[1])["items"] as! [[String: Any]]
+        try require((items[0]["giftCard"] as! [String: Any])["totalFaceValueCents"] as? Int == 7500, "corrected purchase export after relaunch")
+        try FileManager.default.removeItem(at: archiveURL)
+    }
+
+    static func run(relaunch: Bool = false) {
         let report = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("receipt-persistence-check.txt")
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         defer { try? FileManager.default.removeItem(at: scratch) }
         let result: String
         do {
-            try check(at: scratch)
-            result = "PASS: extraction, corrections, edit/save/reload/export, repeated packs, optional balances, expiry, exact cents, legacy records\n"
+            if relaunch {
+                try checkRelaunch()
+            } else {
+                try check(at: scratch)
+                try checkEditors()
+            }
+            result = "PASS: extraction, corrections, edit/save/reload/export, repeated packs, optional balances, expiry, exact cents, legacy records, correction forms (relaunch=\(relaunch))\n"
         } catch { result = "FAIL: \(error)\n" }
         try? result.write(to: report, atomically: true, encoding: .utf8)
         NSLog("[ReceiptPersistenceCheck] %@", result)
+    }
+}
+
+/// Launch-only synthetic previews for inspecting these forms without putting
+/// test receipts in the spending store. They use the production views.
+struct ReceiptPersistencePreview: View {
+    let mode: String
+    @State private var result: ReceiptResult?
+    @State private var error: String?
+
+    static var requestedMode: String? {
+        ProcessInfo.processInfo.arguments.first { $0.hasPrefix("-previewGiftCard") }
+    }
+
+    var body: some View {
+        NavigationStack {
+            if let result {
+                switch mode {
+                case "-previewGiftCardPaymentEditor":
+                    GiftCardRedemptionEditor(tender: result.tenders[1]) { tender in
+                        var draft = ReceiptEditDraft(result: result)
+                        draft.tenders[1] = tender
+                        apply(draft, to: result)
+                    }
+                case "-previewGiftCardPurchaseEditor":
+                    GiftCardPurchaseEditor(gift: result.items[0].giftCard!) { gift in
+                        var draft = ReceiptEditDraft(result: result)
+                        draft.items[0].giftCard = gift
+                        apply(draft, to: result)
+                    }
+                case "-previewGiftCardReceiptEditor":
+                    ReceiptEditorView(original: result) { self.result = $0 }
+                case "-previewGiftCardPurchase":
+                    ScrollView {
+                        GiftCardPurchaseDetails(item: result.items[0], gift: result.items[0].giftCard!)
+                            .padding()
+                    }.navigationTitle("Gift-card purchase")
+                default:
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            ForEach(result.tenders.indices, id: \.self) { index in
+                                if let gift = result.tenders[index].giftCard {
+                                    GiftCardPaymentDetails(tender: result.tenders[index], gift: gift, number: index + 1)
+                                }
+                            }
+                        }.padding()
+                    }.navigationTitle("Gift-card payments")
+                }
+            } else {
+                Text(error ?? "Loading synthetic receipt…")
+            }
+        }
+        .tint(.bbAccent)
+        .task {
+            do {
+                if mode.contains("Purchase") {
+                    result = try ReceiptPersistenceCheck.parse("COSTCO\n399 DOORDASH2X50 79.99\nPC 111111 ACTIVATED\nSUBTOTAL 79.99\nTOTAL 79.99\nMASTERCARD 79.99")
+                } else {
+                    result = try ReceiptPersistenceCheck.parse("LCBO\nBOTTLE 59.70\nTOTAL 59.70\nGift Card 50.00\n123456xxxxx9876543x EXP:NONE\nAUTHOR.#:123456 BAL:0.00\nGift Card 9.70\n123456xxxxx1112223x EXP:NONE\nAUTHOR.#:789012 BAL:90.30")
+                }
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+
+    private func apply(_ draft: ReceiptEditDraft, to previous: ReceiptResult) {
+        guard let edits = draft.edits() else { return }
+        do { result = try ReceiptPersistenceCheck.reformat(previous, edits: edits) }
+        catch { self.error = error.localizedDescription }
     }
 }

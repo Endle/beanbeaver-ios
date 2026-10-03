@@ -139,6 +139,7 @@ struct ReceiptEditDraft {
     var total: String
     var tax: String
     var subtotal: String
+    var tenders: [ReceiptTender]
 
     private let original: ReceiptResult
 
@@ -150,6 +151,7 @@ struct ReceiptEditDraft {
         total = result.total
         tax = result.tax ?? ""
         subtotal = result.subtotal ?? ""
+        tenders = result.tenders
     }
 
     // MARK: Change detection
@@ -180,8 +182,10 @@ struct ReceiptEditDraft {
 
     var subtotalChanged: Bool { changed(subtotal, from: original.subtotal) }
 
+    var tendersChanged: Bool { tenders != original.tenders }
+
     var hasChanges: Bool {
-        merchantChanged || dateChanged || itemsChanged
+        merchantChanged || dateChanged || itemsChanged || tendersChanged
             || totalChanged || taxChanged || subtotalChanged
     }
 
@@ -252,10 +256,9 @@ struct ReceiptEditDraft {
     /// The edits to send, or nil when nothing changed.
     func edits() -> ReceiptEdits? {
         guard hasChanges else { return nil }
-        // `tenders: nil` keeps the parse's own payment list — the editor has
-        // no tender UI, and core treats an absent list as "leave them alone".
+        // Send the full ordered payment list only when a payment changed.
         return ReceiptEdits(
-            tenders: nil,
+            tenders: tendersChanged ? tenders : nil,
             merchant: merchantChanged ? merchant.trimmed : nil,
             dateIso: dateChanged ? dateISO : nil,
             items: itemsChanged ? items.map(Self.edited(from:)) : nil,

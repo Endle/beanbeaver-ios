@@ -11,7 +11,13 @@ struct BeanBeaverApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if let mode = ReceiptPersistencePreview.requestedMode {
+                    ReceiptPersistencePreview(mode: mode)
+                } else {
+                    ContentView()
+                }
+            }
                 // Fetch entitlements once, and keep listening for changes for
                 // the life of the process — see `Entitlements.start()`.
                 .task { await Entitlements.shared.start() }
@@ -22,6 +28,8 @@ struct BeanBeaverApp: App {
                 .task {
                     if ProcessInfo.processInfo.arguments.contains("-checkReceiptPersistence") {
                         ReceiptPersistenceCheck.run()
+                    } else if ProcessInfo.processInfo.arguments.contains("-checkReceiptPersistenceReload") {
+                        ReceiptPersistenceCheck.run(relaunch: true)
                     }
                 }
         }

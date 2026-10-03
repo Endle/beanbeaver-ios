@@ -1186,6 +1186,10 @@ struct ReceiptCard: View {
                 warningsBanner
             }
 
+            if GiftCardDetailsCard.hasDetails(result) {
+                GiftCardDetailsCard(result: result)
+            }
+
             if includesAccountingDetails {
                 AccountingDetailsCard(result: result, wallMs: wallMs,
                                       capturedImageURL: capturedImageURL)

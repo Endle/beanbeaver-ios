@@ -387,3 +387,19 @@ identical packs with distinct activation references could be reordered without
 Save detecting a change. Validate with `scripts/check-receipt-persistence.sh`
 after building/installing the current simulator app. Android adoption remains
 explicitly deferred at the user's request (2026-10-03).
+
+`GiftCardDetailsCard` is part of `ReceiptCard`, so scan results, saved receipts,
+and batch details share the same display. It labels reported balances and
+activation, keeps purchase price separate from face value, and exposes original
+evidence plus unresolved/corrected fields. It does not create tracked cards.
+
+Review & Fix → Gift-card payments edits existing redemption records; Items →
+Item → Activation & face value edits existing purchase records. Leaf forms
+apply to the surrounding receipt draft; only the receipt's Save runs Rust
+`reformatReceipt` and persists changes. Keep source IDs and evidence intact;
+Rust normalizes identifiers and records correction provenance. Blank optional
+fields mean unknown. `GiftCardInput` parses decimal strings to exact Int64 cents
+and rejects negatives, excess precision, and overflow instead of rounding.
+
+The native regression script now terminates/relaunches the app and checks that
+corrected payments and purchases still export with their evidence and provenance.
