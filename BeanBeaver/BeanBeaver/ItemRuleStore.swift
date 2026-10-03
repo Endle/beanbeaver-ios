@@ -41,14 +41,16 @@ final class ItemRuleStore {
     /// could still be invalidated by a core upgrade that removes a rule id.
     private(set) var loadError: String?
 
-    private static let fileURL = ReceiptCaptureStore.directory
-        .appendingPathComponent("item_rules.json")
+    private let storage: JSONFile<Persisted>
+    var storageIssue: String? { storage.issue }
+    var canModify: Bool { !storage.loadFailed }
 
     private struct Persisted: Codable {
         let documents: [ImportedRuleDocument]
     }
 
-    init() {
+    init(fileURL: URL = ReceiptCaptureStore.directory.appendingPathComponent("item_rules.json")) {
+        storage = JSONFile(url: fileURL)
         load()
         rebuild()
     }
@@ -69,6 +71,10 @@ final class ItemRuleStore {
     /// Returns what the document added, for the confirmation message.
     @discardableResult
     func importDocument(named name: String, toml: String) throws -> ImportSummary {
+        guard canModify else {
+            throw NSError(domain: "BeanBeaver.Storage", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: storageIssue ?? "Rule storage is unavailable."])
+        }
         let before = book
         let candidate = try RuleBook(
             options: ParseOptions(
@@ -98,12 +104,14 @@ final class ItemRuleStore {
     }
 
     func remove(_ document: ImportedRuleDocument) {
+        guard canModify else { return }
         documents.removeAll { $0.id == document.id }
         save()
         rebuild()
     }
 
     func remove(atOffsets offsets: IndexSet) {
+        guard canModify else { return }
         documents.remove(atOffsets: offsets)
         save()
         rebuild()
@@ -112,17 +120,21 @@ final class ItemRuleStore {
     // MARK: - Persistence
 
     private func load() {
-        guard let data = try? Data(contentsOf: Self.fileURL),
-              let decoded = try? JSONDecoder().decode(Persisted.self, from: data)
-        else { return }
+        guard let decoded = storage.load() else { return }
         documents = decoded.documents
     }
 
     private func save() {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(Persisted(documents: documents)) else { return }
-        try? data.write(to: Self.fileURL, options: .atomic)
+        storage.save(Persisted(documents: documents))
+    }
+
+    func retryPersistence() {
+        if storage.loadFailed {
+            load()
+            rebuild()
+        } else {
+            save()
+        }
     }
 
     private func rebuild() {

@@ -16,8 +16,8 @@ license split and core-tag pinning live in `../CLAUDE.md` — not repeated here.
 
 App code under `BeanBeaver/BeanBeaver/`, by concern (open the file for detail):
 
-- **Entry / shell** — `BeanBeaverApp.swift` (entry); `ContentView.swift` (the tab shell — it owns the app's state, every sheet, the export alert and the DEBUG deep links, and is still a **grab-bag** that also defines `SettingsView`, `ReceiptResultView`, `ReceiptCard`, `AccountingDetailsCard`, `OriginReceiptView`, `ScanTimingsView`); `RootTab.swift` (the three tabs, the raised Scan button, `BBLayout`); `HomeView.swift` (the home screen).
-- **Scan pipeline** — `ReceiptPipeline.swift` (`BatchRunner`, `-autoRunBatch`), `ReceiptCaptureStore.swift`, `ReceiptBatch.swift`, `DocumentScanner.swift`, `BatchImportView.swift`.
+- **Entry / shell** — `BeanBeaverApp.swift` (entry); `ContentView.swift` (tab shell, presentation state, export alert and launch routes); `SettingsView.swift`, `ReceiptResultView.swift` (also `ReceiptCard` and `AccountingDetailsCard`), `OriginReceiptView.swift`, `ScanTimingsView.swift`, and `ReceiptPreviews.swift` hold their own surfaces; `RootTab.swift` (the three tabs, the raised Scan button, `BBLayout`); `HomeView.swift` (the home screen).
+- **Scan pipeline** — `ReceiptPipeline.swift` (`BatchRunner`, `-autoRunBatch`), `ReceiptScanService.swift` (shared serial OCR worker), `ReceiptCaptureStore.swift`, `ReceiptBatch.swift`, `ReceiptPersistence.swift` (Codable mappings), `DocumentScanner.swift`, `BatchImportView.swift`.
 - **Export / sync** — `LedgerExport.swift` (exporter seam), `LedgerSettingsView.swift` (the "Export" page), backends `GitHubLedger.swift` / `GitHubDeviceFlow.swift` / `FilesLedgerInbox.swift`, and `MoneyManagerExport.swift` / `MoneyManagerWorkbook.swift`.
 - **Support** — `Entitlements.swift` (`isPremium` seam); `DebugInfoStore.swift` (+`DebugInfoListView`) and `DataDump.swift` (+`DataDumpView`) = in-app debug capture; `ReceiptSlip.swift` (the header slip, `TornEdge`, `AmountPrivacyEye`, `DisplayAmount`); others self-named (`Keychain`, `Theme`, `ZoomableImageView`, `PhotoSaver`, `LaunchTiming`).
 
@@ -132,9 +132,11 @@ the code:
 
 **The scan result is a full-screen modal over the whole shell**, bound to "the
 pipeline is not idle" so scanning, failure and result are one presentation
-rather than three. `Done` is withheld while scanning: `ReceiptPipeline.reset()`
-clears the status but does not cancel the running task, so dismissing mid-scan
-would have the finished result present itself again a second later.
+rather than three. `Done` remains withheld while scanning. `ReceiptPipeline.reset()`
+now invalidates the request ID, so a late completion cannot reopen the result or
+record a dismissed scan. Synchronous Rust OCR itself runs to completion.
+The cover owns one `ResultSheet` enum for editor, original, export settings,
+JSON, and sharing; all five presentations attach inside the cover.
 
 **`Info.plist` is a partial, merged with the generated one.** The target keeps
 `GENERATE_INFOPLIST_FILE = YES`; the checked-in file supplies only the keys the
@@ -216,9 +218,9 @@ with every figure replaced by `$•••`. `TrendChart.masked()` is the placeho
 that keeps the card from jumping when the eye is tapped.
 
 **Don't re-add arithmetic here** — a second implementation's opinion is the thing
-that was just deleted. This app has no XCTest target, so `spend-core`'s 28 Rust
-tests are the first automated coverage this logic has ever had on the iOS side;
-before, it was checkable only by hand through `-dumpSpending`.
+that was just deleted. Shared arithmetic stays covered by `spend-core`'s Rust
+tests. `BeanBeaverTests` covers the Swift store, persistence, scan lifecycle,
+and cache invalidation; `-dumpSpending` remains a diagnostic route.
 
 ### Screens read spending through `SpendStore`, never `SpendSummary`
 
@@ -412,3 +414,38 @@ and rejects negatives, excess precision, and overflow instead of rounding.
 
 The native regression script now terminates/relaunches the app and checks that
 corrected payments and purchases still export with their evidence and provenance.
+
+## Reliability boundaries and native tests
+
+`JSONFile<Value>` is the shared disk boundary for receipts, batch drafts, and
+imported rules. Missing files mean first launch; unreadable or undecodable files
+block mutations and preserve the source bytes. Never replace a failed load with
+an empty snapshot. Failed writes keep the latest in-memory state and publish a
+persistent Storage needs attention notice with Retry. Retry reads a blocked
+archive again, or writes the current snapshot after a save failure. There is no
+automatic reset or deletion of damaged data. Spending writes remain off the main
+actor, ordered, atomic, and drained on the scene's inactive/background transition.
+
+`ReceiptScanService` serializes model loading and OCR on one worker queue shared
+by camera and batch. Pausing a batch keeps an in-flight result; removing its
+draft or discarding the batch rejects that completion. Camera reset invalidates
+its request ID. Tests inject a controllable scanner, never delays into production
+OCR. `record` returns the existing/new `SpendRecord.id`; camera edits and batch
+edits carry that UUID rather than looking up a mutable or missing export ID.
+Older batch archives recover the UUID by capture filename, falling back to export
+ID for duplicate scans. A deleted record is not recreated by editing its draft.
+
+`BeanBeaverTests/ReliabilityTests.swift` uses temporary directories and ephemeral
+stores. It covers read/encode/write failures, retries, ordered writes, legacy
+archives, warning kinds, nil/changing export IDs, stale scan completions,
+pause/resume/retry, worker serialization, and cache invalidation including the
+empty-store month rollover. `scripts/README.md` has the command. CI runs these
+in the existing simulator job and retains the xcresult; live OCR and the native
+gift-card save/relaunch checks remain separate integration checks.
+
+Android review (2026-10-03): its stores also turn failed reads into empty data,
+and edits locate records by the previous export ID. Individual draft removal
+also lacks a completion-presence check. Its coroutine cancellation differs from
+Swift, so discard/pause needs platform-specific tests rather than a literal port.
+Those behavioral counterparts are deferred from this iOS-only reliability PR;
+Android requires its own change and verification. No core/mobile-util pins change.

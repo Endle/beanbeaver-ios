@@ -143,17 +143,12 @@ private final class SpendCache {
         }
         if today != day {
             day = today
+            defaultMonthId = nil
             // `month` is pure over records and takes no date; only these two
             // read the clock.
             facts = [:]
             trends = [:]
         }
-    }
-}
-
-extension SpendDate: @retroactive Equatable {
-    public static func == (lhs: SpendDate, rhs: SpendDate) -> Bool {
-        lhs.year == rhs.year && lhs.month == rhs.month && lhs.day == rhs.day
     }
 }
 
@@ -180,9 +175,10 @@ final class SpendStore {
     @ObservationIgnored private var revision = 0
     @ObservationIgnored private let cache = SpendCache()
 
-    private static var fileURL: URL {
-        ReceiptCaptureStore.directory.appendingPathComponent("spend.json")
-    }
+    private let storage: JSONFile<Persisted>?
+    private let now: () -> Date
+    var storageIssue: String? { storage?.issue }
+    var canModify: Bool { storage?.loadFailed != true }
 
     private struct Persisted: Codable {
         let records: [SpendRecord]
@@ -190,19 +186,17 @@ final class SpendStore {
         var previousHistoryLinks: [HistoryLink]?
     }
 
-    /// False for a store that must never reach disk — `SpendPerf`'s synthetic
-    /// corpus, and any preview that wants a populated store. Every mutator
-    /// still works; only `didChange()` is a no-op.
-    private let persists: Bool
-
-    init() {
-        persists = true
+    init(fileURL: URL = ReceiptCaptureStore.directory.appendingPathComponent("spend.json"),
+         now: @escaping () -> Date = Date.init) {
+        storage = JSONFile(url: fileURL)
+        self.now = now
         load()
     }
 
-    /// A store over `records` that never reads or writes `spend.json`.
-    init(ephemeralRecords records: [SpendRecord]) {
-        persists = false
+    /// A store over `records` that never reads or writes spend.json.
+    init(ephemeralRecords records: [SpendRecord], now: @escaping () -> Date = Date.init) {
+        storage = nil
+        self.now = now
         self.records = records
     }
 
@@ -212,15 +206,18 @@ final class SpendStore {
     /// `result.beanbeaverId` when the core supplied one — the same identity
     /// GitHub files under, so scanning the same photo twice doesn't double-count
     /// in the budget. A nil id (no image hash) records unconditionally.
-    func record(result: ReceiptResult, captureFilename: String?, wallMs: Double?) {
+    @discardableResult
+    func record(result: ReceiptResult, captureFilename: String?, wallMs: Double?) -> UUID? {
+        guard canModify else { return nil }
         if let id = result.beanbeaverId,
-           records.contains(where: { $0.result.beanbeaverId == id }) {
-            return
+           let existing = records.first(where: { $0.result.beanbeaverId == id }) {
+            return existing.id
         }
-        records.insert(SpendRecord(id: UUID(), result: result, scannedAt: Date(),
-                                   captureFilename: captureFilename, wallMs: wallMs),
-                       at: 0)
+        let id = UUID()
+        records.insert(SpendRecord(id: id, result: result, scannedAt: now(),
+                                   captureFilename: captureFilename, wallMs: wallMs), at: 0)
         didChange()
+        return id
     }
 
     // MARK: Mutation
@@ -236,28 +233,14 @@ final class SpendStore {
     /// a corrected price reach the budget — no separate invalidation, because
     /// `SpendSummary` is computed from these rows on each read.
     func updateResult(_ id: UUID, to result: ReceiptResult) {
+        guard canModify else { return }
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         records[index].result = result
         didChange()
     }
 
-    /// The same update addressed by identity rather than row, for the scan
-    /// result screen — it holds a `ReceiptResult` straight from the pipeline and
-    /// never learns the `SpendRecord.id` that `record(result:…)` minted for it.
-    ///
-    /// Matched on the receipt's *previous* `beanbeaverId`, since correcting the
-    /// date changes the id the edited copy will carry. A receipt with no id
-    /// can't be located this way and is left alone — the same nil-hash case that
-    /// makes `record(result:…)` skip its dedup.
-    func updateResult(replacing previous: ReceiptResult, with result: ReceiptResult) {
-        guard let id = previous.beanbeaverId,
-              let index = records.firstIndex(where: { $0.result.beanbeaverId == id })
-        else { return }
-        records[index].result = result
-        didChange()
-    }
-
     func setExcluded(_ excluded: Bool, for id: UUID) {
+        guard canModify else { return }
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         records[index].isExcluded = excluded
         didChange()
@@ -268,6 +251,7 @@ final class SpendStore {
     /// from the one hook in `LedgerExporter.export`, so every ledger export call
     /// site benefits without repeating itself.
     func markExported(ids: [String], target: String) {
+        guard canModify else { return }
         guard !ids.isEmpty else { return }
         let idSet = Set(ids)
         var changed = false
@@ -294,6 +278,7 @@ final class SpendStore {
     /// Drop the row **and its photo**. The store owns photo lifetime now, which
     /// is what lets the old sweep go away.
     func remove(_ id: UUID) {
+        guard canModify else { return }
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         if let filename = records[index].captureFilename {
             ReceiptCaptureStore.delete(filename: filename)
@@ -306,6 +291,7 @@ final class SpendStore {
     /// ground between `remove(_:)` and `removeAll()`, so tidying up a handful of
     /// receipts isn't one swipe at a time. Saves once, not once per row.
     func remove(ids: Set<UUID>) {
+        guard canModify else { return }
         guard !ids.isEmpty else { return }
         let before = records.count
         for record in records where ids.contains(record.id) {
@@ -319,6 +305,7 @@ final class SpendStore {
 
     /// Every row and photo, gone.
     func removeAll() {
+        guard canModify else { return }
         for record in records {
             if let filename = record.captureFilename {
                 ReceiptCaptureStore.delete(filename: filename)
@@ -334,6 +321,7 @@ final class SpendStore {
     /// Doesn't touch the photo file itself: the caller (`ReceiptBatch`) owns
     /// that deletion.
     func removeRecords(withCaptureFilenames filenames: Set<String>) {
+        guard canModify else { return }
         guard !filenames.isEmpty else { return }
         let before = records.count
         records.removeAll { record in
@@ -345,6 +333,7 @@ final class SpendStore {
     /// Delete one receipt's photo, keeping the row — the figures stay, the JPEG
     /// doesn't.
     func clearPhoto(_ id: UUID) {
+        guard canModify else { return }
         guard let index = records.firstIndex(where: { $0.id == id }),
               let filename = records[index].captureFilename else { return }
         ReceiptCaptureStore.delete(filename: filename)
@@ -356,6 +345,7 @@ final class SpendStore {
     /// `Clear Old Receipts`: same relief, no heuristic, and every spending figure
     /// stays intact.
     func clearAllPhotos() {
+        guard canModify else { return }
         for index in records.indices where records[index].photoClearedAt == nil {
             if let filename = records[index].captureFilename {
                 ReceiptCaptureStore.delete(filename: filename)
@@ -409,7 +399,7 @@ final class SpendStore {
     var defaultMonthId: String {
         validated()
         if let cached = cache.defaultMonthId { return cached }
-        let value = SpendSummary.defaultMonthId(fromInputs: inputs)
+        let value = SpendSummary.defaultMonthId(fromInputs: inputs, today: now())
         cache.defaultMonthId = value
         return value
     }
@@ -459,7 +449,7 @@ final class SpendStore {
     func facts(_ id: String) -> SpendMonthFacts {
         validated()
         if let cached = cache.facts[id] { return cached }
-        let value = SpendSummary.facts(id, fromInputs: inputs)
+        let value = SpendSummary.facts(id, fromInputs: inputs, today: now())
         cache.facts[id] = value
         return value
     }
@@ -468,7 +458,7 @@ final class SpendStore {
         validated()
         let key = Self.key(for: scope)
         if let cached = cache.trends[key] { return cached }
-        let value = SpendSummary.trend(scope, fromInputs: inputs)
+        let value = SpendSummary.trend(scope, fromInputs: inputs, today: now())
         cache.trends[key] = value
         return value
     }
@@ -502,7 +492,7 @@ final class SpendStore {
     }
 
     private func validated() {
-        cache.validate(revision: revision, today: Date().spendDate)
+        cache.validate(revision: revision, today: now().spendDate)
     }
 
     // MARK: Photo state
@@ -582,6 +572,7 @@ final class SpendStore {
     /// purchases so deleting a receipt does not silently delete a user's link.
     @discardableResult
     func linkHistory(_ history: SpendItemHistory, with other: SpendItemHistory? = nil, name: String) -> HistoryID {
+        guard canModify else { return history.historyID }
         let selected = [history] + (other.map { [$0] } ?? [])
         let ids = Set(selected.compactMap(\.productID))
         var members = historyLinks.filter { ids.contains($0.id) }.flatMap(\.members)
@@ -599,6 +590,7 @@ final class SpendStore {
     }
 
     func resetHistory(_ history: SpendItemHistory) {
+        guard canModify else { return }
         guard let id = history.productID else { return }
         previousHistoryLinks = historyLinks
         historyLinks.removeAll { $0.id == id }
@@ -606,6 +598,7 @@ final class SpendStore {
     }
 
     func undoHistoryChange() {
+        guard canModify else { return }
         guard let previous = previousHistoryLinks else { return }
         historyLinks = previous
         previousHistoryLinks = nil
@@ -615,65 +608,30 @@ final class SpendStore {
     // MARK: Storage
 
     private func load() {
-        guard let data = try? Data(contentsOf: Self.fileURL),
-              let stored = try? JSONDecoder().decode(Persisted.self, from: data) else { return }
-        // Unlike `ReceiptBatch.load()`, a record whose photo is missing is kept
-        // rather than dropped: there a photo-less draft is unusable (it still
-        // has to be parsed); here the parse is already done and the numbers are
-        // the asset. `photoState(for:)` reports `.unavailable` for it.
+        guard let stored = storage?.load() else { return }
         records = stored.records
         historyLinks = stored.historyLinks ?? []
         previousHistoryLinks = stored.previousHistoryLinks
+        revision &+= 1
     }
 
-    /// One mutation happened. Invalidates every derived figure and schedules the
-    /// write.
-    ///
-    /// Every mutator funnels through here rather than calling `persist()`
-    /// directly, which is what makes `revision` a complete description of when
-    /// `cache` is stale — a mutator that forgot to bump it would serve figures
-    /// from before its own change.
+    func retryPersistence() {
+        if storage?.loadFailed == true { load() } else { persist() }
+    }
+
     private func didChange() {
         revision &+= 1
         persist()
     }
 
-    /// The encode and the write, off the main actor.
-    ///
-    /// The encode is the expensive half — the whole corpus, every time, and it
-    /// used to run on the main actor between a tap and the next frame. What
-    /// crosses to the queue is a snapshot of `records`, which is O(1): an array
-    /// of structs is copy-on-write, and nothing mutates it afterwards.
-    ///
-    /// **Serial, so the last write wins.** Two mutations in quick succession
-    /// enqueue two encodes; a concurrent queue could land them out of order and
-    /// leave the older corpus on disk.
     private func persist() {
-        guard persists else { return }
-        let snapshot = Persisted(records: records, historyLinks: historyLinks,
-                                 previousHistoryLinks: previousHistoryLinks)
-        let url = Self.fileURL
-        Self.ioQueue.async {
-            guard let data = try? JSONEncoder().encode(snapshot) else { return }
-            try? data.write(to: url, options: .atomic)
-        }
+        storage?.save(Persisted(records: records, historyLinks: historyLinks,
+                                previousHistoryLinks: previousHistoryLinks), background: true)
     }
 
-    private static let ioQueue = DispatchQueue(
-        label: "com.beanbeaver.SpendStore.persist", qos: .utility)
+    /// Drain ordered writes before iOS can suspend the app; also publish failures.
+    func flushPendingWrites() { storage?.flush() }
 
-    /// Block until every scheduled write has landed.
-    ///
-    /// Called when the app leaves the foreground (`BeanBeaverApp`). Without it
-    /// the move off the main actor would trade a hitch for a durability window:
-    /// iOS can suspend the process between the enqueue and the write, and the
-    /// mutation the user just made would be gone on next launch. On the
-    /// background transition there is time to spend and no frame to miss, so
-    /// this is where the old synchronous behaviour belongs.
-    func flushPendingWrites() {
-        guard persists else { return }
-        Self.ioQueue.sync {}
-    }
 }
 
 #if DEBUG

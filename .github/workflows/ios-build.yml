@@ -170,6 +170,24 @@ jobs:
           [ -n "$APP" ] || { echo "built .app not found"; exit 1; }
           xcrun simctl install "${{ steps.sim.outputs.udid }}" "$APP"
 
+      - name: Swift reliability tests
+        run: |
+          xcodebuild test \
+            -project BeanBeaver/BeanBeaver.xcodeproj \
+            -scheme "$SCHEME" -configuration Debug \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build -resultBundlePath reliability-tests.xcresult \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
+
+      - name: Upload Swift test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reliability-tests
+          path: reliability-tests.xcresult
+          if-no-files-found: ignore
+
       # Pick up to LIVE_SIM_MAX fixtures to run on-device, preferring ones with a
       # committed expected.json (so the accuracy step has something to grade),
       # sorted for determinism. Written to selected.txt, shared by the two steps
