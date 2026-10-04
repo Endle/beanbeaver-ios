@@ -3,43 +3,6 @@ import Observation
 import os
 import BBReceiptKit
 
-/// The process's one loaded `OcrSession`, shared by the single-receipt camera
-/// flow (`ReceiptPipeline`) and the photo-library batch (`ReceiptBatch`). A
-/// second session would load the models a second time, and they aren't small.
-@MainActor
-enum OcrSessionProvider {
-    private static var session: OcrSession?
-    /// Whether `session` was built with the orientation classifier — so a change
-    /// to the setting reloads the session on the next scan.
-    private static var loadedWithOrientationCls: Bool?
-
-    /// The one global switch for the orientation classifier, read from the
-    /// `skipOrientationCheck` default (default off = keep the classifier —
-    /// current behavior). Drives both interactive scans and the headless
-    /// `BatchRunner`. For a headless A/B it can be overridden per launch via
-    /// `-skipOrientationCheck YES|NO` (NSUserDefaults argument domain).
-    nonisolated static var useOrientationCls: Bool {
-        !UserDefaults.standard.bool(forKey: "skipOrientationCheck")
-    }
-
-    static func loaded() throws -> OcrSession {
-        let useCls = useOrientationCls
-        // Reuse the cached session only if the orientation-cls setting is
-        // unchanged; otherwise reload (the classifier is loaded at construction).
-        if let session, loadedWithOrientationCls == useCls { return session }
-        // OCR runs on CPU: the core is built CPU-only because CPU beats CoreML/ANE
-        // on both speed and accuracy for the shipped dynamic-shape mobile models.
-        guard let dir = Bundle.main.resourceURL else {
-            throw NSError(domain: "BeanBeaver", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "No app resource bundle"])
-        }
-        let s = try OcrSession.load(modelsDirectory: dir, useOrientationCls: useCls)
-        session = s
-        loadedWithOrientationCls = useCls
-        return s
-    }
-}
-
 /// Drives the on-device scan of a single camera-captured receipt: run
 /// `OcrSession.scan` off the main thread and publish the result for SwiftUI.
 /// The photo-library batch has its own driver (`ReceiptBatch`) but shares the
@@ -65,9 +28,7 @@ final class ReceiptPipeline {
     /// Human-readable label for whichever stage the estimate currently sits in.
     private(set) var scanStepLabel: String = StepEstimate.steps[0].label
 
-    /// The exact JPEG bytes (written to a temp file) that the OCR last saw, for
-    /// diagnostics: export it and A/B against the desktop server to isolate the
-    /// capture/encode path from the OCR model.
+    /// The exact JPEG bytes in durable capture storage, for review and export.
     private(set) var capturedImageURL: URL?
 
     /// Swift-observed wall time (ms) of the last `OcrSession.scan` call —
@@ -77,6 +38,19 @@ final class ReceiptPipeline {
 
     /// Default credit-card account for the placeholder posting; tweak in UI later.
     var creditCardAccount = "Liabilities:CreditCard"
+
+    private let scanner: any ReceiptScanning
+    private let store: SpendStore
+    private let captureDirectory: URL
+    private var scanID: UUID?
+    private(set) var recordID: UUID?
+
+    init(scanner: any ReceiptScanning = ReceiptScanService.shared,
+         store: SpendStore? = nil, captureDirectory: URL = ReceiptCaptureStore.directory) {
+        self.scanner = scanner
+        self.store = store ?? .shared
+        self.captureDirectory = captureDirectory
+    }
 
     private var progressTask: Task<Void, Never>?
 
@@ -108,11 +82,14 @@ final class ReceiptPipeline {
     /// dismissed scan.
     func replaceResult(with result: ReceiptResult) {
         guard case .done = status else { return }
+        if let recordID { store.updateResult(recordID, to: result) }
         status = .done(result)
     }
 
     /// Return to the home screen (idle state) so the user can scan another receipt.
     func reset() {
+        scanID = nil
+        recordID = nil
         status = .idle
         capturedImageURL = nil
         lastWallMs = nil
@@ -122,9 +99,19 @@ final class ReceiptPipeline {
     }
 
     func scan(imageData: Data, options: ParseOptions? = nil) async {
+        guard scanID == nil else { return }
+        guard store.canModify else {
+            status = .failed(store.storageIssue ?? "Receipt storage is unavailable.")
+            return
+        }
+        let id = UUID()
+        scanID = id
+        recordID = nil
+        defer { if scanID == id { scanID = nil } }
         let opts = options ?? ItemRuleStore.shared.parseOptions
         status = .scanning
         capturedImageURL = persistCapture(imageData)
+        let capture = capturedImageURL
         lastWallMs = nil
         scanProgress = 0
         scanStepLabel = StepEstimate.steps[0].label
@@ -134,25 +121,29 @@ final class ReceiptPipeline {
         let currency = LedgerFormatPrefs.currency
         let taxAccount = LedgerFormatPrefs.taxAccount
         do {
-            let session = try OcrSessionProvider.loaded()
             let signpost = Self.signposter.beginInterval("scan")
+            defer { Self.signposter.endInterval("scan", signpost) }
             let started = Date()
-            // OCR is CPU-heavy; keep it off the main actor.
-            let result = try await Task.detached(priority: .userInitiated) {
-                try session.scan(imageData: imageData, creditCardAccount: account,
-                                 currency: currency, taxAccount: taxAccount,
-                                 options: opts)
-            }.value
+            let result = try await scanner.scan(ReceiptScanRequest(
+                imageData: imageData, creditCardAccount: account, currency: currency,
+                taxAccount: taxAccount, options: opts))
+            guard scanID == id else {
+                if let capture { try? FileManager.default.removeItem(at: capture) }
+                return
+            }
             lastWallMs = Date().timeIntervalSince(started) * 1000
             lastWallMs.map(rememberScanDuration)
-            Self.signposter.endInterval("scan", signpost)
             progressTask?.cancel()
             scanProgress = 1
             status = .done(result)
             DebugInfoStore.recordSuccess(result: result, wallMs: lastWallMs)
-            SpendStore.shared.record(result: result, captureFilename: capturedImageURL?.lastPathComponent,
-                                     wallMs: lastWallMs)
+            recordID = store.record(result: result, captureFilename: capture?.lastPathComponent,
+                                    wallMs: lastWallMs)
         } catch {
+            guard scanID == id else {
+                if let capture { try? FileManager.default.removeItem(at: capture) }
+                return
+            }
             progressTask?.cancel()
             status = .failed(String(describing: error))
             DebugInfoStore.recordFailure(error)
@@ -216,10 +207,9 @@ final class ReceiptPipeline {
         }
     }
 
-    /// Write the captured JPEG to a timestamped temp file so it can be exported
-    /// via the share sheet (AirDrop / Files / Mail).
+    /// Keep the exact JPEG in durable capture storage for later export.
     private func persistCapture(_ data: Data) -> URL? {
-        let url = ReceiptCaptureStore.newCaptureURL()
+        let url = captureDirectory.appendingPathComponent("\(ReceiptCaptureStore.filenamePrefix)\(UUID().uuidString).jpg")
         do {
             try data.write(to: url)
             return url

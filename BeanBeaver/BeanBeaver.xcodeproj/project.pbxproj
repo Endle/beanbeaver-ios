@@ -5,6 +5,14 @@
 	};
 	objectVersion = 60;
 	objects = {
+/* Begin PBXTargetDependency section */
+        2A0000000000000000000008 = {isa = PBXTargetDependency; target = 1A0000000000000000000006; targetProxy = 2A0000000000000000000007; };
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+        2A0000000000000000000007 = {isa = PBXContainerItemProxy; containerPortal = 1A0000000000000000000001; proxyType = 1; remoteGlobalIDString = 1A0000000000000000000006; remoteInfo = BeanBeaver; };
+/* End PBXContainerItemProxy section */
+
 
 /* Begin PBXBuildFile section */
 		1C0000000000000000000001 /* BeanBeaverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0000000000000000000001 /* BeanBeaverApp.swift */; };
@@ -66,6 +74,18 @@
 		1C00000000000000000000B4 /* GiftCardDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000B4 /* GiftCardDetailsView.swift */; };
 		1C00000000000000000000B5 /* GiftCardEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000B5 /* GiftCardEditorView.swift */; };
 		1C00000000000000000000A2 /* ItemsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000A2 /* ItemsView.swift */; };
+		1C00000000000000000000C0 /* JSONFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000C0; };
+		1C00000000000000000000C1 /* StorageIssueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000C1; };
+		1C00000000000000000000C2 /* ReceiptScanService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000C2; };
+		1C00000000000000000000C3 /* ReceiptPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000C3; };
+		1C00000000000000000000C4 /* OriginReceiptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000C4; };
+		1C00000000000000000000C5 /* LedgerFormatPrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000C5; };
+		1C00000000000000000000C6 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000C6; };
+		1C00000000000000000000C7 /* ReceiptResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000C7; };
+		1C00000000000000000000C8 /* ScanTimingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000C8; };
+		1C00000000000000000000C9 /* ReceiptPreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00000000000000000000C9; };
+        2A0000000000000000000003 = {isa = PBXBuildFile; fileRef = 2A0000000000000000000002; };
+        2A0000000000000000000012 = {isa = PBXBuildFile; productRef = 1A0000000000000000000012; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -128,6 +148,18 @@
 		1B00000000000000000000B4 /* GiftCardDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCardDetailsView.swift; sourceTree = "<group>"; };
 		1B00000000000000000000B5 /* GiftCardEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCardEditorView.swift; sourceTree = "<group>"; };
 		1B00000000000000000000A2 /* ItemsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemsView.swift; sourceTree = "<group>"; };
+		1B00000000000000000000C0 /* JSONFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONFile.swift; sourceTree = "<group>"; };
+		1B00000000000000000000C1 /* StorageIssueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageIssueView.swift; sourceTree = "<group>"; };
+		1B00000000000000000000C2 /* ReceiptScanService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptScanService.swift; sourceTree = "<group>"; };
+		1B00000000000000000000C3 /* ReceiptPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptPersistence.swift; sourceTree = "<group>"; };
+		1B00000000000000000000C4 /* OriginReceiptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OriginReceiptView.swift; sourceTree = "<group>"; };
+		1B00000000000000000000C5 /* LedgerFormatPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerFormatPrefs.swift; sourceTree = "<group>"; };
+		1B00000000000000000000C6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1B00000000000000000000C7 /* ReceiptResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptResultView.swift; sourceTree = "<group>"; };
+		1B00000000000000000000C8 /* ScanTimingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanTimingsView.swift; sourceTree = "<group>"; };
+		1B00000000000000000000C9 /* ReceiptPreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptPreviews.swift; sourceTree = "<group>"; };
+        2A0000000000000000000001 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = BeanBeaverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+        2A0000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReliabilityTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,6 +171,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+        2A0000000000000000000006 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (2A0000000000000000000012,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -146,6 +179,7 @@
 			isa = PBXGroup;
 			children = (
 				1A0000000000000000000004 /* BeanBeaver */,
+                2A0000000000000000000004 /* BeanBeaverTests */,
 				1A0000000000000000000005 /* Models */,
 				1A0000000000000000000003 /* Products */,
 			);
@@ -155,6 +189,7 @@
 			isa = PBXGroup;
 			children = (
 				1A0000000000000000000007 /* BeanBeaver.app */,
+                2A0000000000000000000001 /* BeanBeaverTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -164,6 +199,16 @@
 			children = (
 				1B0000000000000000000001 /* BeanBeaverApp.swift */,
 				1B0000000000000000000002 /* ContentView.swift */,
+				1B00000000000000000000C9 /* ReceiptPreviews.swift */,
+				1B00000000000000000000C8 /* ScanTimingsView.swift */,
+				1B00000000000000000000C7 /* ReceiptResultView.swift */,
+				1B00000000000000000000C6 /* SettingsView.swift */,
+				1B00000000000000000000C5 /* LedgerFormatPrefs.swift */,
+				1B00000000000000000000C4 /* OriginReceiptView.swift */,
+				1B00000000000000000000C3 /* ReceiptPersistence.swift */,
+				1B00000000000000000000C2 /* ReceiptScanService.swift */,
+				1B00000000000000000000C1 /* StorageIssueView.swift */,
+				1B00000000000000000000C0 /* JSONFile.swift */,
 				1B0000000000000000000003 /* ReceiptPipeline.swift */,
 				1B0000000000000000000004 /* DocumentScanner.swift */,
 				1B0000000000000000000005 /* PhotoSaver.swift */,
@@ -231,6 +276,7 @@
 			name = Models;
 			sourceTree = "<group>";
 		};
+        2A0000000000000000000004 = {isa = PBXGroup; children = (2A0000000000000000000002,); path = BeanBeaverTests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -254,6 +300,18 @@
 			productReference = 1A0000000000000000000007 /* BeanBeaver.app */;
 			productType = "com.apple.product-type.application";
 		};
+        2A0000000000000000000009 /* BeanBeaverTests */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = 2A000000000000000000000A;
+            buildPhases = (2A0000000000000000000005, 2A0000000000000000000006,);
+            buildRules = ();
+            dependencies = (2A0000000000000000000008,);
+            name = BeanBeaverTests;
+            packageProductDependencies = (1A0000000000000000000012,);
+            productName = BeanBeaverTests;
+            productReference = 2A0000000000000000000001;
+            productType = "com.apple.product-type.bundle.unit-test";
+        };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -285,6 +343,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+                2A0000000000000000000009 /* BeanBeaverTests */,
 				1A0000000000000000000006 /* BeanBeaver */,
 			);
 		};
@@ -316,6 +375,16 @@
 			files = (
 				1C0000000000000000000001 /* BeanBeaverApp.swift in Sources */,
 				1C0000000000000000000002 /* ContentView.swift in Sources */,
+				1C00000000000000000000C9 /* ReceiptPreviews.swift in Sources */,
+				1C00000000000000000000C8 /* ScanTimingsView.swift in Sources */,
+				1C00000000000000000000C7 /* ReceiptResultView.swift in Sources */,
+				1C00000000000000000000C6 /* SettingsView.swift in Sources */,
+				1C00000000000000000000C5 /* LedgerFormatPrefs.swift in Sources */,
+				1C00000000000000000000C4 /* OriginReceiptView.swift in Sources */,
+				1C00000000000000000000C3 /* ReceiptPersistence.swift in Sources */,
+				1C00000000000000000000C2 /* ReceiptScanService.swift in Sources */,
+				1C00000000000000000000C1 /* StorageIssueView.swift in Sources */,
+				1C00000000000000000000C0 /* JSONFile.swift in Sources */,
 				1C0000000000000000000003 /* ReceiptPipeline.swift in Sources */,
 				1C0000000000000000000004 /* DocumentScanner.swift in Sources */,
 				1C0000000000000000000005 /* PhotoSaver.swift in Sources */,
@@ -366,6 +435,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+        2A0000000000000000000005 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (2A0000000000000000000003,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
@@ -470,6 +540,34 @@
 			};
 			name = Release;
 		};
+        2A000000000000000000000B = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BeanBeaver.app/BeanBeaver";
+                GENERATE_INFOPLIST_FILE = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = com.beanbeaver.BeanBeaverTests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SWIFT_VERSION = 5.0;
+                TARGETED_DEVICE_FAMILY = 1;
+                OTHER_LDFLAGS = "-lc++";
+            };
+            name = Debug;
+        };
+        2A000000000000000000000C = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BeanBeaver.app/BeanBeaver";
+                GENERATE_INFOPLIST_FILE = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = com.beanbeaver.BeanBeaverTests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SWIFT_VERSION = 5.0;
+                TARGETED_DEVICE_FAMILY = 1;
+                OTHER_LDFLAGS = "-lc++";
+            };
+            name = Release;
+        };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -491,6 +589,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+        2A000000000000000000000A = {isa = XCConfigurationList; buildConfigurations = (2A000000000000000000000B, 2A000000000000000000000C,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */

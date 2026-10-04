@@ -126,7 +126,7 @@ codegen-units = 1
 # `ReceiptWarningKind::implausibleSummary` (core #64) — a summary block that
 # cannot be right (no total found while items parsed, or subtotal == tax) is
 # reported instead of silently reading 0.00. Kinds are open by contract, so
-# `WarningSeverity.swift`'s `@unknown default` and `ReceiptBatch.swift`'s two
+# `WarningSeverity.swift`'s `@unknown default` and `ReceiptPersistence.swift`'s two
 # name/kind switches already absorb it; ranking it explicitly is a follow-up,
 # not a blocker. The parse content is core #67, the same family of fix as v0.8.3
 # above: Loblaw department headers (`21-GROCERY`, `22-DAIRY`, …) print at the
@@ -250,7 +250,7 @@ codegen-units = 1
 # `EditedItem`. Kept as a string because the codes have leading zeros that a
 # number would eat. It cost three build rounds here, not one -- the eight
 # `ReceiptItem(...)` preview literals failed first and masked the rest, and the
-# last site to surface was `ReceiptBatch.swift`'s Codable decode, which builds
+# last site to surface was `ReceiptPersistence.swift`'s Codable decode, which builds
 # via `self.init(description:` and so matches no `ReceiptItem(` grep. Look for
 # that site FIRST on the next additive field.
 #

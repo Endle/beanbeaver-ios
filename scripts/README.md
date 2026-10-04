@@ -112,3 +112,20 @@ show the opt-in gift-card controls without changing the saved preference.
 
 These render the real views using synthetic parser inputs. They are visual
 inspection routes, not evidence of tapping through the normal navigation flow.
+
+### Swift reliability tests
+
+The shared `BeanBeaver` scheme includes `BeanBeaverTests`. With the generated
+xcframework present, run on an available arm64 simulator:
+
+```sh
+xcodebuild test -project BeanBeaver/BeanBeaver.xcodeproj -scheme BeanBeaver \
+  -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -parallel-testing-enabled NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO
+```
+
+Tests use synthetic receipts, a controlled scanner, and temporary archives;
+they do not add receipts or rules to the normal store. They exercise Swift
+persistence and lifecycle decisions without OCR. Keep the public simulator scan
+and `check-receipt-persistence.sh` for the packaged native integration, and use
+`-benchSpend` in a Release build for spending performance comparisons.

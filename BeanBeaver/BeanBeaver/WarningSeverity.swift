@@ -59,7 +59,7 @@ extension ReceiptWarningKind {
         // alone, so it repairs nothing and the formatter falls back to a single
         // payment posting. The entry still balances; what is unreliable is the
         // breakdown of *how* it was paid.
-        case .tenderMismatch:
+        case .tenderMismatch, .implausibleSummary:
             return .notice
 
         // The parser repaired a mangled price and reconciled it against the
