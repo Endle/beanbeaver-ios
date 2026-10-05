@@ -446,7 +446,12 @@ codegen-units = 1
 # rule recognises takes the department it is printed under, so PCBL BLACK LABE
 # ice cream files as Frozen instead of FIXME. Measured on the private corpus:
 # 3 lines moved from uncategorized, cached and live, and nothing else changed.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.9" }
+# v0.17.10 leaves `crates/ffi/` untouched. A REG row that OCR reduced to
+# "REG$11.99  21.75" (Chinese sub-line and "@" lost) was suppressed as suggested
+# retail, dropping the item above it; the trailing price now prices that still-
+# unpriced name. Measured: only the target receipt moved, cached and live; on XV
+# the capture replays 13/13 with no warning (it was 12/13, 21.75 short).
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.10" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -507,7 +512,8 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # v0.1.37 carries core v0.17.9 (and v0.17.8, which was never tagged on its own)
 # and nothing else -- no spend-layer change, so every Spend signature is as it
 # was in v0.1.33.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.37" }
+# v0.1.38 carries core v0.17.10 and nothing else -- no spend-layer change.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.38" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
