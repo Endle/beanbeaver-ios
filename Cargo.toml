@@ -439,7 +439,19 @@ codegen-units = 1
 # reference and ACTIVATED state, as DoorDash and LCBO cards already did. UBER
 # is matched as a word, so TUBER is not a card. Measured: UBER occurs in one
 # corpus receipt only; on XV, an -autoRunBatch of 11 photos matched v0.17.6.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.7" }
+# v0.17.8 leaves `crates/ffi/` untouched. Deskew's row-sweep corroboration band
+# widens from 0.5 to 1.0 degrees, so a curled receipt gets the shear it needs.
+# v0.17.9 leaves `crates/ffi/` untouched. No Frills / Loblaws / RCSS department
+# banners (23-FROZEN, 31-MEATS, ...) become a last-resort category: a line no
+# rule recognises takes the department it is printed under, so PCBL BLACK LABE
+# ice cream files as Frozen instead of FIXME. Measured on the private corpus:
+# 3 lines moved from uncategorized, cached and live, and nothing else changed.
+# v0.17.10 leaves `crates/ffi/` untouched. A REG row that OCR reduced to
+# "REG$11.99  21.75" (Chinese sub-line and "@" lost) was suppressed as suggested
+# retail, dropping the item above it; the trailing price now prices that still-
+# unpriced name. Measured: only the target receipt moved, cached and live; on XV
+# the capture replays 13/13 with no warning (it was 12/13, 21.75 short).
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.10" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -497,7 +509,11 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # every Spend signature is as it was in v0.1.33.
 # v0.1.35 carries core v0.17.6 and v0.1.36 carries core v0.17.7, nothing else --
 # no spend-layer change, so every Spend signature is as it was in v0.1.33.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.36" }
+# v0.1.37 carries core v0.17.9 (and v0.17.8, which was never tagged on its own)
+# and nothing else -- no spend-layer change, so every Spend signature is as it
+# was in v0.1.33.
+# v0.1.38 carries core v0.17.10 and nothing else -- no spend-layer change.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.38" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
