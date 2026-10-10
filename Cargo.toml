@@ -451,7 +451,16 @@ codegen-units = 1
 # retail, dropping the item above it; the trailing price now prices that still-
 # unpriced name. Measured: only the target receipt moved, cached and live; on XV
 # the capture replays 13/13 with no warning (it was 12/13, 21.75 short).
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.10" }
+# v0.17.11 leaves `crates/ffi/` untouched. A third REG-row shape, "(AREG11.99"
+# (the Chinese sub-line collapsed to one letter), was read as a phantom item;
+# it is now recognised as suggested retail. On XV the rescan gives 13/13.
+# v0.17.12 leaves `crates/ffi/` untouched. Ice cream files by the product, not
+# its flavour (FACE/EYE/DAY CREAM are exact-only), FreshCo "Tom Diced" is
+# canned, and FreshCo's store is found when its footer header splits. Short
+# priced labels survive the description search, and a weight row whose
+# weight x rate reconciles keeps its price with the item above, so weighed
+# lines are no longer swapped or dropped under column drift.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.12" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -513,7 +522,9 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # and nothing else -- no spend-layer change, so every Spend signature is as it
 # was in v0.1.33.
 # v0.1.38 carries core v0.17.10 and nothing else -- no spend-layer change.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.38" }
+# v0.1.39 carries core v0.17.12 (and v0.17.11, which was never tagged on its
+# own) and nothing else -- no spend-layer change.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.39" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
