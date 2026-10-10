@@ -460,7 +460,12 @@ codegen-units = 1
 # priced labels survive the description search, and a weight row whose
 # weight x rate reconciles keeps its price with the item above, so weighed
 # lines are no longer swapped or dropped under column drift.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.12" }
+# v0.17.13 leaves `crates/ffi/` untouched, but amounts may now be negative: a
+# refund receipt keeps its printed signs (total, subtotal, tax and the refunded
+# tender), so items, summary and tenders still agree and a refund reduces
+# spend. A quantity breakdown whose own N x unit equals the price keeps it
+# rather than yielding it to the item below (also when OCR reads its `$` as 8).
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.13" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -524,7 +529,8 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # v0.1.38 carries core v0.17.10 and nothing else -- no spend-layer change.
 # v0.1.39 carries core v0.17.12 (and v0.17.11, which was never tagged on its
 # own) and nothing else -- no spend-layer change.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.39" }
+# v0.1.40 carries core v0.17.13 and nothing else -- no spend-layer change.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.40" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
