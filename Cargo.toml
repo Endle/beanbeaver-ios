@@ -465,7 +465,11 @@ codegen-units = 1
 # tender), so items, summary and tenders still agree and a refund reduces
 # spend. A quantity breakdown whose own N x unit equals the price keeps it
 # rather than yielding it to the item below (also when OCR reads its `$` as 8).
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.13" }
+# v0.17.14 leaves `crates/ffi/` untouched. No Frills' truncated "FANT ORG ZS"
+# (Fanta) files as Drink, and checkout/reusable bags as household supply; an
+# LCBO branch label is no longer taken as the street address; a price the
+# reverse side bleeds through is recovered when the arithmetic corroborates it.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.14" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -530,7 +534,8 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # v0.1.39 carries core v0.17.12 (and v0.17.11, which was never tagged on its
 # own) and nothing else -- no spend-layer change.
 # v0.1.40 carries core v0.17.13 and nothing else -- no spend-layer change.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.40" }
+# v0.1.41 carries core v0.17.14 and nothing else -- no spend-layer change.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.41" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
