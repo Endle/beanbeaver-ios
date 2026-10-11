@@ -339,6 +339,28 @@ which is load-bearing and silent when removed.
 
 - Avoid using macro #if DEBUG - think twice that if it's necessary
 
+- **Reading the camera/scan log from a device.** `Logger.scanner` (camera
+  presentation and VisionKit's delegate callbacks) and `ReceiptPipeline`'s
+  `scan` category log at `.notice`, so they persist and are in any
+  `log collect`. Collecting from an attached phone needs root, so the user runs
+  it:
+
+      sudo /usr/bin/log collect --device-udid <UDID> --last 20m --output xv.logarchive
+      /usr/bin/log show xv.logarchive --style compact \
+        --predicate 'subsystem == "com.beanbeaver.BeanBeaver"'
+
+  Widen to `process == "BeanBeaver"` to see VisionKit's own lines around them —
+  the document camera runs in-process. Use `/usr/bin/log`: in zsh a bare `log`
+  is a builtin.
+
+  Added after a 2026-10-11 stall on iOS 27.0.1 where VisionKit's finish button
+  did nothing and no app state could say whether the tap ever reached
+  `didFinishWith`. A good scan logs `camera requested`, `camera … created` and
+  `camera cover appeared`, then `camera … finished`, `scan started`,
+  `scan done`. Where it stops locates the fault: no `finished` means VisionKit
+  never called back, and `requested` without `appeared` means SwiftUI never
+  presented the camera.
+
 
 ## Item history
 

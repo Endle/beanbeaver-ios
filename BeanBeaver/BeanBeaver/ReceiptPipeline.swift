@@ -59,6 +59,11 @@ final class ReceiptPipeline {
     private static let signposter = OSSignposter(
         subsystem: "com.beanbeaver.BeanBeaver", category: "scan")
 
+    /// What happened to each scan request, including the ones refused before
+    /// any visible state changes. Pairs with `Logger.scanner`, which logs the
+    /// camera handing the photo over.
+    private static let log = Logger(subsystem: "com.beanbeaver.BeanBeaver", category: "scan")
+
     /// Run the pipeline on a JPEG bundled in the app, bypassing the camera and
     /// photo picker. Shipped (not DEBUG-only) so anyone without a receipt in
     /// hand — an App Review tester, a curious first-time user — can still see
@@ -99,11 +104,16 @@ final class ReceiptPipeline {
     }
 
     func scan(imageData: Data, options: ParseOptions? = nil) async {
-        guard scanID == nil else { return }
+        guard scanID == nil else {
+            Self.log.error("scan ignored: another scan is still running")
+            return
+        }
         guard store.canModify else {
+            Self.log.error("scan refused: receipt storage unavailable")
             status = .failed(store.storageIssue ?? "Receipt storage is unavailable.")
             return
         }
+        Self.log.notice("scan started (\(imageData.count, privacy: .public) bytes)")
         let id = UUID()
         scanID = id
         recordID = nil
@@ -128,10 +138,12 @@ final class ReceiptPipeline {
                 imageData: imageData, creditCardAccount: account, currency: currency,
                 taxAccount: taxAccount, options: opts))
             guard scanID == id else {
+                Self.log.notice("scan finished after it was dismissed; result dropped")
                 if let capture { try? FileManager.default.removeItem(at: capture) }
                 return
             }
             lastWallMs = Date().timeIntervalSince(started) * 1000
+            Self.log.notice("scan done in \(Int(self.lastWallMs ?? 0), privacy: .public) ms")
             lastWallMs.map(rememberScanDuration)
             progressTask?.cancel()
             scanProgress = 1
@@ -141,9 +153,11 @@ final class ReceiptPipeline {
                                     wallMs: lastWallMs)
         } catch {
             guard scanID == id else {
+                Self.log.notice("scan failed after it was dismissed; error dropped")
                 if let capture { try? FileManager.default.removeItem(at: capture) }
                 return
             }
+            Self.log.error("scan failed: \(String(describing: error), privacy: .public)")
             progressTask?.cancel()
             status = .failed(String(describing: error))
             DebugInfoStore.recordFailure(error)
@@ -214,6 +228,7 @@ final class ReceiptPipeline {
             try data.write(to: url)
             return url
         } catch {
+            Self.log.error("capture not saved: \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }

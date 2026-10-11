@@ -1,5 +1,6 @@
 import SwiftUI
 import VisionKit
+import os
 import BBReceiptKit
 
 struct ContentView: View {
@@ -170,6 +171,15 @@ struct ContentView: View {
         .tint(.bbAccent)
         .onChange(of: priceHistoryEnabled) { _, enabled in
             if !enabled { showItems = false }
+        }
+        // The result cover is up when the camera is requested only via Scan
+        // Another, which asks this root to present a second cover over its
+        // first — so the flag tells the two entry points apart in a log.
+        .onChange(of: showScanner) { _, shown in
+            Logger.scanner.notice("""
+                camera \(shown ? "requested" : "dismiss requested", privacy: .public) \
+                (result cover up: \(pipelineIsActive, privacy: .public))
+                """)
         }
         .overlay(alignment: .bottom) {
             RootTabBarAction { showScanner = true }
