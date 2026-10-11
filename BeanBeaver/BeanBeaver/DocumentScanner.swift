@@ -1,5 +1,18 @@
 import SwiftUI
 import VisionKit
+import os
+
+extension Logger {
+    /// Camera presentation and VisionKit's delegate callbacks.
+    ///
+    /// VisionKit's own finish button is outside this app's code: if a tap on it
+    /// never reaches `didFinishWith`, nothing on screen distinguishes that from
+    /// a scan this app dropped. These lines make the two separable in a device
+    /// log (`subsystem == "com.beanbeaver.BeanBeaver"`). `.notice` so they are
+    /// persisted and survive into a `log collect`; values are counts, sizes and
+    /// flags, never receipt content, so they are logged `.public`.
+    static let scanner = Logger(subsystem: "com.beanbeaver.BeanBeaver", category: "scanner")
+}
 
 /// `DocumentScanner` plus a one-time coaching hint. VisionKit has no delegate
 /// callback for "page kept" — only the final `didFinishWith` once the user
@@ -29,7 +42,12 @@ struct ScannerWithHint: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        // Appear/disappear rather than the flag that presents this: a SwiftUI
+        // presentation can be requested and never shown (see the result-cover
+        // notes in CLAUDE.md), and only these say it actually was.
+        .onDisappear { Logger.scanner.notice("camera cover disappeared") }
         .onAppear {
+            Logger.scanner.notice("camera cover appeared (hint: \(!hasSeenScanSaveHint, privacy: .public))")
             guard !hasSeenScanSaveHint else { return }
             hasSeenScanSaveHint = true
             withAnimation { showHint = true }
@@ -73,6 +91,7 @@ struct DocumentScanner: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> VNDocumentCameraViewController {
         let controller = VNDocumentCameraViewController()
         controller.delegate = context.coordinator
+        Logger.scanner.notice("camera \(context.coordinator.session, privacy: .public) created")
         return controller
     }
 
@@ -82,7 +101,19 @@ struct DocumentScanner: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
         private let parent: DocumentScanner
+        /// Ties each callback to the camera it came from, should SwiftUI ever
+        /// rebuild the controller while one is on screen.
+        let session = String(UUID().uuidString.prefix(8))
         init(_ parent: DocumentScanner) { self.parent = parent }
+
+        /// VisionKit holds its delegate weakly, so a coordinator released while
+        /// its camera is still up turns every button in that camera into a
+        /// silent no-op. Logged so that case shows up rather than being
+        /// inferred.
+        deinit {
+            let session = session
+            Logger.scanner.notice("camera \(session, privacy: .public) coordinator released")
+        }
 
         func documentCameraViewController(
             _ controller: VNDocumentCameraViewController,
@@ -91,12 +122,23 @@ struct DocumentScanner: UIViewControllerRepresentable {
             // Use the most recent page; encode to JPEG for the Rust seam.
             if scan.pageCount > 0,
                let data = scan.imageOfPage(at: scan.pageCount - 1).jpegData(compressionQuality: 0.9) {
+                Logger.scanner.notice("""
+                    camera \(self.session, privacy: .public) finished: \(scan.pageCount, privacy: .public) \
+                    page(s), last page \(data.count, privacy: .public) bytes
+                    """)
                 parent.onScan(data)
+            } else {
+                // Closes the camera with nothing to read — no result, no error.
+                Logger.scanner.error("""
+                    camera \(self.session, privacy: .public) finished with no usable page \
+                    (\(scan.pageCount, privacy: .public) page(s))
+                    """)
             }
             parent.onFinish()
         }
 
         func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
+            Logger.scanner.notice("camera \(self.session, privacy: .public) cancelled")
             parent.onFinish()
         }
 
@@ -104,6 +146,10 @@ struct DocumentScanner: UIViewControllerRepresentable {
             _ controller: VNDocumentCameraViewController,
             didFailWithError error: Error
         ) {
+            Logger.scanner.error("""
+                camera \(self.session, privacy: .public) failed: \
+                \(String(describing: error), privacy: .public)
+                """)
             parent.onFinish()
         }
     }
