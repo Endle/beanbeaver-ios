@@ -473,7 +473,12 @@ codegen-units = 1
 # $1.000 PC gift card" is no longer a gift-card tender; on the spatial path an
 # amount grouped onto SUBTOTAL stays summary when the amount column leans, and
 # a code-only SKU row prices the description OCR split off just above it.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.15" }
+# v0.17.16 leaves `crates/ffi/` untouched. OCR's C/O confusion is tolerated
+# (Bisouit -> BISCUIT), Asia Food Mart's ZHENXIANG/SHISO & SEAFOOD lines file
+# by product, and a bare ", #A" unit stays with the street. A price printed on a
+# standalone product-code row, or in a code-price table, pairs with the name
+# printed below it, so those items are no longer dropped.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.16" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -540,7 +545,8 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # v0.1.40 carries core v0.17.13 and nothing else -- no spend-layer change.
 # v0.1.41 carries core v0.17.14 and nothing else -- no spend-layer change.
 # v0.1.42 carries core v0.17.15 and nothing else -- no spend-layer change.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.42" }
+# v0.1.43 carries core v0.17.16 and nothing else -- no spend-layer change.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.43" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
