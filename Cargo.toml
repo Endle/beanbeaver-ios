@@ -478,7 +478,9 @@ codegen-units = 1
 # by product, and a bare ", #A" unit stays with the street. A price printed on a
 # standalone product-code row, or in a code-price table, pairs with the name
 # printed below it, so those items are no longer dropped.
-bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.16" }
+# v0.17.17 recovers names above SKU/quantity/price rows and classifies
+# tableware bowls. No FFI interface change; verified against the XV receipt.
+bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.17.17" }
 # The library the app actually links. It carries bb-receipt-ffi's UniFFI
 # scaffolding inside it, so ONE libbb_mobile_ffi.a exposes both namespaces and
 # build-xcframework.sh runs one codegen step. It also brings `spend-core`, the
@@ -546,7 +548,8 @@ bb-receipt-ffi = { git = "https://github.com/Endle/beanbeaver-core", tag = "v0.1
 # v0.1.41 carries core v0.17.14 and nothing else -- no spend-layer change.
 # v0.1.42 carries core v0.17.15 and nothing else -- no spend-layer change.
 # v0.1.43 carries core v0.17.16 and nothing else -- no spend-layer change.
-bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.43" }
+# v0.1.44 carries core v0.17.17 with no spend-layer change.
+bb-mobile-ffi = { git = "https://github.com/Endle/beanbeaver-mobile-util", tag = "v0.1.44" }
 # `cli` provides uniffi_bindgen_main() for the local src/bin/uniffi-bindgen.rs,
 # which build-xcframework.sh runs to generate the Swift glue. Keep the version in
 # step with the uniffi that bb-receipt-ffi pulls in (0.28).
