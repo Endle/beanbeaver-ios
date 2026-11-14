@@ -90,7 +90,9 @@ struct SettingsView: View {
         NavigationStack {
             ScrollViewReader { proxy in
             List {
-                // First, above every section header. Where receipts go is the
+                feedbackSection
+
+                // Where receipts go is the
                 // one setting here with a *state* worth reporting, and it used
                 // to be reachable only from the home screen's export card —
                 // which no longer exists. Its own group rather than a row under
@@ -159,7 +161,6 @@ struct SettingsView: View {
                 .listRowBackground(Color.bbCardFill)
 
                 versionSection
-                feedbackSection
 
                 Section {
                     Toggle("Turn on price history", isOn: $priceHistoryEnabled)
@@ -245,8 +246,7 @@ struct SettingsView: View {
         .listRowBackground(Color.bbCardFill)
     }
 
-    /// Where to reach the project. Placed directly under About so the two read
-    /// as one move: the versions to quote, then somewhere to quote them.
+    /// Review and community links lead Settings so they are easy to discover.
     ///
     /// Built with `if let` rather than a force-unwrap so a typo'd URL drops a
     /// row instead of trapping the app. `Link` hands the URL to the system,
@@ -254,6 +254,11 @@ struct SettingsView: View {
     /// installed and fall back to Safari when it isn't.
     private var feedbackSection: some View {
         Section {
+            if let url = URL(string: "https://apps.apple.com/app/id6790981690?action=write-review") {
+                Link(destination: url) {
+                    Label("Rate BeanBeaver", systemImage: "star")
+                }
+            }
             ForEach(Self.feedbackRooms) { room in
                 if let url = URL(string: room.urlString) {
                     Link(destination: url) {
@@ -262,9 +267,9 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("Feedback")
+            Text("Feedback & Support")
         } footer: {
-            Text("Questions, bugs, and receipts that came out wrong — whichever room suits you. When it's a scan problem, include the two versions above.")
+            Text("Questions or a scan problem? Reach us on Discord or Matrix.")
         }
         .listRowBackground(Color.bbCardFill)
     }
